@@ -12,11 +12,14 @@ let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSign
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
 const isTimeAfter330PM = () => new Date() > new Date().setHours(15, 30);
 const isTimeAfter1147PM = () => !(isTimeAfter330PM && new Date() < new Date().setHours(23, 47));
-let pickedExchange = debug ? 'BFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
-const getPickedIndex = () => debug ? 'BANKEX' : ['UNKNOWN', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX'][new Date().getDay()] || 'UNKNOWN';
+let pickedExchange = debug ? 'NFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
+const getPickedIndex = () => debug ? 'NIFTY' : ['UNKNOWN', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX'][new Date().getDay()] || 'UNKNOWN';
 const setPickedExchange = value => pickedExchange = value, getPickedExchange = () => pickedExchange;
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
+let multiplier = 1;
+let exitMTM = -1200;
+let gainExitMTM = 400;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
@@ -33,7 +36,7 @@ async function send_callback_notification() {
               { text: '🛑', callback_data: 'stop' }
             ]]};
     !debug && bot.sendMessage(chat_id_me, 'Choose server settings', { reply_markup: keyboard });
-  } catch (error) { console.error(error);}
+  } catch (error) { console.error(error);send_notification(error + ' error occured', true)}
 }
 
 bot.on('callback_query', (callbackQuery) => {
@@ -91,7 +94,7 @@ async function find_bias(api, inputToken, ocGap, keyword) {
     if(keyword[0] === getPickedIndex()[0]) calcBias = localCalcBias;
     debug && console.log(calcBias, ' : calcBias')
     return `${keyword[0]}[${ltp_rounded-open}] ${ltp_rounded} (${localCalcBias})`;
-  } catch (err) { console.error('Error:', err); return null; }
+  } catch (error) { console.error('Error:', error); send_notification(error + ' error occured', true); return null; }
 }
 
 async function fetchAllBiases(api, exchange = 'NFO', iteration) {
@@ -117,7 +120,7 @@ async function fetchAllBiases(api, exchange = 'NFO', iteration) {
     await send_notification(filteredBiases.join(' '));
 
     iteration === 1  && await send_callback_notification();
-  } catch (err) { console.error('Error fetching all biases:', err); }
+  } catch (error) { console.error('Error fetching all biases:', error); send_notification(error + ' error occured', true) }
 }
 
 const checkL1Alert = (slOrders) => {
@@ -212,7 +215,7 @@ async function processOrders(api, exchange = 'NFO') {
     } else {
       console.log('no SL orders available')
     }
-  } catch (error) {console.error(error);}
+  } catch (error) {console.error(error);send_notification(error + ' error occured', true)}
 }
 
 async function isCrudeOrderAlreadyPlaced(api) {
@@ -379,8 +382,8 @@ let orderCE = {
     product_type: 'M',
     exchange: 'MCX',
     tradingsymbol: ATMCESym || 'CRUDEOIL14DEC23C6700',
-    quantity: '200',// multiplier
-    discloseqty: '200',// multiplier
+    quantity: (100*multiplier).toString(),// multiplier
+    discloseqty: (100*multiplier).toString(),// multiplier
     price_type: 'LMT',
     price: SpotCEObj.bp5 || 0,
     remarks: 'PawanEntryCrudeCEAPI'
@@ -396,8 +399,8 @@ let orderPE = {
     product_type: 'M',
     exchange: 'MCX',
     tradingsymbol: ATMPESym || 'CRUDEOIL14DEC23P6700',
-    quantity: '200', // multiplier
-    discloseqty: '200', // multiplier
+    quantity: (100*multiplier).toString(), // multiplier
+    discloseqty: (100*multiplier).toString(), // multiplier
     price_type: 'LMT',
     price: SpotPEObj.bp5 || 0,
     remarks: 'PawanEntryCrudePEAPI'
@@ -412,8 +415,8 @@ let orderCESL = {
     product_type: 'M',
     exchange: 'MCX',
     tradingsymbol: ATMCESym || 'CRUDEOIL14DEC23C6700',
-    quantity: '200',// multiplier
-    discloseqty: '200',// multiplier
+    quantity: (100*multiplier).toString(),// multiplier
+    discloseqty: (100*multiplier).toString(),// multiplier
     price_type: 'SL-LMT',
     price: Number(Math.round(Number(SpotCEObj.lp || 10) * 1.5)-5),
     trigger_price: Number(Math.round(Number(SpotCEObj.lp || 10) * 1.5)-10),
@@ -427,8 +430,8 @@ let orderPESL = {
     product_type: 'M',
     exchange: 'MCX',
     tradingsymbol: ATMPESym || 'CRUDEOIL14DEC23P6700',
-    quantity: '200', // multiplier
-    discloseqty: '200', // multiplier
+    quantity: (100*multiplier).toString(), // multiplier
+    discloseqty: (100*multiplier).toString(), // multiplier
     price_type: 'SL-LMT',
     price: Number(Math.round(Number(SpotPEObj.lp || 10) * 1.5)-5),
     trigger_price: Number(Math.round(Number(SpotPEObj.lp || 10) * 1.5)-10),
@@ -467,7 +470,7 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
             debug && console.log(SpotObj2.lp) // 233.50
             mtmValue = 2*(Math.round(((+filtered_data[0].avgprc + +filtered_data[1].avgprc) - (+SpotObj1.lp + +SpotObj2.lp))*100));
             // if MTM exit condition then close positions and exit pending orders
-            if(isTimeAfter1147PM() || mtmValue > 800 || mtmValue < -3000){
+            if(isTimeAfter1147PM() || mtmValue > (multiplier*gainExitMTM) || mtmValue < (multiplier*exitMTM)){
 
                 //cancel the SL orders
                 api.cancel_order(filtered_data_SL[0].norenordno)
@@ -479,8 +482,8 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
                     product_type: 'M',
                     exchange: 'MCX',
                     tradingsymbol: SpotObj1.tsym,
-                    quantity: '200',// multiplier
-                    discloseqty: '200',// multiplier
+                    quantity: (100*multiplier).toString(),// multiplier
+                    discloseqty: (100*multiplier).toString(),// multiplier
                     price_type: 'LMT',
                     price: SpotObj1.sp5,
                     remarks: 'PawanExit1API'
@@ -493,8 +496,8 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
                     product_type: 'M',
                     exchange: 'MCX',
                     tradingsymbol: SpotObj2.tsym,
-                    quantity: '200', // multiplier
-                    discloseqty: '200', // multiplier
+                    quantity: (100*multiplier).toString(), // multiplier
+                    discloseqty: (100*multiplier).toString(), // multiplier
                     price_type: 'LMT',
                     price: SpotObj2.sp5,
                     remarks: 'PawanExit2API'

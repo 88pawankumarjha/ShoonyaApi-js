@@ -1,5 +1,5 @@
 const Api = require('./lib/RestApi');
-const { debug, getPickedIndex, isTimeAfter1147PM, isCrudeOrderAlreadyPlaced, crudeStraddlePlaceOrder, crudeStraddlePostOrderPlacement, fetchAllBiases, processOrders, getCustomInterval, getStopSignal, getPickedExchange } = require('./utils/common');
+const { debug, send_notification, getPickedIndex, isTimeAfter1147PM, isCrudeOrderAlreadyPlaced, crudeStraddlePlaceOrder, crudeStraddlePostOrderPlacement, fetchAllBiases, processOrders, getCustomInterval, getStopSignal, getPickedExchange } = require('./utils/common');
 const { delay } = require('./utils/customLibrary');
 const { runFinNiftyContinuumIC } = require('./utils/finNiftyIC');
 const { authparams } = require('./creds');
@@ -11,9 +11,11 @@ let exitResult = '';
 api.login(authparams)
   .then((res) => {
     console.log('Reply: ', res);
+    // send_notification(res.susertoken, true)
   })
   .catch((err) => {
     console.error(err);
+    send_notification(error + ' error occured', true)
   });
 
 async function runIteration(api) {
@@ -33,10 +35,12 @@ async function runIteration(api) {
       await runIteration(api); 
     } else {
       console.log('Finished all iterations.');
+      send_notification('stopped', true)  
       process.exit(0);
     }
   } catch (error) {
     console.error(error);
+    send_notification(error + ' error occured', true)
   }
 }
 
@@ -76,9 +80,12 @@ async function runMCXIteration(api) {
       await delay(exitResult === 'loss' ? 300000 : 5000);
     } catch (error) {
       console.error(error);
+      send_notification(error + ' error occured', true)
     }
   }
   console.log('MCX Iteration calls completed.');
+  send_notification('MCX Iteration calls completed.', true)
+  process.exit(0);
 }
 
 // Start the non-recursive function
