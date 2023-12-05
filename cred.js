@@ -1,6 +1,6 @@
 const speakeasy = require('speakeasy');
 
-const token = ''; // Replace with your actual secret token
+const token = ' '; // Replace with your actual secret token
 
 const totp = speakeasy.totp({
   secret: token,
