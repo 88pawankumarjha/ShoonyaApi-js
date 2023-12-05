@@ -2,7 +2,7 @@ const Api = require('./lib/RestApi');
 const { debug, getPickedIndex, isTimeAfter1147PM, isCrudeOrderAlreadyPlaced, crudeStraddlePlaceOrder, crudeStraddlePostOrderPlacement, fetchAllBiases, processOrders, getCustomInterval, getStopSignal, getPickedExchange } = require('./utils/common');
 const { delay } = require('./utils/customLibrary');
 const { runFinNiftyContinuumIC } = require('./utils/finNiftyIC');
-const { authparams } = require('./cred');
+const { authparams } = require('./creds');
 
 const api = new Api({});
 let iteration = 0;

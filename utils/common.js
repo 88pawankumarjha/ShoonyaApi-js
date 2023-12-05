@@ -1,9 +1,9 @@
 const debug = false;
 const { setStop } = require('../app');
 const TelegramBot = require('node-telegram-bot-api');
-const { telegramBotToken } = require('../cred');
-const { chat_id_me } = require('../cred');
-const { chat_id } = require('../cred');
+const { telegramBotToken } = require('../creds');
+const { chat_id_me } = require('../creds');
+const { chat_id } = require('../creds');
 const { identify_option_type, fetchSpotPrice, delay, getStrike, calcVix } = require('./customLibrary');
 
 const bot = new TelegramBot(telegramBotToken, { polling: true });
