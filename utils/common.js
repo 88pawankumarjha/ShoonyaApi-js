@@ -489,8 +489,8 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
             if(isTimeAfter1147PM() || mtmValue > (multiplier*gainExitMTM) || mtmValue < (multiplier*exitMTM)){
 
                 //cancel the SL orders
-                api.cancel_order(filtered_data_SL[0].norenordno)
-                api.cancel_order(filtered_data_SL[1].norenordno)
+                api.cancel_order(filtered_data_SL[0]?.norenordno)
+                api.cancel_order(filtered_data_SL[1]?.norenordno)
 
                 // exit both strikes
                 let order1 = {
