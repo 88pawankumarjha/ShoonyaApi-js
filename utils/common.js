@@ -80,18 +80,18 @@ async function find_bias(api, inputToken, ocGap, keyword) {
       let newSearchSymbol = keyword + (atmStrike + ocGap * side) + ` ${Number(side) > 0 ? 'PE' : 'CE'}`;
       debug && console.log(newSearchSymbol, 'newSearchSymbol')
       const searchResult = await api.searchscrip(getPickedExchange(), newSearchSymbol);
-      if(keyword[0] === getPickedIndex()[0] && getPickedExchange() === 'BFO')
-         {
-            debug && console.log(searchResult, 'searchResult');
-            return searchResult.values[searchResult.values.length - 1].token;
-        }
-        else {
+      // if(keyword[0] === getPickedIndex()[0] && getPickedExchange() === 'BFO')
+      //    {
+      //       debug && console.log(searchResult, 'searchResult');
+      //       return searchResult.values[searchResult.values.length - 1].token;
+      //   }
+      //   else {
             debug && console.log(searchResult.values[0].tsym, 'searchResult.values[0].tsym');
             return searchResult.values[0].token;
-        }
+        // }
     };
 
-    let biasDiffOC = getPickedExchange() == 'BFO' ? 1: 2;
+    let biasDiffOC = getPickedExchange() == 'BFO' ? 2: 2;
     debug && console.log(biasDiffOC, 'biasDiffOC');
     const [ATMToken1, ATMToken2] = await Promise.all([getATMToken(-1 * biasDiffOC), getATMToken(biasDiffOC)]);
     const [ltpPut, ltpCall] = await Promise.all([
