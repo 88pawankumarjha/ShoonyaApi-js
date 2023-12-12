@@ -49,7 +49,7 @@ module.exports.idxNameTokenMap = new Map([
   ['SENSEX', '1'],
 ]);
 
-module.exports.downloadCsv = async (url, destination) => {
+module.exports.downloadCsv = async (url, destination, axios, fs) => {
   try {
     const response = await axios({
       method: 'GET',
@@ -70,7 +70,7 @@ module.exports.downloadCsv = async (url, destination) => {
   }
 };
 
-module.exports.filterAndMapDates = (data) => {
+module.exports.filterAndMapDates = (moment, data) => {
   const currentDate = moment().format('YYYY-MM-DD');
   return data
     .filter((row) => moment(row.Expiry, 'DD-MMM-YYYY').isSameOrAfter(currentDate))
