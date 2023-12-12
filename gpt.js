@@ -154,8 +154,12 @@ async function findNearestExpiry() {
     console.error('Error:', error.message);
   } finally {
     // Clean up: Delete downloaded files
-    fs.unlinkSync(zipFilePath);
-    fs.unlinkSync(csvFilePath);
+    if (fs.existsSync(zipFilePath)) {
+      fs.unlinkSync(zipFilePath);
+    }
+    if (fs.existsSync(csvFilePath)) {
+      fs.unlinkSync(csvFilePath);
+    }
   }
 };
 // Execute the findNearestExpiry function
