@@ -68,18 +68,18 @@ let biasProcess = {
 }
 
 const resetBiasProcess = () => {
-  optionChain = undefined,
-  ocCallOptions = undefined,
-  ocPutOptions = undefined,
-  itmCallSymbol = undefined,
-  itmCallStrikePrice = undefined,
-  itmPutSymbol = undefined,
-  itmPutStrikePrice = undefined,
-  atmStrike = undefined,
-  spotObject = undefined,
-  callSubStr = undefined,
-  putSubStr = undefined
-}
+    biasProcess.optionChain = undefined,
+    biasProcess.ocCallOptions = undefined,
+    biasProcess.ocPutOptions = undefined,
+    biasProcess.itmCallSymbol = undefined,
+    biasProcess.itmCallStrikePrice = undefined,
+    biasProcess.itmPutSymbol = undefined,
+    biasProcess.itmPutStrikePrice = undefined,
+    biasProcess.atmStrike = undefined,
+    biasProcess.spotObject = undefined,
+    biasProcess.callSubStr = undefined,
+    biasProcess.putSubStr = undefined
+  }
 
 
 let biasOutput = { // N[46] 20155 (-20)
@@ -1151,7 +1151,6 @@ getBias = async () => {
     try {
         await executeLogin();
         await startWebsocket();
-        await delay(1000);
         await updateITMSymbolfromOC();
         // Start the recurring function and store the interval identifier
         intervalId = setInterval(await myRecurringFunction, globalInput.delayTime);
