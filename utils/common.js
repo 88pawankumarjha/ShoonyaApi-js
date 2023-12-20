@@ -10,23 +10,31 @@ const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
-
-function convertToIST(time) {
-  const inputTime = new Date(time);
-  const istTime = new Date(inputTime.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  return istTime;
-}
-
-const isTimeBeforeorAfter = (compare, hours, mins) => {
-const inputTime = new Date();
-const istTime = convertToIST(inputTime);
-const curOffTime = convertToIST(inputTime);
-curOffTime.setHours(hours, mins);
-return compare == '<' ? istTime < curOffTime: istTime > curOffTime;
+const isTimeAfter330PM = () => {
+  const currentDate = new Date();
+  const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const formattedTime = istDateTimeFormat.format(currentDate);
+  const [hours, minutes] = formattedTime.split(':').map(Number);
+  return hours > 15 || (hours === 15 && minutes >= 30);
 };
-
-const isTimeAfter330PM = () => {return isTimeBeforeorAfter('>',15,30)};
-const isTimeAfter1147PM = () => !(isTimeAfter330PM && (isTimeBeforeorAfter('>', 11, 47)));
+const isTimeBefore1147PM = () => {
+  const currentDate = new Date();
+  const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const formattedTime = istDateTimeFormat.format(currentDate);
+  const [hours, minutes] = formattedTime.split(':').map(Number);
+  return hours < 23 || (hours === 23 && minutes < 47);
+};
+const isTimeAfter1147PM = () => !(isTimeAfter330PM && isTimeBefore1147PM());
 let pickedExchange = debug ? 'NFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
 const getPickedIndex = () => debug ? 'NIFTY' : ['UNKNOWN', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX'][new Date().getDay()] || 'UNKNOWN';
 const setPickedExchange = value => pickedExchange = value, getPickedExchange = () => pickedExchange;
@@ -80,18 +88,18 @@ async function find_bias(api, inputToken, ocGap, keyword) {
       let newSearchSymbol = keyword + (atmStrike + ocGap * side) + ` ${Number(side) > 0 ? 'PE' : 'CE'}`;
       debug && console.log(newSearchSymbol, 'newSearchSymbol')
       const searchResult = await api.searchscrip(getPickedExchange(), newSearchSymbol);
-      // if(keyword[0] === getPickedIndex()[0] && getPickedExchange() === 'BFO')
-      //    {
-      //       debug && console.log(searchResult, 'searchResult');
-      //       return searchResult.values[searchResult.values.length - 1].token;
-      //   }
-      //   else {
+      if(keyword[0] === getPickedIndex()[0] && getPickedExchange() === 'BFO')
+         {
+            debug && console.log(searchResult, 'searchResult');
+            return searchResult.values[searchResult.values.length - 1].token;
+        }
+        else {
             debug && console.log(searchResult.values[0].tsym, 'searchResult.values[0].tsym');
             return searchResult.values[0].token;
-        // }
+        }
     };
 
-    let biasDiffOC = getPickedExchange() == 'BFO' ? 2: 2;
+    let biasDiffOC = getPickedExchange() == 'BFO' ? 1: 2;
     debug && console.log(biasDiffOC, 'biasDiffOC');
     const [ATMToken1, ATMToken2] = await Promise.all([getATMToken(-1 * biasDiffOC), getATMToken(biasDiffOC)]);
     const [ltpPut, ltpCall] = await Promise.all([
@@ -234,6 +242,7 @@ async function processOrders(api, exchange = 'NFO') {
 }
 
 async function isCrudeOrderAlreadyPlaced(api) {
+    // return false;
     const orders = await api.get_orderbook();
     const filtered_data = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('Pawan') && item?.status === 'COMPLETE') : [];
     // console.log(filtered_data[0],filtered_data[1])
@@ -243,19 +252,18 @@ async function isCrudeOrderAlreadyPlaced(api) {
 async function crudeStraddlePlaceOrder(api, exchange='MCX') {
 
 //find ATM strike CE and PE
+
+const monthAbbreviation = new Date().toLocaleString('default', { month: 'short' }).toUpperCase();
+
 let query = `CRUDEOIL`;
 let futureObj = await api.searchscrip(exchange='MCX', searchtext=query)
 let futureToken = futureObj.values[3].token; //258003 //3 as it skips crudeoil, crudeoilm and its future
-console.log(futureToken, 'futureToken')
+
 const Spot = await fetchSpotPrice(api, futureToken, 'MCX');
     if (!Spot) { console.log('Not able to find the spot'); return null; }
-    debug && console.log(Spot.lp, 'spot lp') // 6241.00
-    console.log(Spot.lp, 'spot lp') // 6241.00
+    debug && console.log(Spot.lp) // 6241.00
 
 const ATMStrike = Math.round(Spot.lp / 50) * 50 //6250
-
-console.log(ATMStrike, 'ATMStrike');
-
 const ATMCEStrike = ATMStrike%100 !=0 ? +ATMStrike + 50: +ATMStrike;
 const ATMPEStrike = ATMStrike%100 !=0 ? +ATMStrike - 50: +ATMStrike;
 
