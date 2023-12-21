@@ -956,10 +956,10 @@ async function takeAction(goingUp) {
 
     if(goingUp && !telegramSignals.stopSignal && !debug) {
         await api.place_order(orderCE);
-        biasProcess.vix > 0 ? await api.place_order(orderSubmissiveCE) : await api.place_order(orderAggressiveCE);
+        biasProcess.vix > 0 ? await api.place_order(orderSubmissiveCE) : await api.place_order(orderAggressivePE);
     }else if (!goingUp && !telegramSignals.stopSignal && !debug){
         await api.place_order(orderPE);
-        biasProcess.vix > 0 ? await api.place_order(orderSubmissivePE) : await api.place_order(orderAggressivePE);
+        biasProcess.vix > 0 ? await api.place_order(orderSubmissivePE) : await api.place_order(orderAggressiveCE);
     }
     // console.log(orderCE, 'orderCE')
     // console.log(orderPE, 'orderPE')
