@@ -1039,7 +1039,13 @@ myRecurringFunction = async () => {
     ltpSuggestedCall = (+latestQuotes[biasProcess.callSubStr]?.lp + +biasProcess.itmCallStrikePrice);
     // console.log(latestQuotes[biasProcess.callSubStr], biasProcess.itmCallStrikePrice, latestQuotes[`NSE|${globalInput.token}`].lp, 'call')
     // console.log(latestQuotes[biasProcess.putSubStr], biasProcess.itmPutStrikePrice, latestQuotes[`NSE|${globalInput.token}`].lp, 'put')
-    biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`NSE|${globalInput.token}`].lp));
+    
+    const lpValue = latestQuotes[`NSE|${globalInput.token}`]?.lp;
+    // Check if all variables are valid numbers
+    if (!isNaN(ltpSuggestedCall) && !isNaN(ltpSuggestedPut) && !isNaN(lpValue)) {
+      // Perform the calculation
+        biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`NSE|${globalInput.token}`].lp));
+    }
     // console.log(biasOutput.bias, ' : biasOutput.bias');
     // console.log(`vix = ${biasProcess.vix}`);
 
