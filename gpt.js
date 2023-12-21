@@ -214,7 +214,8 @@ async function findNearestExpiry() {
     globalInput.MONTHLY_EXPIRY = expiryFutList[0].Expiry;
     globalInput.pickedExchange = expiryFutList[0].Exchange;
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error(error.message);
+    send_notification(error.message, true)
   } 
   // finally {
     // Clean up: Delete downloaded files
@@ -250,7 +251,10 @@ async function send_callback_notification() {
                 { text: '🛑', callback_data: 'exit' }
               ]]};
       !debug && bot.sendMessage(chat_id_me, 'Choose server settings', { reply_markup: keyboard });
-    } catch (error) { console.error(error);send_notification(error + ' error occured', true)}
+    } catch (error) {
+        console.error(error.message);
+        send_notification(error.message, true)
+      } 
   }
   bot.on('callback_query', (callbackQuery) => {
     const chatId = callbackQuery.message.chat.id;
@@ -445,7 +449,7 @@ postOrderPosTracking = () => {
 function receiveQuote(data) {
     // console.log("Quote ::", data);
     // Update the latest quote value for the corresponding instrument
-    if(data.lp) {
+    if(data.lp && data.tk && data.e) {
         latestQuotes[data.e + '|' + data.tk] = data
     }
     //  else {
@@ -515,9 +519,10 @@ async function getOptionChain() {
             return null;
         }
     } catch (error) {
-        console.error('Error:', error.message);
+        console.error(error.message);
+        send_notification(error.message, true)
         return null;
-    }
+      } 
 }
 
 // Function to find the ITM symbol from the option chain
@@ -1009,6 +1014,7 @@ async function checkAlert() {
 
 // updateBias and updateITMSymbolfromOC when atmStrike changes
 myRecurringFunction = async () => {
+    try{
 
     getAtmStrike()!= biasProcess.atmStrike && resetBiasProcess() && await updateITMSymbolfromOC() && await dynSubs();
     biasProcess.vix = latestQuotes['NSE|26017']?.pc;
@@ -1016,8 +1022,8 @@ myRecurringFunction = async () => {
     debug && console.log(`${biasProcess.itmCallSymbol}:`, latestQuotes[biasProcess.callSubStr] ? latestQuotes[biasProcess.callSubStr].lp : "N/A", "Order:", latestOrders[biasProcess.callSubStr]);
     debug && console.log(`${biasProcess.itmPutSymbol}:`, latestQuotes[biasProcess.putSubStr] ? latestQuotes[biasProcess.putSubStr].lp : "N/A", "Order:", latestOrders[biasProcess.putSubStr]);
 
-    ltpSuggestedPut = +biasProcess.itmPutStrikePrice - (+latestQuotes[biasProcess.putSubStr].lp);
-    ltpSuggestedCall = (+latestQuotes[biasProcess.callSubStr].lp + +biasProcess.itmCallStrikePrice);
+    ltpSuggestedPut = +biasProcess.itmPutStrikePrice - (+latestQuotes[biasProcess.putSubStr]?.lp);
+    ltpSuggestedCall = (+latestQuotes[biasProcess.callSubStr]?.lp + +biasProcess.itmCallStrikePrice);
     // console.log(latestQuotes[biasProcess.callSubStr], biasProcess.itmCallStrikePrice, latestQuotes[`NSE|${globalInput.token}`].lp, 'call')
     // console.log(latestQuotes[biasProcess.putSubStr], biasProcess.itmPutStrikePrice, latestQuotes[`NSE|${globalInput.token}`].lp, 'put')
     biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`NSE|${globalInput.token}`].lp));
@@ -1077,6 +1083,11 @@ myRecurringFunction = async () => {
       clearInterval(intervalId);
       // console.log(latestOrders, 'latestOrders')
       console.log('Recurring function stopped.');
+    }
+
+    } catch (error) {
+        console.error(error.message);
+        send_notification(error.message, true)
     }
 }
 
@@ -1167,7 +1178,7 @@ getBias = async () => {
         // }, 10000);
     } catch (error) {
         console.error(error);
-        send_notification(error, true)
+        send_notification(error.message, true)
     }
 };
 getBias();
