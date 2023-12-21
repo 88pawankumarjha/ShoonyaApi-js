@@ -528,18 +528,21 @@ async function getOptionChain() {
 // Function to find the ITM symbol from the option chain
 function updateITMSymbolAndStrike(optionType) {
     // Filter options by type (CE for Call, PE for Put)
-    biasProcess.ocCallOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'CE');
-    biasProcess.ocPutOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'PE');
-    // Sort options by tsym for both Call and Put
-    biasProcess.ocCallOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
-    biasProcess.ocPutOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
-    // Assign ITM symbols and strike prices
-    debug && console.log(biasProcess.ocCallOptions, 'callOptions')
-    debug && console.log(biasProcess.ocPutOptions, 'putOptions')
-    biasProcess.itmCallSymbol = biasProcess.ocCallOptions[14].tsym;
-    biasProcess.itmCallStrikePrice = biasProcess.ocCallOptions[14].strprc;
-    biasProcess.itmPutSymbol = biasProcess.ocPutOptions[16].tsym;
-    biasProcess.itmPutStrikePrice = biasProcess.ocPutOptions[16].strprc;
+    if(biasProcess.optionChain)
+    {
+        biasProcess.ocCallOptions = biasProcess.optionChain.values.filter(option => option.optt === 'CE');
+        biasProcess.ocPutOptions = biasProcess.optionChain.values.filter(option => option.optt === 'PE');
+        // Sort options by tsym for both Call and Put
+        biasProcess.ocCallOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
+        biasProcess.ocPutOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
+        // Assign ITM symbols and strike prices
+        debug && console.log(biasProcess.ocCallOptions, 'callOptions')
+        debug && console.log(biasProcess.ocPutOptions, 'putOptions')
+        biasProcess.itmCallSymbol = biasProcess.ocCallOptions[14].tsym;
+        biasProcess.itmCallStrikePrice = biasProcess.ocCallOptions[14].strprc;
+        biasProcess.itmPutSymbol = biasProcess.ocPutOptions[16].tsym;
+        biasProcess.itmPutStrikePrice = biasProcess.ocPutOptions[16].strprc;
+    }
     return;
 }
 
@@ -955,11 +958,21 @@ async function takeAction(goingUp) {
     }
 
     if(goingUp && !telegramSignals.stopSignal && !debug) {
-        await api.place_order(orderCE);
-        biasProcess.vix > 0 ? await api.place_order(orderSubmissiveCE) : await api.place_order(orderAggressivePE);
+        if(biasProcess.vix > 0){
+            await api.place_order(orderCE);
+            await api.place_order(orderSubmissiveCE)
+        } else {
+            await api.place_order(orderPE);
+            await api.place_order(orderAggressivePE);
+        }
     }else if (!goingUp && !telegramSignals.stopSignal && !debug){
-        await api.place_order(orderPE);
-        biasProcess.vix > 0 ? await api.place_order(orderSubmissivePE) : await api.place_order(orderAggressiveCE);
+        if(biasProcess.vix > 0){
+            await api.place_order(orderPE);
+            await api.place_order(orderSubmissivePE);
+        } else {
+            await api.place_order(orderPE);
+            await api.place_order(orderAggressiveCE);
+        }
     }
     // console.log(orderCE, 'orderCE')
     // console.log(orderPE, 'orderPE')
