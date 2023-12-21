@@ -528,21 +528,21 @@ async function getOptionChain() {
 // Function to find the ITM symbol from the option chain
 function updateITMSymbolAndStrike(optionType) {
     // Filter options by type (CE for Call, PE for Put)
-    if(biasProcess.optionChain)
-    {
-        biasProcess.ocCallOptions = biasProcess.optionChain.values.filter(option => option.optt === 'CE');
-        biasProcess.ocPutOptions = biasProcess.optionChain.values.filter(option => option.optt === 'PE');
+    // if(biasProcess.optionChain)
+    // {
+        biasProcess.ocCallOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'CE');
+        biasProcess.ocPutOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'PE');
         // Sort options by tsym for both Call and Put
-        biasProcess.ocCallOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
-        biasProcess.ocPutOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
+        biasProcess?.ocCallOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
+        biasProcess?.ocPutOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
         // Assign ITM symbols and strike prices
         debug && console.log(biasProcess.ocCallOptions, 'callOptions')
         debug && console.log(biasProcess.ocPutOptions, 'putOptions')
-        biasProcess.itmCallSymbol = biasProcess.ocCallOptions[14].tsym;
-        biasProcess.itmCallStrikePrice = biasProcess.ocCallOptions[14].strprc;
-        biasProcess.itmPutSymbol = biasProcess.ocPutOptions[16].tsym;
-        biasProcess.itmPutStrikePrice = biasProcess.ocPutOptions[16].strprc;
-    }
+        biasProcess.itmCallSymbol = biasProcess?.ocCallOptions[14]?.tsym;
+        biasProcess.itmCallStrikePrice = biasProcess?.ocCallOptions[14]?.strprc;
+        biasProcess.itmPutSymbol = biasProcess?.ocPutOptions[16]?.tsym;
+        biasProcess.itmPutStrikePrice = biasProcess?.ocPutOptions[16]?.strprc;
+    // }
     return;
 }
 
@@ -1042,8 +1042,7 @@ myRecurringFunction = async () => {
     
     const lpValue = latestQuotes[`NSE|${globalInput.token}`]?.lp;
     // Check if all variables are valid numbers
-    if (!isNaN(ltpSuggestedCall) && !isNaN(ltpSuggestedPut) && !isNaN(lpValue)) {
-      // Perform the calculation
+    if (!isNaN(lpValue)) {
         biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`NSE|${globalInput.token}`].lp));
     }
     // console.log(biasOutput.bias, ' : biasOutput.bias');
