@@ -970,7 +970,7 @@ async function takeAction(goingUp) {
             await api.place_order(orderPE);
             await api.place_order(orderSubmissivePE);
         } else {
-            await api.place_order(orderPE);
+            await api.place_order(orderCE);
             await api.place_order(orderAggressiveCE);
         }
     }
