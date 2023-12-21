@@ -528,8 +528,8 @@ async function getOptionChain() {
 // Function to find the ITM symbol from the option chain
 function updateITMSymbolAndStrike(optionType) {
     // Filter options by type (CE for Call, PE for Put)
-    biasProcess.ocCallOptions = biasProcess.optionChain.values.filter(option => option.optt === 'CE');
-    biasProcess.ocPutOptions = biasProcess.optionChain.values.filter(option => option.optt === 'PE');
+    biasProcess.ocCallOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'CE');
+    biasProcess.ocPutOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'PE');
     // Sort options by tsym for both Call and Put
     biasProcess.ocCallOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
     biasProcess.ocPutOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
@@ -1092,7 +1092,7 @@ myRecurringFunction = async () => {
 }
 
 function getTokenByTradingSymbol(tradingSymbol) {
-    const option = biasProcess.optionChain.values.find(option => option.tsym === tradingSymbol);
+    const option = biasProcess.optionChain?.values.find(option => option.tsym === tradingSymbol);
     if (option) {
       return option.token;
     } else {
