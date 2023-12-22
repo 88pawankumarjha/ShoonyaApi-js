@@ -5,9 +5,9 @@ const { telegramBotToken } = require('../creds');
 const { chat_id_me } = require('../creds');
 const { chat_id } = require('../creds');
 const { identify_option_type, fetchSpotPrice, delay, getStrike, calcVix } = require('./customLibrary');
-
+let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
-let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
+let interval = 20000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
 const isTimeAfter330PM = () => {
@@ -35,8 +35,8 @@ const isTimeBefore1147PM = () => {
   return hours < 23 || (hours === 23 && minutes < 47);
 };
 const isTimeAfter1147PM = () => !(isTimeAfter330PM && isTimeBefore1147PM());
-let pickedExchange = debug ? 'NFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
-const getPickedIndex = () => debug ? 'NIFTY' : ['UNKNOWN', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX'][new Date().getDay()] || 'UNKNOWN';
+let pickedExchange = debug ? 'BFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
+const getPickedIndex = () => debug ? 'SENSEX' : ['UNKNOWN', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX'][new Date().getDay()] || 'UNKNOWN';
 const setPickedExchange = value => pickedExchange = value, getPickedExchange = () => pickedExchange;
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
@@ -55,6 +55,10 @@ async function send_callback_notification() {
       const keyboard = {inline_keyboard: [[
               { text: '🐌', callback_data: 'slower' },
               { text: '🚀', callback_data: 'faster' },
+              { text: 'CA', callback_data: 'CA' },
+              { text: 'CS', callback_data: 'CS' },
+              { text: 'PA', callback_data: 'PA' },
+              { text: 'PS', callback_data: 'PS' },
               { text: '💹', callback_data: 'toggleExchange' },
               { text: '🛑', callback_data: 'stop' }
             ]]};
@@ -68,6 +72,26 @@ bot.on('callback_query', (callbackQuery) => {
   const exchange = getPickedExchange();
   if (data === 'slower') setCustomInterval(true);
   else if (data === 'faster') setCustomInterval(false);
+  else if (data === 'CA') {
+    (async () => {
+      await takeAction(apiLocal, -1, false); // takeAction(api, vixQuoteCalc, up);
+    })();
+  }
+  else if (data === 'CS') {
+    (async () => {
+      await takeAction(apiLocal, 1, true); // takeAction(api, vixQuoteCalc, up);
+    })();
+  }
+  else if (data === 'PA') {
+    (async () => {
+      await takeAction(apiLocal, -1, true); // takeAction(api, vixQuoteCalc, up);
+    })();
+  }
+  else if (data === 'PS') {
+    (async () => {
+      await takeAction(apiLocal, 1, false); // takeAction(api, vixQuoteCalc, up);
+    })();
+  }
   else if (data === 'stop') stopSignal = !stopSignal;
   else if (data === 'toggleExchange') setPickedExchange(getPickedExchange() === 'NFO' ? 'BFO' : getPickedExchange() === 'BFO' ? 'MCX' : 'NFO');
   bot.sendMessage(chatId, `Delay: ${getCustomInterval() / 1000} sec, Exchange: ${getPickedExchange()}, Stopped: ${getStopSignal()}`);
@@ -88,15 +112,15 @@ async function find_bias(api, inputToken, ocGap, keyword) {
       let newSearchSymbol = keyword + (atmStrike + ocGap * side) + ` ${Number(side) > 0 ? 'PE' : 'CE'}`;
       debug && console.log(newSearchSymbol, 'newSearchSymbol')
       const searchResult = await api.searchscrip(getPickedExchange(), newSearchSymbol);
-      if(keyword[0] === getPickedIndex()[0] && getPickedExchange() === 'BFO')
-         {
-            debug && console.log(searchResult, 'searchResult');
-            return searchResult.values[searchResult.values.length - 1].token;
-        }
-        else {
+      // if(keyword[0] === getPickedIndex()[0] && getPickedExchange() === 'BFO')
+      //    {
+      //       debug && console.log(searchResult, 'searchResult');
+      //       return searchResult.values[searchResult.values.length - 1].token;
+      //   }
+      //   else {
             debug && console.log(searchResult.values[0].tsym, 'searchResult.values[0].tsym');
             return searchResult.values[0].token;
-        }
+        // }
     };
 
     let biasDiffOC = getPickedExchange() == 'BFO' ? 1: 2;
@@ -122,6 +146,7 @@ async function find_bias(api, inputToken, ocGap, keyword) {
 
 async function fetchAllBiases(api, exchange = 'NFO', iteration) {
   try {
+    apiLocal = api;
     const biasesConfig = [];
     if (getPickedExchange() === 'NFO') {
         biasesConfig.push({ token: '26000', ocGap: 50, keyword: 'NIFTY ' });
@@ -173,8 +198,211 @@ async function checkAlert(api) {
             const vixQuoteCalc = await calcVix(api);
             debug && console.log(vixQuoteCalc, 'vixQuoteCalc')
             send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX = ${vixQuoteCalc}%, Bias ${calcBias}, '\n'${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}'\n'${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`, true);
+            await takeAction(api, vixQuoteCalc, up);
         }
     }
+}
+
+// exitPosition()
+
+const takeAction = async (api, vixQuoteCalc, up) => {
+ 
+
+  let smallestCallPosition;
+  let smallestPutPosition;
+  let orderCE = {};
+  let orderAggCE = {};
+  let orderAggCESL = {};
+  let orderSubCE = {};
+  let orderSubCESL = {};
+  let orderPE = {};
+  let orderAggPE = {};
+  let orderAggPESL = {};
+  let orderSubPE = {};
+  let orderSubPESL = {};
+  
+// updateSmallestPositions
+
+  
+      const data = await api.get_positions();
+    
+      if (Array.isArray(data)) {
+          // Separate calls and puts for NFO - these are sold options with smallest LTP
+          const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
+          const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
+          smallestCallPosition = calls.length > 0 && calls.reduce((min, option) => (parseFloat(option.lp) < parseFloat(min.lp) ? option : min), calls[0]);
+          smallestPutPosition = puts.length > 0 && puts.reduce((min, option) => (parseFloat(option.lp) < parseFloat(min.lp) ? option : min), puts[0]);
+
+          orderCE = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: smallestCallPosition?.tsym,
+            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderCEExitAPI'
+          }
+
+          ltporderAggCE = await getCloserTokenLTP(api, smallestCallPosition, -1)
+
+          orderAggCE = {
+            buy_or_sell: 'S',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: getCloserTokenSymbol((smallestCallPosition),-1),
+            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderCEEntryAPI'
+          }
+          orderAggCESL = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: getCloserTokenSymbol((smallestCallPosition),-1),
+            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'SL-LMT',
+            price: +ltporderAggCE + 70,
+            trigger_price: +ltporderAggCE + 65,
+            remarks: 'CommonOrderCEEntryAPISL'
+          }
+
+          ltporderSubCE = await getCloserTokenLTP(api, smallestCallPosition, 1)
+
+          orderSubCE = {
+            buy_or_sell: 'S',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: getCloserTokenSymbol((smallestCallPosition),1),
+            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderCEEntryAPI'
+          }
+
+          orderSubCESL = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: getCloserTokenSymbol((smallestCallPosition),1),
+            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'SL-LMT',
+            price: +ltporderSubCE + 70,
+            trigger_price: +ltporderSubCE + 65,
+            remarks: 'CommonOrderCEEntryAPISL'
+          }
+          orderPE = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: smallestPutPosition?.tsym,
+            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderPEExitAPI'
+          }
+
+          ltporderAggPE = await getCloserTokenLTP(api, smallestPutPosition, 1)
+
+          orderAggPE = {
+            buy_or_sell: 'S',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: getCloserTokenSymbol((smallestPutPosition),1),
+            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderPEEntryAPI'
+          }
+
+          orderAggPESL = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: getCloserTokenSymbol((smallestPutPosition),1),
+            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'SL-LMT',
+            price: +ltporderAggPE + 70,
+            trigger_price: +ltporderAggPE + 65,
+            remarks: 'CommonOrderPEEntryAPISL'
+          }
+
+          ltporderSubPE = await getCloserTokenLTP(api, smallestPutPosition, -1)
+
+          orderSubPE = {
+            buy_or_sell: 'S',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: getCloserTokenSymbol((smallestPutPosition),-1),
+            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderPEEntryAPI'
+          }
+
+          orderSubPESL = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: getCloserTokenSymbol((smallestPutPosition),-1),
+            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'SL-LMT',
+            price: +ltporderSubPE + 70,
+            trigger_price: +ltporderSubPE + 65,
+            remarks: 'CommonOrderPEEntryAPISL'
+          }
+        } else {
+            console.error('Positions data is not an array.');
+        }
+  const orders = await api.get_orderbook();
+
+  const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C'): [];
+  const filtered_data_SL_PE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'P'): [];
+
+  if(up & vixQuoteCalc > 0) {
+    send_notification(`going up & high vix`)
+    //exit call
+    await api.place_order(orderCE);
+    await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
+    //move away call
+    await api.place_order(orderSubCE);
+    await api.place_order(orderSubCESL);
+  } else if (up & vixQuoteCalc <= 0) {
+    send_notification(`going up & low vix`)
+    //exit call
+    await api.place_order(orderPE);
+    await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
+    //come closer call
+    await api.place_order(orderAggPE);
+    await api.place_order(orderAggPESL);
+  } else if (!up & vixQuoteCalc > 0) {
+    send_notification(`going down and high vix`)
+    //exit put
+    await api.place_order(orderPE);
+    await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
+    //move away put
+    await api.place_order(orderSubPE);
+    await api.place_order(orderSubPESL);
+  } else if (!up & vixQuoteCalc <= 0) {
+    send_notification(`going down and low vix`)
+    //exit put
+    await api.place_order(orderCE);
+    await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
+    //come closer put
+    await api.place_order(orderAggCE);
+    await api.place_order(orderAggCESL);
+  }
 }
 
 const getCloserTokenSymbol = (item, level=1) => {
@@ -250,7 +478,7 @@ async function isCrudeOrderAlreadyPlaced(api) {
 }
 
 async function crudeStraddlePlaceOrder(api, exchange='MCX') {
-
+await send_callback_notification();
 //find ATM strike CE and PE
 
 const monthAbbreviation = new Date().toLocaleString('default', { month: 'short' }).toUpperCase();
