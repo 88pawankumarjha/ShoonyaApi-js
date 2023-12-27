@@ -593,7 +593,7 @@ async function processOrders(api, exchange = 'NFO') {
   try {
     const orders = await api.get_orderbook();
     const filtered_data = Array.isArray(orders) ? orders.filter(item => item.status === 'TRIGGER_PENDING' && item?.instname === 'OPTIDX'): [];
-    console.log(filtered_data)
+    // console.log(filtered_data)
     if (filtered_data.length === 0) { console.log('No orders with status TRIGGER_PENDING.'); return;}
     debug && console.log(filtered_data, 'filtered_data')
     for (const item of filtered_data) {
