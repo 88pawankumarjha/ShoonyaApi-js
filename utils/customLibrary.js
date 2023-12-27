@@ -7,10 +7,12 @@ module.exports.fetchSpotPrice = async (api, inputToken, pickedExchange) => {
   }
 }
 
-module.exports.identify_option_type = (symbol) => {
+const identify_option_type = (symbol) => {
   const cleaned_symbol = symbol.replace(/\d+$/, ''); // Remove trailing digits
   return cleaned_symbol.endsWith('C') || cleaned_symbol.endsWith('CE') ? 'C' : cleaned_symbol.endsWith('P') || cleaned_symbol.endsWith('PE') ? 'P' : 'U';
 }
+module.exports.identify_option_type = identify_option_type;
+
 
 module.exports.delay = (ms) => {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -21,7 +23,7 @@ module.exports.calcVix = async (api) => {
   return parseFloat((((vixQuote?.lp - vixQuote?.c)/vixQuote?.c)*100) || 1).toFixed(2) || 1;
 }
 
-module.exports.getStrike = (tsym, pickedExchange) => {
+const getStrike = (tsym, pickedExchange) => {
   if (pickedExchange === 'NFO'){//BANKNIFTY22NOV23C43800, FINNIFTY28NOV23C19300, NIFTY23NOV23C19750
           return +tsym.slice(-5);
       }
@@ -32,6 +34,22 @@ module.exports.getStrike = (tsym, pickedExchange) => {
       return +tsym.slice(-3);
   }
 }
+module.exports.getStrike = getStrike;
+
+module.exports.nearByTsymPutSub = (item, ocGapCalc, pickedExchange) => {
+  return item.tsym.slice(0, -5) + (getStrike(item.tsym, pickedExchange) - parseInt(ocGapCalc, 10))
+}
+module.exports.nearByTsymCallAgg = (item, ocGapCalc, pickedExchange) => {
+  return item.tsym.slice(0, -5) + (getStrike(item.tsym, pickedExchange) - parseInt(ocGapCalc, 10))
+}
+module.exports.nearByTsymCallSub = (item, ocGapCalc, pickedExchange) => {
+  return item.tsym.slice(0, -5) + (getStrike(item.tsym, pickedExchange) + parseInt(ocGapCalc, 10))
+}
+module.exports.nearByTsymPutAgg = (item, ocGapCalc, pickedExchange) => {
+  return item.tsym.slice(0, -5) + (getStrike(item.tsym, pickedExchange) + parseInt(ocGapCalc, 10))
+}
+
+
 //nearest expiry start
 module.exports.idxNameOcGap = new Map([
   ['BANKEX', '100'],

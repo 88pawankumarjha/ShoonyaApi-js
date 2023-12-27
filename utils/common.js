@@ -4,10 +4,10 @@ const TelegramBot = require('node-telegram-bot-api');
 const { telegramBotToken } = require('../creds');
 const { chat_id_me } = require('../creds');
 const { chat_id } = require('../creds');
-const { identify_option_type, fetchSpotPrice, delay, getStrike, calcVix } = require('./customLibrary');
+const { identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByTsymPutAgg, nearByTsymPutSub, nearByTsymCallAgg, nearByTsymCallSub, nearByPositions } = require('./customLibrary');
 let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
-let interval = 20000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
+let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
 const isTimeAfter330PM = () => {
@@ -74,22 +74,26 @@ bot.on('callback_query', (callbackQuery) => {
   else if (data === 'faster') setCustomInterval(false);
   else if (data === 'CA') {
     (async () => {
-      await takeAction(apiLocal, -1, false); // takeAction(api, vixQuoteCalc, up);
+      send_notification('CA clicked', true)
+      await takeDecision(apiLocal, false, -1) // await takeDecision(api, up, vixQuoteCalc)
     })();
   }
   else if (data === 'CS') {
     (async () => {
-      await takeAction(apiLocal, 1, true); // takeAction(api, vixQuoteCalc, up);
+      send_notification('CS clicked', true)
+      await takeDecision(apiLocal, true, 1) // await takeDecision(api, up, vixQuoteCalc)
     })();
   }
   else if (data === 'PA') {
     (async () => {
-      await takeAction(apiLocal, -1, true); // takeAction(api, vixQuoteCalc, up);
+      send_notification('PA clicked', true)
+      await takeDecision(apiLocal, true, -1) // await takeDecision(api, up, vixQuoteCalc)
     })();
   }
   else if (data === 'PS') {
     (async () => {
-      await takeAction(apiLocal, 1, false); // takeAction(api, vixQuoteCalc, up);
+      send_notification('PS clicked', true)
+      await takeDecision(apiLocal, false, 1) // await takeDecision(api, up, vixQuoteCalc)
     })();
   }
   else if (data === 'stop') stopSignal = !stopSignal;
@@ -198,46 +202,126 @@ async function checkAlert(api) {
             const vixQuoteCalc = await calcVix(api);
             debug && console.log(vixQuoteCalc, 'vixQuoteCalc')
             send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX = ${vixQuoteCalc}%, Bias ${calcBias}, '\n'${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}'\n'${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`, true);
-            await takeAction(api, vixQuoteCalc, up);
+            await takeDecision(api, up, vixQuoteCalc)
         }
     }
 }
 
-// exitPosition()
+const takeDecision = async (api, up, vixQuoteCalc) => {
+  await updatePositions(api);
+  if (up && vixQuoteCalc > 0) {
+    await takeActionCallAway(api)
+  }
+  else if (!up && vixQuoteCalc > 0) {
+    await takeActionPutAway(api)
+  }
+  else if (!up && vixQuoteCalc <= 0) {
+    await takeActionCallCloser(api)
+  }
+  else if (up && vixQuoteCalc <= 0) {
+    await takeActionPutCloser(api)
+  }
+}
+let callPositions= [];
+let putPositions= [];
+let smallestCallPosition = {};
+let smallestPutPosition = {};
 
-const takeAction = async (api, vixQuoteCalc, up) => {
+const updateNearByPositions = async (positions) => {
+if (getPickedExchange() === 'NFO'){//BANKNIFTY22NOV23C43800, FINNIFTY28NOV23C19300, NIFTY23NOV23C19750
+  if (identify_option_type(positions[0]?.tsym) == 'C') {
+    item = positions[0];
+    strike = getStrike(item.tsym, pickedExchange)
+    prefix = item.tsym.slice(0, -5)
+    callPositions.push(item.tsym)
+    callPositions.push(prefix + (strike + Math.abs(+ocGapCalc)))
+    callPositions.push(prefix + (strike - Math.abs(+ocGapCalc)))
+    
+    item = positions[1]
+    strike = getStrike(item.tsym, pickedExchange)
+    prefix = item.tsym.slice(0, -5)
+    putPositions.push(item.tsym)
+    putPositions.push(prefix + (strike - Math.abs(+ocGapCalc)))
+    putPositions.push(prefix + (strike + Math.abs(+ocGapCalc)))
+  } else {
+    item = positions[1]
+    strike = getStrike(item.tsym, pickedExchange)
+    prefix = item.tsym.slice(0, -5)
+    callPositions.push(item.tsym)
+    callPositions.push(prefix + (strike + Math.abs(+ocGapCalc)))
+    callPositions.push(prefix + (strike - Math.abs(+ocGapCalc)))
+    
+    item = positions[0]
+    strike = getStrike(item.tsym, pickedExchange)
+    prefix = item.tsym.slice(0, -5)
+    putPositions.push(item.tsym)
+    putPositions.push(prefix + (strike - Math.abs(+ocGapCalc)))
+    putPositions.push(prefix + (strike + Math.abs(+ocGapCalc)))
+  }
+}
+else if (getPickedExchange() === 'BFO') {//SENSEX23N1765500PE, BANKEX23N2049300CE
+  if (identify_option_type(positions[0]?.tsym) == 'C') {
+    item = positions[0];
+    callPositions.push(item.tsym)
+    callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+    callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+    item = position[1]
+    putPositions.push(item.tsym)
+    putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+    putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+  } else {
+    item = positions[1];
+    callPositions.push(item.tsym)
+    callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+    callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+    item = position[0]
+    putPositions.push(item.tsym)
+    putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+    putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+  }    
+  }
+
+  send_notification('callPositions: '+callPositions.join('-'), true)
+  send_notification('putPositions: '+putPositions.join('-'), true)
+  
+}
+
+const updatePositions = async (api) => {
+
+  callPositions = []
+  putPositions = []
+  smallestCallPosition = {};
+  smallestPutPosition = {};
+
+  const data = await api.get_positions();
+  if (Array.isArray(data)) {
+    const sellPositions = data.filter(option => parseInt(option.netqty) < 0);
+    sellPositions.sort((a, b) => parseFloat(a.lp) - parseFloat(b.lp));
+    const smallestTwoPositions = sellPositions.slice(0, 2);
+    await updateNearByPositions(smallestTwoPositions)
+  
+    // Separate calls and puts for NFO - these are sold options with smallest LTP
+    const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
+    smallestCallPosition = calls.length > 0 && calls.reduce((min, option) => (parseFloat(option.lp) < parseFloat(min.lp) ? option : min), calls[0]);
+    const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
+    smallestPutPosition = puts.length > 0 && puts.reduce((min, option) => (parseFloat(option.lp) < parseFloat(min.lp) ? option : min), puts[0]);
+    
+}
+}
+
+
+
+const takeActionCallAway = async (api) => {
  
-
-  let smallestCallPosition;
-  let smallestPutPosition;
   let orderCE = {};
-  let orderAggCE = {};
-  let orderAggCESL = {};
   let orderSubCE = {};
   let orderSubCESL = {};
-  let orderPE = {};
-  let orderAggPE = {};
-  let orderAggPESL = {};
-  let orderSubPE = {};
-  let orderSubPESL = {};
   
-// updateSmallestPositions
-
-  
-      const data = await api.get_positions();
-    
-      if (Array.isArray(data)) {
-          // Separate calls and puts for NFO - these are sold options with smallest LTP
-          const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
-          const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
-          smallestCallPosition = calls.length > 0 && calls.reduce((min, option) => (parseFloat(option.lp) < parseFloat(min.lp) ? option : min), calls[0]);
-          smallestPutPosition = puts.length > 0 && puts.reduce((min, option) => (parseFloat(option.lp) < parseFloat(min.lp) ? option : min), puts[0]);
-
           orderCE = {
             buy_or_sell: 'B',
             product_type: 'M',
             exchange: getPickedExchange(),
-            tradingsymbol: smallestCallPosition?.tsym,
+            tradingsymbol: callPositions[0],
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'MKT',
@@ -245,39 +329,13 @@ const takeAction = async (api, vixQuoteCalc, up) => {
             remarks: 'CommonOrderCEExitAPI'
           }
 
-          ltporderAggCE = await getCloserTokenLTP(api, smallestCallPosition, -1)
-
-          orderAggCE = {
-            buy_or_sell: 'S',
-            product_type: 'M',
-            exchange: getPickedExchange(),
-            tradingsymbol: getCloserTokenSymbol((smallestCallPosition),-1),
-            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
-            discloseqty: 0,
-            price_type: 'MKT',
-            price: 0,
-            remarks: 'CommonOrderCEEntryAPI'
-          }
-          orderAggCESL = {
-            buy_or_sell: 'B',
-            product_type: 'M',
-            exchange: getPickedExchange(),
-            tradingsymbol: getCloserTokenSymbol((smallestCallPosition),-1),
-            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
-            discloseqty: 0,
-            price_type: 'SL-LMT',
-            price: +ltporderAggCE + 70,
-            trigger_price: +ltporderAggCE + 65,
-            remarks: 'CommonOrderCEEntryAPISL'
-          }
-
-          ltporderSubCE = await getCloserTokenLTP(api, smallestCallPosition, 1)
+          // ltporderSubCE = await getCloserTokenLTP(api, smallestCallPosition, -1)
 
           orderSubCE = {
             buy_or_sell: 'S',
             product_type: 'M',
             exchange: getPickedExchange(),
-            tradingsymbol: getCloserTokenSymbol((smallestCallPosition),1),
+            tradingsymbol: callPositions[1],
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'MKT',
@@ -289,14 +347,36 @@ const takeAction = async (api, vixQuoteCalc, up) => {
             buy_or_sell: 'B',
             product_type: 'M',
             exchange: getPickedExchange(),
-            tradingsymbol: getCloserTokenSymbol((smallestCallPosition),1),
+            tradingsymbol: callPositions[1],
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +ltporderSubCE + 70,
-            trigger_price: +ltporderSubCE + 65,
+            price: +smallestCallPosition?.lp + 40,
+            trigger_price: +smallestCallPosition?.lp + 35,
             remarks: 'CommonOrderCEEntryAPISL'
           }
+        
+  const orders = await api.get_orderbook();
+
+  const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C'): [];
+  send_notification("exit "+ orderCE.tradingsymbol,true)
+  send_notification(orderSubCE.tradingsymbol,true)
+  //exit call
+  await api.place_order(orderCE);
+  await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
+  await delay(500);
+  //move away call
+  await api.place_order(orderSubCE);
+  await api.place_order(orderSubCESL);
+  
+}
+const takeActionPutAway = async (api) => {
+
+  let orderPE = {};
+  let orderSubPE = {};
+  let orderSubPESL = {};
+  
+
           orderPE = {
             buy_or_sell: 'B',
             product_type: 'M',
@@ -309,40 +389,14 @@ const takeAction = async (api, vixQuoteCalc, up) => {
             remarks: 'CommonOrderPEExitAPI'
           }
 
-          ltporderAggPE = await getCloserTokenLTP(api, smallestPutPosition, 1)
 
-          orderAggPE = {
-            buy_or_sell: 'S',
-            product_type: 'M',
-            exchange: getPickedExchange(),
-            tradingsymbol: getCloserTokenSymbol((smallestPutPosition),1),
-            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
-            discloseqty: 0,
-            price_type: 'MKT',
-            price: 0,
-            remarks: 'CommonOrderPEEntryAPI'
-          }
-
-          orderAggPESL = {
-            buy_or_sell: 'B',
-            product_type: 'M',
-            exchange: getPickedExchange(),
-            tradingsymbol: getCloserTokenSymbol((smallestPutPosition),1),
-            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
-            discloseqty: 0,
-            price_type: 'SL-LMT',
-            price: +ltporderAggPE + 70,
-            trigger_price: +ltporderAggPE + 65,
-            remarks: 'CommonOrderPEEntryAPISL'
-          }
-
-          ltporderSubPE = await getCloserTokenLTP(api, smallestPutPosition, -1)
+          // ltporderSubPE = await getCloserTokenLTP(api, smallestPutPosition, -1)
 
           orderSubPE = {
             buy_or_sell: 'S',
             product_type: 'M',
             exchange: getPickedExchange(),
-            tradingsymbol: getCloserTokenSymbol((smallestPutPosition),-1),
+            tradingsymbol: putPositions[1],
             quantity: Math.abs(smallestPutPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'MKT',
@@ -354,55 +408,143 @@ const takeAction = async (api, vixQuoteCalc, up) => {
             buy_or_sell: 'B',
             product_type: 'M',
             exchange: getPickedExchange(),
-            tradingsymbol: getCloserTokenSymbol((smallestPutPosition),-1),
+            tradingsymbol: putPositions[1],
             quantity: Math.abs(smallestPutPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +ltporderSubPE + 70,
-            trigger_price: +ltporderSubPE + 65,
+            price: +smallestPutPosition?.lp + 40,
+            trigger_price: +smallestPutPosition?.lp + 35,
             remarks: 'CommonOrderPEEntryAPISL'
           }
-        } else {
-            console.error('Positions data is not an array.');
-        }
+          
   const orders = await api.get_orderbook();
 
-  const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C'): [];
   const filtered_data_SL_PE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'P'): [];
-
-  if(up & vixQuoteCalc > 0) {
-    send_notification(`going up & high vix`)
-    //exit call
-    await api.place_order(orderCE);
-    await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
-    //move away call
-    await api.place_order(orderSubCE);
-    await api.place_order(orderSubCESL);
-  } else if (up & vixQuoteCalc <= 0) {
-    send_notification(`going up & low vix`)
-    //exit call
-    await api.place_order(orderPE);
-    await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
-    //come closer call
-    await api.place_order(orderAggPE);
-    await api.place_order(orderAggPESL);
-  } else if (!up & vixQuoteCalc > 0) {
-    send_notification(`going down and high vix`)
+    send_notification("exit "+ orderPE.tradingsymbol, true)
+    send_notification(orderSubPE.tradingsymbol, true)
     //exit put
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
+    await delay(500);
     //move away put
     await api.place_order(orderSubPE);
     await api.place_order(orderSubPESL);
-  } else if (!up & vixQuoteCalc <= 0) {
-    send_notification(`going down and low vix`)
+}
+const takeActionCallCloser = async (api) => {
+
+  let orderCE = {};
+  let orderAggCE = {};
+  let orderAggCESL = {};
+  
+          orderCE = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: smallestCallPosition?.tsym,
+            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderCEExitAPI'
+          }
+
+          // ltporderAggCE = await getCloserTokenLTP(api, smallestCallPosition, 1)
+          orderAggCE = {
+            buy_or_sell: 'S',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: callPositions[2],
+            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderCEEntryAPI'
+          }
+          orderAggCESL = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: callPositions[2],
+            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'SL-LMT',
+            price: +smallestCallPosition?.lp + 40,
+            trigger_price: +smallestCallPosition?.lp + 35,
+            remarks: 'CommonOrderCEEntryAPISL'
+          }
+
+  const orders = await api.get_orderbook();
+
+  const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C'): [];
+  send_notification("exit "+ orderCE.tradingsymbol, true)
+    send_notification(orderAggCE.tradingsymbol, true)
     //exit put
     await api.place_order(orderCE);
     await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
+    await delay(500);
     //come closer put
     await api.place_order(orderAggCE);
     await api.place_order(orderAggCESL);
-  }
+  
+
+}
+const takeActionPutCloser = async (api) => {
+ 
+  let orderPE = {};
+  let orderAggPE = {};
+  let orderAggPESL = {};
+  
+          orderPE = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: smallestPutPosition?.tsym,
+            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderPEExitAPI'
+          }
+
+          // ltporderAggPE = await getCloserTokenLTP(api, smallestPutPosition, 1)
+          orderAggPE = {
+            buy_or_sell: 'S',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: putPositions[2],
+            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'MKT',
+            price: 0,
+            remarks: 'CommonOrderPEEntryAPI'
+          }
+
+          orderAggPESL = {
+            buy_or_sell: 'B',
+            product_type: 'M',
+            exchange: getPickedExchange(),
+            tradingsymbol: putPositions[2],
+            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            discloseqty: 0,
+            price_type: 'SL-LMT',
+            price: +smallestPutPosition?.lp + 40,
+            trigger_price: +smallestPutPosition?.lp + 35,
+            remarks: 'CommonOrderPEEntryAPISL'
+          }
+          
+  const orders = await api.get_orderbook();
+
+  const filtered_data_SL_PE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'P'): [];
+    send_notification("exit "+ orderPE.tradingsymbol, true)
+    send_notification(orderAggPE.tradingsymbol, true)
+    //exit call
+    await api.place_order(orderPE);
+    await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
+    await delay(500);
+    //come closer put
+    await api.place_order(orderAggPE);
+    await api.place_order(orderAggPESL);
+  
 }
 
 const getCloserTokenSymbol = (item, level=1) => {

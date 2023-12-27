@@ -528,21 +528,18 @@ async function getOptionChain() {
 // Function to find the ITM symbol from the option chain
 function updateITMSymbolAndStrike(optionType) {
     // Filter options by type (CE for Call, PE for Put)
-    // if(biasProcess.optionChain)
-    // {
-        biasProcess.ocCallOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'CE');
-        biasProcess.ocPutOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'PE');
-        // Sort options by tsym for both Call and Put
-        biasProcess?.ocCallOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
-        biasProcess?.ocPutOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
-        // Assign ITM symbols and strike prices
-        debug && console.log(biasProcess.ocCallOptions, 'callOptions')
-        debug && console.log(biasProcess.ocPutOptions, 'putOptions')
-        biasProcess.itmCallSymbol = biasProcess?.ocCallOptions[14]?.tsym;
-        biasProcess.itmCallStrikePrice = biasProcess?.ocCallOptions[14]?.strprc;
-        biasProcess.itmPutSymbol = biasProcess?.ocPutOptions[16]?.tsym;
-        biasProcess.itmPutStrikePrice = biasProcess?.ocPutOptions[16]?.strprc;
-    // }
+    biasProcess.ocCallOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'CE');
+    biasProcess.ocPutOptions = biasProcess.optionChain?.values.filter(option => option.optt === 'PE');
+    // Sort options by tsym for both Call and Put
+    biasProcess.ocCallOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
+    biasProcess.ocPutOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
+    // Assign ITM symbols and strike prices
+    debug && console.log(biasProcess.ocCallOptions, 'callOptions')
+    debug && console.log(biasProcess.ocPutOptions, 'putOptions')
+    biasProcess.itmCallSymbol = biasProcess.ocCallOptions[14].tsym;
+    biasProcess.itmCallStrikePrice = biasProcess.ocCallOptions[14].strprc;
+    biasProcess.itmPutSymbol = biasProcess.ocPutOptions[16].tsym;
+    biasProcess.itmPutStrikePrice = biasProcess.ocPutOptions[16].strprc;
     return;
 }
 
@@ -965,7 +962,7 @@ async function takeAction(goingUp) {
             await api.place_order(orderPE);
             await api.place_order(orderAggressivePE);
         }
-    }else if (!goingUp && !telegramSignals.stopSignal && !debug){
+    } else if (!goingUp && !telegramSignals.stopSignal && !debug){
         if(biasProcess.vix > 0){
             await api.place_order(orderPE);
             await api.place_order(orderSubmissivePE);
@@ -1039,12 +1036,7 @@ myRecurringFunction = async () => {
     ltpSuggestedCall = (+latestQuotes[biasProcess.callSubStr]?.lp + +biasProcess.itmCallStrikePrice);
     // console.log(latestQuotes[biasProcess.callSubStr], biasProcess.itmCallStrikePrice, latestQuotes[`NSE|${globalInput.token}`].lp, 'call')
     // console.log(latestQuotes[biasProcess.putSubStr], biasProcess.itmPutStrikePrice, latestQuotes[`NSE|${globalInput.token}`].lp, 'put')
-    
-    const lpValue = latestQuotes[`NSE|${globalInput.token}`]?.lp;
-    // Check if all variables are valid numbers
-    if (!isNaN(lpValue)) {
-        biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`NSE|${globalInput.token}`].lp));
-    }
+    biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`NSE|${globalInput.token}`].lp));
     // console.log(biasOutput.bias, ' : biasOutput.bias');
     // console.log(`vix = ${biasProcess.vix}`);
 
@@ -1067,28 +1059,7 @@ myRecurringFunction = async () => {
       debug && positionProcess.collectedValuesCall.size != 0 && console.log("current ltp: ", [...positionProcess.collectedValuesCall.get(1)][1]); //current ltp
       debug && positionProcess.collectedValuesCall.size != 0 && console.log("positionProcess.collectedValuesCall: ", [...positionProcess.collectedValuesCall.values()]);
       debug && positionProcess.collectedValuesPut.size != 0 && console.log("positionProcess.collectedValuesPut: ", [...positionProcess.collectedValuesPut.values()]);
-      // current name:  NIFTY14DEC23C20950
-      // current ltp:  123.95
-      // CE:  [
-      //   [ 'NIFTY14DEC23C21000', '94.90' ],
-      //   [ 'NIFTY14DEC23C20950', '123.95' ],
-      //   [ 'NIFTY14DEC23C20900', '157.25' ],
-      //   [ 'NIFTY14DEC23C20850', '196.45' ]
-      // ]
-      // PE:  [
-      //   [ 'NIFTY14DEC23P21000', '82.50' ],
-      //   [ 'NIFTY14DEC23P21050', '108.40' ],
-      //   [ 'NIFTY14DEC23P21100', '138.00' ],
-      //   [ 'NIFTY14DEC23P21150', '172.45' ]
-      // ]
-
       await checkAlert();
-
-      // If you want to use the values individually, you can loop through collectedValues
-      // collectedValues.forEach(value => {
-      //   // Do something with each value
-      //   console.log(value);
-      // });
     }
     
   
@@ -1147,7 +1118,6 @@ function updatePositionsNeighboursAndSubs() {
     if (positionProcess.smallestCallPosition) positionProcess.callsNearbyNeighbours = updateNeighbours(biasProcess.ocCallOptions, positionProcess.smallestCallPosition, positionProcess.callsNearbyNeighbours, 'CE');
     if (positionProcess.smallestPutPosition) positionProcess.putsNearbyNeighbours = updateNeighbours(biasProcess.ocPutOptions, positionProcess.smallestPutPosition, positionProcess.putsNearbyNeighbours, 'PE');
 
-    // console.log(positionProcess, ' : positionProcess')
     // subscribe
     function dynamicallyAddSubscriptions() {
         const addSubscriptions = (options) => {
@@ -1189,11 +1159,6 @@ getBias = async () => {
         await delay(1000);
         updatePositionsNeighboursAndSubs();
         await send_callback_notification();
-
-        // setTimeout(() => {
-        //     api.closeWebSocket();
-        //     websocket_closed = true;
-        // }, 10000);
     } catch (error) {
         console.error(error);
         send_notification(error.message, true)
