@@ -8,7 +8,7 @@ const { identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByT
 let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
-let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal || isTimeAfter328PM();
+let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal || (getPickedExchange() != 'MCX' && isTimeAfter328PM());
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
 const isTimeAfter330PM = () => {
   const currentDate = new Date();
@@ -592,7 +592,7 @@ async function getCloserTokenLTP(api, item, level=1) {
 async function processOrders(api, exchange = 'NFO') {
   try {
     const orders = await api.get_orderbook();
-    const filtered_data = Array.isArray(orders) ? orders.filter(item => item.status === 'TRIGGER_PENDING' && item?.instname === 'OPTIDX'): [];
+    const filtered_data = Array.isArray(orders) ? orders.filter(item => item.status === 'TRIGGER_PENDING'): [];
     // console.log(filtered_data)
     if (filtered_data.length === 0) { console.log('No orders with status TRIGGER_PENDING.'); return;}
     debug && console.log(filtered_data, 'filtered_data')
