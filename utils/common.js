@@ -8,7 +8,7 @@ const { identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByT
 let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
-let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
+let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal || isTimeAfter328PM();
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
 const isTimeAfter330PM = () => {
   const currentDate = new Date();
@@ -21,6 +21,18 @@ const isTimeAfter330PM = () => {
   const formattedTime = istDateTimeFormat.format(currentDate);
   const [hours, minutes] = formattedTime.split(':').map(Number);
   return hours > 15 || (hours === 15 && minutes >= 30);
+};
+const isTimeAfter328PM = () => {
+  const currentDate = new Date();
+  const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const formattedTime = istDateTimeFormat.format(currentDate);
+  const [hours, minutes] = formattedTime.split(':').map(Number);
+  return hours > 15 || (hours === 15 && minutes >= 28);
 };
 const isTimeBefore1147PM = () => {
   const currentDate = new Date();
