@@ -915,11 +915,11 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
     if (orders_exitedAlready || filtered_data_API.length === 0) { console.log('No open straddle'); return;}
 
     const filtered_data_SL = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('PawanSLEntry') && item?.status === 'TRIGGER_PENDING'): [];
-    console.log(filtered_data_SL, 'filtered_data_SL')
+    // console.log(filtered_data_SL, 'filtered_data_SL')
     const filtered_data = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('PawanEntry') && item?.status === 'COMPLETE') : [];
     if (filtered_data.length === 0) { console.log('No open straddle'); return null;}
     debug && console.log(filtered_data[0].token, filtered_data[0].avgprc, ' ',filtered_data[1].token, filtered_data[1].avgprc,  'filtered_data')
-    console.log(filtered_data, 'filtered_data')
+    // console.log(filtered_data, 'filtered_data')
     //CRUDEOIL14DEC23P6300 236.10   CRUDEOIL14DEC23C6400 241.10 filtered_data
     while (!exitFlag) { // run for 5 secs less than picked interval
         //check MTM
