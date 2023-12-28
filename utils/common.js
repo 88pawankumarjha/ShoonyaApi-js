@@ -416,8 +416,8 @@ const takeActionCallAway = async (api) => {
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + 40,
-            trigger_price: +smallestCallPosition?.lp + 35,
+            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 5),
+            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 4),
             remarks: 'CommonOrderCEEntryAPISL'
           }
         
@@ -477,8 +477,8 @@ const takeActionPutAway = async (api) => {
             quantity: Math.abs(smallestPutPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + 40,
-            trigger_price: +smallestPutPosition?.lp + 35,
+            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 5),
+            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 4),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -533,8 +533,8 @@ const takeActionCallCloser = async (api) => {
             quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + 40,
-            trigger_price: +smallestCallPosition?.lp + 35,
+            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 5),
+            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 4),
             remarks: 'CommonOrderCEEntryAPISL'
           }
 
@@ -592,8 +592,8 @@ const takeActionPutCloser = async (api) => {
             quantity: (Math.abs(smallestPutPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + 40,
-            trigger_price: +smallestPutPosition?.lp + 35,
+            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 5),
+            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 4),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
