@@ -61,6 +61,7 @@ let ocGapCalc = 0;
 let mtmValue = 0;
 let iterationCounter = 0;
 let exitFlag = false;
+let exitAllFlag = false;
 
 async function send_callback_notification() {
   try {
@@ -109,7 +110,7 @@ bot.on('callback_query', (callbackQuery) => {
     })();
   }
   else if (data === 'stop') stopSignal = !stopSignal;
-  else if (data === 'exit') exitAll(apiLocal);
+  else if (data === 'exit') {getPickedExchange() === 'MCX' ? exitAllFlag=true : exitAll(apiLocal);}
   else if (data === 'toggleExchange') setPickedExchange(getPickedExchange() === 'NFO' ? 'BFO' : getPickedExchange() === 'BFO' ? 'MCX' : 'NFO');
   bot.sendMessage(chatId, `Delay: ${getCustomInterval() / 1000} sec, Exchange: ${getPickedExchange()}, Stopped: ${getStopSignal()}`);
 });
@@ -933,7 +934,7 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
             debug && console.log(SpotObj2.lp) // 233.50
             mtmValue = 2*(Math.round(((+filtered_data[0].avgprc + +filtered_data[1].avgprc) - (+SpotObj1.lp + +SpotObj2.lp))*100));
             // if MTM exit condition then close positions and exit pending orders
-            if(isTimeAfter1147PM() || mtmValue > (multiplier*gainExitMTM) || mtmValue < (multiplier*exitMTM)){
+            if(exitAllFlag || isTimeAfter1147PM() || mtmValue > (multiplier*gainExitMTM) || mtmValue < (multiplier*exitMTM)){
 
                 //cancel the SL orders
                 api.cancel_order(filtered_data_SL[0]?.norenordno)
