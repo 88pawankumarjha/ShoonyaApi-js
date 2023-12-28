@@ -8,7 +8,7 @@ const { identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByT
 let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
-let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal || (getPickedExchange() != 'MCX' && isTimeAfter328PM());
+let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
 const isTimeAfter330PM = () => {
   const currentDate = new Date();
@@ -71,8 +71,8 @@ async function send_callback_notification() {
               { text: 'CS', callback_data: 'CS' },
               { text: 'PA', callback_data: 'PA' },
               { text: 'PS', callback_data: 'PS' },
-              { text: '💹', callback_data: 'toggleExchange' },
-              { text: '🛑', callback_data: 'stop' }
+              { text: '🛑', callback_data: 'stop' },
+              { text: '×', callback_data: 'exit' }
             ]]};
     !debug && bot.sendMessage(chat_id_me, 'Choose server settings', { reply_markup: keyboard });
   } catch (error) { console.error(error);send_notification(error + ' error occured', true)}
@@ -109,6 +109,7 @@ bot.on('callback_query', (callbackQuery) => {
     })();
   }
   else if (data === 'stop') stopSignal = !stopSignal;
+  else if (data === 'exit') exitAll(apiLocal);
   else if (data === 'toggleExchange') setPickedExchange(getPickedExchange() === 'NFO' ? 'BFO' : getPickedExchange() === 'BFO' ? 'MCX' : 'NFO');
   bot.sendMessage(chatId, `Delay: ${getCustomInterval() / 1000} sec, Exchange: ${getPickedExchange()}, Stopped: ${getStopSignal()}`);
 });
@@ -234,6 +235,60 @@ const takeDecision = async (api, up, vixQuoteCalc) => {
     await takeActionPutCloser(api)
   }
 }
+
+
+const exitAll = async (api) => {
+  await updatePositions(api);
+
+  let orderCE = {};
+  
+  orderCE = {
+    buy_or_sell: 'B',
+    product_type: 'M',
+    exchange: getPickedExchange(),
+    tradingsymbol: callPositions[0],
+    quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'CommonOrderCEExitAPI'
+  }
+
+
+  let orderPE = {};
+
+  orderPE = {
+    buy_or_sell: 'B',
+    product_type: 'M',
+    exchange: getPickedExchange(),
+    tradingsymbol: smallestPutPosition?.tsym,
+    quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'CommonOrderPEExitAPI'
+  }
+
+  const orders = await api.get_orderbook();
+
+  const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C' && item?.instname === 'OPTIDX'): [];
+  send_notification("exit "+ orderCE.tradingsymbol,true)
+  await api.place_order(orderCE);
+  await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
+
+
+
+  const filtered_data_SL_PE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'P' && item?.instname === 'OPTIDX'): [];
+    send_notification("exit "+ orderPE.tradingsymbol, true)
+    //exit put
+    await api.place_order(orderPE);
+    await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
+    
+  
+  send_notification('exited all and stopped', true)  
+  process.exit(0);
+}
+
 let callPositions= [];
 let putPositions= [];
 let smallestCallPosition = {};
@@ -320,8 +375,6 @@ const updatePositions = async (api) => {
     
 }
 }
-
-
 
 const takeActionCallAway = async (api) => {
  
@@ -466,7 +519,7 @@ const takeActionCallCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: callPositions[2],
-            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
             discloseqty: 0,
             price_type: 'MKT',
             price: 0,
@@ -477,7 +530,7 @@ const takeActionCallCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: callPositions[2],
-            quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+            quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
             price: +smallestCallPosition?.lp + 40,
@@ -524,7 +577,7 @@ const takeActionPutCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: putPositions[2],
-            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            quantity: (Math.abs(smallestPutPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
             discloseqty: 0,
             price_type: 'MKT',
             price: 0,
@@ -536,7 +589,7 @@ const takeActionPutCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: putPositions[2],
-            quantity: Math.abs(smallestPutPosition?.netqty).toString(),
+            quantity: (Math.abs(smallestPutPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
             price: +smallestPutPosition?.lp + 40,
@@ -591,8 +644,11 @@ async function getCloserTokenLTP(api, item, level=1) {
 
 async function processOrders(api, exchange = 'NFO') {
   try {
+    if(isTimeAfter328PM()) {
+      await exitAll(api);
+    }
     const orders = await api.get_orderbook();
-    const filtered_data = Array.isArray(orders) ? orders.filter(item => item.status === 'TRIGGER_PENDING'): [];
+    const filtered_data = Array.isArray(orders) ? orders.filter(item => item.status === 'TRIGGER_PENDING' && (exchange === 'MCX' || item?.instname === 'OPTIDX')): [];
     // console.log(filtered_data)
     if (filtered_data.length === 0) { console.log('No orders with status TRIGGER_PENDING.'); return;}
     debug && console.log(filtered_data, 'filtered_data')
