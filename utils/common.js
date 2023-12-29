@@ -1,5 +1,4 @@
 const debug = false;
-const { setStop } = require('../app');
 const TelegramBot = require('node-telegram-bot-api');
 const { telegramBotToken } = require('../creds');
 const { chat_id_me } = require('../creds');
@@ -333,19 +332,19 @@ else if (getPickedExchange() === 'BFO') {//SENSEX23N1765500PE, BANKEX23N2049300C
     callPositions.push(item.tsym)
     callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
     callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
-    item = position[1]
+    item = positions[1]
     putPositions.push(item.tsym)
     putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
     putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
   } else {
     item = positions[1];
     callPositions.push(item.tsym)
-    callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
     callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
-    item = position[0]
+    callPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+    item = positions[0]
     putPositions.push(item.tsym)
-    putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
     putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
+    putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
   }    
   }
 
@@ -417,8 +416,8 @@ const takeActionCallAway = async (api) => {
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 5),
-            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 4),
+            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 2) + 5,
+            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 2),
             remarks: 'CommonOrderCEEntryAPISL'
           }
         
@@ -430,7 +429,7 @@ const takeActionCallAway = async (api) => {
   //exit call
   await api.place_order(orderCE);
   await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
-  await delay(500);
+  getPickedExchange() === 'BFO' ? await delay(1000): await delay(500);
   //move away call
   await api.place_order(orderSubCE);
   await api.place_order(orderSubCESL);
@@ -478,8 +477,8 @@ const takeActionPutAway = async (api) => {
             quantity: Math.abs(smallestPutPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 5),
-            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 4),
+            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 2) + 5,
+            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 2),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -491,7 +490,7 @@ const takeActionPutAway = async (api) => {
     //exit put
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
-    await delay(500);
+    getPickedExchange() === 'BFO' ? await delay(1000): await delay(500);
     //move away put
     await api.place_order(orderSubPE);
     await api.place_order(orderSubPESL);
@@ -520,7 +519,7 @@ const takeActionCallCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: callPositions[2],
-            quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
+            quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'MKT',
             price: 0,
@@ -531,11 +530,11 @@ const takeActionCallCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: callPositions[2],
-            quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
+            quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 5),
-            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 4),
+            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 5,
+            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3),
             remarks: 'CommonOrderCEEntryAPISL'
           }
 
@@ -547,7 +546,7 @@ const takeActionCallCloser = async (api) => {
     //exit put
     await api.place_order(orderCE);
     await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
-    await delay(500);
+    getPickedExchange() === 'BFO' ? await delay(1000): await delay(500);
     //come closer put
     await api.place_order(orderAggCE);
     await api.place_order(orderAggCESL);
@@ -578,7 +577,7 @@ const takeActionPutCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: putPositions[2],
-            quantity: (Math.abs(smallestPutPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
+            quantity: (Math.abs(smallestPutPosition?.netqty) - Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'MKT',
             price: 0,
@@ -590,11 +589,11 @@ const takeActionPutCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: putPositions[2],
-            quantity: (Math.abs(smallestPutPosition?.netqty) - Math.abs(+ocGapCalc)).toString(),
+            quantity: (Math.abs(smallestPutPosition?.netqty)  - Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 5),
-            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 4),
+            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 5,
+            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -606,7 +605,7 @@ const takeActionPutCloser = async (api) => {
     //exit call
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
-    await delay(500);
+    getPickedExchange() === 'BFO' ? await delay(1000): await delay(500);
     //come closer put
     await api.place_order(orderAggPE);
     await api.place_order(orderAggPESL);
