@@ -10,6 +10,7 @@ let interval = 10000, setCustomInterval = value => interval = value ? interval +
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
 const isTimeAfter330PM = () => {
+  // return true;
   const currentDate = new Date();
   const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Kolkata',
@@ -644,8 +645,8 @@ async function getCloserTokenLTP(api, item, level=1) {
 
 async function processOrders(api, exchange = 'NFO') {
   try {
-    if(isTimeAfter328PM()) {
-      await exitAll(api);
+    if(exchange != 'MCX') {
+      isTimeAfter328PM() && await exitAll(api);
     }
     const orders = await api.get_orderbook();
     const filtered_data = Array.isArray(orders) ? orders.filter(item => item.status === 'TRIGGER_PENDING' && (exchange === 'MCX' || item?.instname === 'OPTIDX')): [];
