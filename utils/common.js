@@ -53,8 +53,8 @@ const setPickedExchange = value => pickedExchange = value, getPickedExchange = (
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
 let multiplier = 2;
-let exitMTM = -1200;
-let gainExitMTM = 400;
+let exitMTM = -1600;
+let gainExitMTM = 450;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
@@ -534,8 +534,8 @@ const takeActionCallCloser = async (api) => {
             quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 5,
-            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3),
+            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 10,
+            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 5,
             remarks: 'CommonOrderCEEntryAPISL'
           }
 
@@ -593,8 +593,8 @@ const takeActionPutCloser = async (api) => {
             quantity: (Math.abs(smallestPutPosition?.netqty)  - Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 5,
-            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3),
+            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 10,
+            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 5,
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
