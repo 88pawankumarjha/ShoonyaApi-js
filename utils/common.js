@@ -417,8 +417,8 @@ const takeActionCallAway = async (api) => {
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 2) + 5,
-            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 2),
+            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 2) + 5,
+            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 2),
             remarks: 'CommonOrderCEEntryAPISL'
           }
         
@@ -478,8 +478,8 @@ const takeActionPutAway = async (api) => {
             quantity: Math.abs(smallestPutPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 2) + 5,
-            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 2),
+            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 2) + 5,
+            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 2),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -534,8 +534,8 @@ const takeActionCallCloser = async (api) => {
             quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 10,
-            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 5,
+            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 10,
+            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 5,
             remarks: 'CommonOrderCEEntryAPISL'
           }
 
@@ -593,8 +593,8 @@ const takeActionPutCloser = async (api) => {
             quantity: (Math.abs(smallestPutPosition?.netqty)  - Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 10,
-            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 5,
+            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 10,
+            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 5,
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
