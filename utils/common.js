@@ -63,6 +63,11 @@ let iterationCounter = 0;
 let exitFlag = false;
 let exitAllFlag = false;
 
+let callPositions= [];
+let putPositions= [];
+let smallestCallPosition = {};
+let smallestPutPosition = {};
+
 async function send_callback_notification() {
   try {
       const keyboard = {inline_keyboard: [[
@@ -223,6 +228,12 @@ async function checkAlert(api) {
 
 const takeDecision = async (api, up, vixQuoteCalc) => {
   await updatePositions(api);
+  
+  // goSubmissive if already in straddle
+  putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
+  callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
+  if(putStrike == callStrike) {vixQuoteCalc = 1}
+
   if (up && vixQuoteCalc > 0) {
     await takeActionCallAway(api)
   }
@@ -289,11 +300,6 @@ const exitAll = async (api) => {
   send_notification('exited all and stopped', true)  
   process.exit(0);
 }
-
-let callPositions= [];
-let putPositions= [];
-let smallestCallPosition = {};
-let smallestPutPosition = {};
 
 const updateNearByPositions = async (positions) => {
 if (getPickedExchange() === 'NFO'){//BANKNIFTY22NOV23C43800, FINNIFTY28NOV23C19300, NIFTY23NOV23C19750
