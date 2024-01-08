@@ -9,39 +9,28 @@ const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
+const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Kolkata',
+  hour: 'numeric',
+  minute: 'numeric',
+  hour12: false,
+});
+
 const isTimeAfter330PM = () => {
-  // return true;
+  //return true;
   const currentDate = new Date();
-  const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  });
   const formattedTime = istDateTimeFormat.format(currentDate);
   const [hours, minutes] = formattedTime.split(':').map(Number);
   return hours > 15 || (hours === 15 && minutes >= 30);
 };
 const isTimeAfter328PM = () => {
   const currentDate = new Date();
-  const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  });
   const formattedTime = istDateTimeFormat.format(currentDate);
   const [hours, minutes] = formattedTime.split(':').map(Number);
   return hours > 15 || (hours === 15 && minutes >= 28);
 };
 const isTimeBefore1147PM = () => {
   const currentDate = new Date();
-  const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  });
   const formattedTime = istDateTimeFormat.format(currentDate);
   const [hours, minutes] = formattedTime.split(':').map(Number);
   return hours < 23 || (hours === 23 && minutes < 47);
@@ -146,7 +135,7 @@ async function find_bias(api, inputToken, ocGap, keyword) {
         // }
     };
 
-    let biasDiffOC = getPickedExchange() == 'BFO' ? 1: 2;
+    let biasDiffOC = getPickedExchange() === 'BFO' ? 1: 2;
     debug && console.log(biasDiffOC, 'biasDiffOC');
     const [ATMToken1, ATMToken2] = await Promise.all([getATMToken(-1 * biasDiffOC), getATMToken(biasDiffOC)]);
     const [ltpPut, ltpCall] = await Promise.all([
@@ -241,29 +230,29 @@ const takeDecision = async (api, up, vixQuoteCalc) => {
     await takeActionPutAway(api)
   }
   else if (!up && vixQuoteCalc <= 0) {
-    await takeActionCallCloser(api)
+        await takeActionCallCloser(api)
   }
   else if (up && vixQuoteCalc <= 0) {
-    await takeActionPutCloser(api)
-  }
-}
+        await takeActionPutCloser(api)
+      }
+    }
 
 
-const exitAll = async (api) => {
-  await updatePositions(api);
+    const exitAll = async (api) => {
+      await updatePositions(api);
 
-  let orderCE = {};
-  
-  orderCE = {
-    buy_or_sell: 'B',
-    product_type: 'M',
-    exchange: getPickedExchange(),
-    tradingsymbol: callPositions[0],
-    quantity: Math.abs(smallestCallPosition?.netqty).toString(),
-    discloseqty: 0,
-    price_type: 'MKT',
-    price: 0,
-    remarks: 'CommonOrderCEExitAPI'
+      let orderCE = {};
+
+      orderCE = {
+        buy_or_sell: 'B',
+        product_type: 'M',
+        exchange: getPickedExchange(),
+        tradingsymbol: callPositions[0],
+        quantity: Math.abs(smallestCallPosition?.netqty).toString(),
+        discloseqty: 0,
+        price_type: 'MKT',
+        price: 0,
+        remarks: 'CommonOrderCEExitAPI'
   }
 
 
@@ -415,6 +404,7 @@ const takeActionCallAway = async (api) => {
             remarks: 'CommonOrderCEEntryAPI'
           }
 
+          localSLPrice = await getLTPfromSymbol(api, callPositions[1]);
           orderSubCESL = {
             buy_or_sell: 'B',
             product_type: 'M',
@@ -423,8 +413,8 @@ const takeActionCallAway = async (api) => {
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 2) + 5,
-            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 2),
+            price: Number(Math.round(Number(localSLPrice || 10) * 3)+2),
+            trigger_price: Number(Math.round(Number(localSLPrice || 10) * 3)),
             remarks: 'CommonOrderCEEntryAPISL'
           }
         
@@ -476,6 +466,7 @@ const takeActionPutAway = async (api) => {
             remarks: 'CommonOrderPEEntryAPI'
           }
 
+          localSLPrice = await getLTPfromSymbol(api, putPositions[1]);
           orderSubPESL = {
             buy_or_sell: 'B',
             product_type: 'M',
@@ -484,8 +475,8 @@ const takeActionPutAway = async (api) => {
             quantity: Math.abs(smallestPutPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 2) + 5,
-            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 2),
+            price: Number(Math.round(Number(localSLPrice || 10) * 3)+2),
+            trigger_price: Number(Math.round(Number(localSLPrice || 10) * 3)),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -532,6 +523,7 @@ const takeActionCallCloser = async (api) => {
             price: 0,
             remarks: 'CommonOrderCEEntryAPI'
           }
+          localSLPrice = await getLTPfromSymbol(api, callPositions[2]);
           orderAggCESL = {
             buy_or_sell: 'B',
             product_type: 'M',
@@ -540,8 +532,8 @@ const takeActionCallCloser = async (api) => {
             quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 10,
-            trigger_price: +smallestPutPosition?.lp + (+smallestPutPosition?.lp * 3) + 5,
+            price: Number(Math.round(Number(localSLPrice || 10) * 3)+2),
+            trigger_price: Number(Math.round(Number(localSLPrice || 10) * 3)),
             remarks: 'CommonOrderCEEntryAPISL'
           }
 
@@ -590,7 +582,7 @@ const takeActionPutCloser = async (api) => {
             price: 0,
             remarks: 'CommonOrderPEEntryAPI'
           }
-
+          localSLPrice = await getLTPfromSymbol(api, putPositions[2]);
           orderAggPESL = {
             buy_or_sell: 'B',
             product_type: 'M',
@@ -599,8 +591,8 @@ const takeActionPutCloser = async (api) => {
             quantity: (Math.abs(smallestPutPosition?.netqty)  - Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 10,
-            trigger_price: +smallestCallPosition?.lp + (+smallestCallPosition?.lp * 3) + 5,
+            price: Number(Math.round(Number(localSLPrice || 10) * 3)+2),
+            trigger_price: Number(Math.round(Number(localSLPrice || 10) * 3)),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -639,6 +631,17 @@ const getCloserTokenSymbol = (item, level=1) => {
         console.log("Strike price not found in the symbol.");
         return null;
     }
+}
+
+async function getLTPfromSymbol(api, tsym) {
+  console.log(tsym)
+  localSearch = await api.searchscrip(getPickedExchange(), tsym);
+  console.log(localSearch, 'localSearch')
+  localToken = localSearch.values[0].token;
+  console.log(localToken, 'localToken')
+  const ltpResponse = await api.get_quotes(getPickedExchange(), localToken);
+  console.log(ltpResponse.lp, 'ltpResponse.lp')
+  return ltpResponse.lp;
 }
 
 async function getCloserTokenLTP(api, item, level=1) {
