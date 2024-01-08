@@ -152,7 +152,7 @@ async function find_bias(api, inputToken, ocGap, keyword) {
     let localCalcBias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - ltp_rounded);
     if(keyword[0] === getPickedIndex()[0]) calcBias = localCalcBias;
     debug && console.log(calcBias, ' : calcBias')
-    return `${keyword[0]}[${ltp_rounded-open}] ${ltp_rounded} (${localCalcBias})`;
+    return `${keyword[0]}[${ltp_rounded-open}] ${ltp_rounded+localCalcBias} (${localCalcBias>0?'+':'-'})`;
   } catch (error) { console.error('Error:', error); send_notification(error + ' error occured', true); return null; }
 }
 
