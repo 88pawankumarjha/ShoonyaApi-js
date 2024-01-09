@@ -16,6 +16,13 @@ const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
   hour12: false,
 });
 
+const isTimeEqualsProps = (inputHrs, inputMins) => {
+  const currentDate = new Date();
+  const formattedTime = istDateTimeFormat.format(currentDate);
+  const [hours, minutes] = formattedTime.split(':').map(Number);
+  return hours === inputHrs && minutes === inputMins;
+};
+
 const isTimeAfter330PM = () => {
   //return true;
   const currentDate = new Date();
@@ -42,8 +49,8 @@ const setPickedExchange = value => pickedExchange = value, getPickedExchange = (
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
 let multiplier = 2;
-let exitMTM = -1600;
-let gainExitMTM = 450;
+let exitMTM = -1500;
+let gainExitMTM = 350;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
@@ -152,7 +159,7 @@ async function find_bias(api, inputToken, ocGap, keyword) {
     let localCalcBias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - ltp_rounded);
     if(keyword[0] === getPickedIndex()[0]) calcBias = localCalcBias;
     debug && console.log(calcBias, ' : calcBias')
-    return `${keyword[0]}[${ltp_rounded-open}] ${ltp_rounded+localCalcBias} (${localCalcBias>0?'+':'-'})`;
+    return `${keyword[0]}[${ltp_rounded-open}] ${ltp_rounded+localCalcBias} (${localCalcBias})`;
   } catch (error) { console.error('Error:', error); send_notification(error + ' error occured', true); return null; }
 }
 
@@ -978,6 +985,7 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
                 !debug && await api.place_order(order2);
                 send_notification(`Exited with ${mtmValue} Rs.`, true)
                 await delay((mtmValue>0)? 1000:300000);
+                exitAllFlag=false;
                 return mtmValue>0?'profit':'loss';
             }
             //check for any manual stop signal
