@@ -3,44 +3,23 @@ const TelegramBot = require('node-telegram-bot-api');
 const { telegramBotToken } = require('../creds');
 const { chat_id_me } = require('../creds');
 const { chat_id } = require('../creds');
-const { identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByTsymPutAgg, nearByTsymPutSub, nearByTsymCallAgg, nearByTsymCallSub, nearByPositions } = require('./customLibrary');
+const { isTimeEqualsNotAfterProps, identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByTsymPutAgg, nearByTsymPutSub, nearByTsymCallAgg, nearByTsymCallSub, nearByPositions } = require('./customLibrary');
 let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
 const getIsBFO = () => [1, 5].includes(new Date().getDay());
-const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'Asia/Kolkata',
-  hour: 'numeric',
-  minute: 'numeric',
-  hour12: false,
-});
 
-const isTimeEqualsProps = (inputHrs, inputMins) => {
-  const currentDate = new Date();
-  const formattedTime = istDateTimeFormat.format(currentDate);
-  const [hours, minutes] = formattedTime.split(':').map(Number);
-  return hours === inputHrs && minutes === inputMins;
-};
 
 const isTimeAfter330PM = () => {
   //return true;
-  const currentDate = new Date();
-  const formattedTime = istDateTimeFormat.format(currentDate);
-  const [hours, minutes] = formattedTime.split(':').map(Number);
-  return hours > 15 || (hours === 15 && minutes >= 30);
+  return isTimeEqualsNotAfterProps(15,30,false);
 };
 const isTimeAfter328PM = () => {
-  const currentDate = new Date();
-  const formattedTime = istDateTimeFormat.format(currentDate);
-  const [hours, minutes] = formattedTime.split(':').map(Number);
-  return hours > 15 || (hours === 15 && minutes >= 28);
+  return isTimeEqualsNotAfterProps(15,28,false);
 };
 const isTimeBefore1147PM = () => {
-  const currentDate = new Date();
-  const formattedTime = istDateTimeFormat.format(currentDate);
-  const [hours, minutes] = formattedTime.split(':').map(Number);
-  return hours < 23 || (hours === 23 && minutes < 47);
+  return !isTimeEqualsNotAfterProps(23,47,false);
 };
 const isTimeAfter1147PM = () => !(isTimeAfter330PM && isTimeBefore1147PM());
 let pickedExchange = debug ? 'BFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
@@ -50,7 +29,7 @@ const send_notification = async (message, me = false) => console.log(message) ||
 let calcBias = 0;
 let multiplier = 2;
 let exitMTM = -1500;
-let gainExitMTM = 350;
+let gainExitMTM = 380;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
@@ -223,7 +202,12 @@ async function checkAlert(api) {
 }
 
 const takeDecision = async (api, up, vixQuoteCalc) => {
-  await updatePositions(api);
+  try{
+    await updatePositions(api);
+  } catch (error) {
+    throw error; // Rethrow the error to propagate it
+  }
+  
   
   // goSubmissive if already in straddle
   putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
@@ -246,7 +230,11 @@ const takeDecision = async (api, up, vixQuoteCalc) => {
 
 
     const exitAll = async (api) => {
-      await updatePositions(api);
+      try{
+        await updatePositions(api);
+      } catch (error) {
+        throw error; // Rethrow the error to propagate it
+      }    
 
       let orderCE = {};
 
@@ -301,28 +289,28 @@ const updateNearByPositions = async (positions) => {
 if (getPickedExchange() === 'NFO'){//BANKNIFTY22NOV23C43800, FINNIFTY28NOV23C19300, NIFTY23NOV23C19750
   if (identify_option_type(positions[0]?.tsym) == 'C') {
     item = positions[0];
-    strike = getStrike(item.tsym, pickedExchange)
+    strike = getStrike(item?.tsym, pickedExchange)
     prefix = item.tsym.slice(0, -5)
     callPositions.push(item.tsym)
     callPositions.push(prefix + (strike + Math.abs(+ocGapCalc)))
     callPositions.push(prefix + (strike - Math.abs(+ocGapCalc)))
     
     item = positions[1]
-    strike = getStrike(item.tsym, pickedExchange)
+    strike = getStrike(item?.tsym, pickedExchange)
     prefix = item.tsym.slice(0, -5)
     putPositions.push(item.tsym)
     putPositions.push(prefix + (strike - Math.abs(+ocGapCalc)))
     putPositions.push(prefix + (strike + Math.abs(+ocGapCalc)))
   } else {
     item = positions[1]
-    strike = getStrike(item.tsym, pickedExchange)
+    strike = getStrike(item?.tsym, pickedExchange)
     prefix = item.tsym.slice(0, -5)
     callPositions.push(item.tsym)
     callPositions.push(prefix + (strike + Math.abs(+ocGapCalc)))
     callPositions.push(prefix + (strike - Math.abs(+ocGapCalc)))
     
     item = positions[0]
-    strike = getStrike(item.tsym, pickedExchange)
+    strike = getStrike(item?.tsym, pickedExchange)
     prefix = item.tsym.slice(0, -5)
     putPositions.push(item.tsym)
     putPositions.push(prefix + (strike - Math.abs(+ocGapCalc)))
@@ -349,11 +337,7 @@ else if (getPickedExchange() === 'BFO') {//SENSEX23N1765500PE, BANKEX23N2049300C
     putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) - Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
     putPositions.push(item.tsym.slice(0, -7) + (getStrike(item.tsym, getPickedExchange()) + Math.abs(parseInt(ocGapCalc, 10)))+item.tsym.slice(-2));
   }    
-  }
-
-  send_notification('callPositions: '+callPositions.join('-'), true)
-  send_notification('putPositions: '+putPositions.join('-'), true)
-  
+  }  
 }
 
 const updatePositions = async (api) => {
@@ -428,8 +412,7 @@ const takeActionCallAway = async (api) => {
   const orders = await api.get_orderbook();
 
   const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C' && item?.instname === 'OPTIDX'): [];
-  send_notification("exit "+ orderCE.tradingsymbol,true)
-  send_notification(orderSubCE.tradingsymbol,true)
+  send_notification("exited: "+ orderCE.tradingsymbol+"\nentered: "+orderSubCE.tradingsymbol+'\ncallPositions: '+callPositions.join('-')+'\nputPositions: '+putPositions.join('-'),true);
   //exit call
   await api.place_order(orderCE);
   await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
@@ -641,13 +624,13 @@ const getCloserTokenSymbol = (item, level=1) => {
 }
 
 async function getLTPfromSymbol(api, tsym) {
-  console.log(tsym)
+  // console.log(tsym)
   localSearch = await api.searchscrip(getPickedExchange(), tsym);
-  console.log(localSearch, 'localSearch')
+  // console.log(localSearch, 'localSearch')
   localToken = localSearch.values[0].token;
-  console.log(localToken, 'localToken')
+  // console.log(localToken, 'localToken')
   const ltpResponse = await api.get_quotes(getPickedExchange(), localToken);
-  console.log(ltpResponse.lp, 'ltpResponse.lp')
+  // console.log(ltpResponse.lp, 'ltpResponse.lp')
   return ltpResponse.lp;
 }
 
@@ -706,7 +689,7 @@ async function isCrudeOrderAlreadyPlaced(api) {
 }
 
 async function crudeStraddlePlaceOrder(api, exchange='MCX') {
-await send_callback_notification();
+// await send_callback_notification();
 //find ATM strike CE and PE
 
 const monthAbbreviation = new Date().toLocaleString('default', { month: 'short' }).toUpperCase();

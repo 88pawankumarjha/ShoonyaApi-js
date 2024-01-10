@@ -95,3 +95,20 @@ module.exports.filterAndMapDates = (moment, data) => {
     .map((row) => ({ ...row, Expiry: moment(row.Expiry, 'DD-MMM-YYYY').format('YYYY-MM-DD') }));
 };
 //nearest expiry end
+
+const istDateTimeFormat = new Intl.DateTimeFormat('en-US', {
+timeZone: 'Asia/Kolkata',
+hour: 'numeric',
+minute: 'numeric',
+hour12: false,
+});
+
+module.exports.isTimeEqualsNotAfterProps = (inputHrs, inputMins, isEqualNotAfter) => {
+if (typeof inputHrs !== 'number' || typeof inputMins !== 'number' || inputHrs < 0 || inputHrs > 23 || inputMins < 0 || inputMins > 59) {
+  throw new Error('Invalid input parameters. Hours must be between 0 and 23, and minutes must be between 0 and 59.');
+}
+const currentDate = new Date();
+const formattedTime = istDateTimeFormat.format(currentDate);
+const [hours, minutes] = formattedTime.split(':').map(Number);
+return isEqualNotAfter ? (hours === inputHrs && minutes === inputMins) : (hours > inputHrs || (hours === inputHrs && minutes >= inputMins));
+};

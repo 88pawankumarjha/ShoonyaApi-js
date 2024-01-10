@@ -7,7 +7,8 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "jest && node app.js",
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
@@ -28,5 +29,8 @@
     "speakeasy": "^2.0.0",
     "unzipper": "^0.10.14",
     "ws": "^7.4.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }
