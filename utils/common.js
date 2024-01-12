@@ -28,8 +28,8 @@ const setPickedExchange = value => pickedExchange = value, getPickedExchange = (
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
 let multiplier = 2;
-let exitMTM = -1500;
-let gainExitMTM = 380;
+let exitMTM = -1800 * multiplier;
+let gainExitMTM = 350 * multiplier;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
