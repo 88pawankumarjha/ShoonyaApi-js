@@ -209,9 +209,11 @@ const takeDecision = async (api, up, vixQuoteCalc, fromBot = false) => {
     // goSubmissive if already in straddle
     putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
     callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
+    // do not go closer than straddle via BOT
     if(putStrike == callStrike) {vixQuoteCalc = 1}
-
-    send_notification((+callStrike - +putStrike)+' : taking decision, before action - strike difference');
+    // do not come closer than 2 strikes distance via BOT
+    if(((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) <= 2) {vixQuoteCalc = 1}
+    send_notification(((+callStrike - +putStrike)/Math.abs(+ocGapCalc))+' : taking decision, before action - strike difference');
 
     //check condition before action
     if (up && vixQuoteCalc > 0) {
@@ -238,7 +240,7 @@ const takeDecision = async (api, up, vixQuoteCalc, fromBot = false) => {
     putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
     callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
     send_notification('distance: '+(+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl + new Date(), true)
-    send_notification((+callStrike - +putStrike)+' : taking decision, after action - strike difference');
+    send_notification((+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ' : taking decision, after action - strike difference' + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl + new Date());
   }
   catch (error) {
     throw error; // Rethrow the error to propagate it
