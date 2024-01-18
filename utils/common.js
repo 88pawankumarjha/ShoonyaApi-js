@@ -197,12 +197,12 @@ async function checkAlert(api) {
             const vixQuoteCalc = await calcVix(api);
             debug && console.log(vixQuoteCalc, 'vixQuoteCalc')
             send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX = ${vixQuoteCalc}%, Bias ${calcBias}, '\n'${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}'\n'${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`, true);
-            await takeDecision(api, up, vixQuoteCalc)
+            await takeDecision(api, up, vixQuoteCalc, true)
         }
     }
 }
 
-const takeDecision = async (api, up, vixQuoteCalc) => {
+const takeDecision = async (api, up, vixQuoteCalc, fromBot = false) => {
   try{
     await updatePositions(api);
     
@@ -211,6 +211,8 @@ const takeDecision = async (api, up, vixQuoteCalc) => {
     callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
     if(putStrike == callStrike) {vixQuoteCalc = 1}
 
+    send_notification((+callStrike - +putStrike)+' : taking decision, before action - strike difference');
+
     //check condition before action
     if (up && vixQuoteCalc > 0) {
       await takeActionCallAway(api)
@@ -218,18 +220,25 @@ const takeDecision = async (api, up, vixQuoteCalc) => {
     else if (!up && vixQuoteCalc > 0) {
       await takeActionPutAway(api)
     }
+
+    // do not come closer via BOT after 2 PM
     else if (!up && vixQuoteCalc <= 0) {
-          await takeActionCallCloser(api)
+          if(!fromBot) {await takeActionCallCloser(api)}
+          else if(fromBot && !isTimeEqualsNotAfterProps(2,0,false)) {await takeActionCallCloser(api)}
+          else {console.log('avoiding auto bot trades to come closer post 2 PM')}
     }
     else if (up && vixQuoteCalc <= 0) {
-          await takeActionPutCloser(api)
+          if(!fromBot) {await takeActionPutCloser(api)}
+          else if(fromBot && !isTimeEqualsNotAfterProps(2,0,false)) {await takeActionPutCloser(api)}
+          else {console.log('avoiding auto bot trades to come closer post 2 PM')}
     }
 
     //send distance and MtoM
     await updatePositions(api);
     putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
     callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
-    send_notification('distance: '+(+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl, true)
+    send_notification('distance: '+(+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl + new Date(), true)
+    send_notification((+callStrike - +putStrike)+' : taking decision, after action - strike difference');
   }
   catch (error) {
     throw error; // Rethrow the error to propagate it
