@@ -1264,7 +1264,7 @@ async function checkCrossOverExit(ema9, ema21) {
         console.log("No call signal detected.");
         // Additional logic if needed
     }
-    positionTakenInSymbol && console.log(positionTakenInSymbol, ' : positionTakenInSymbol')
+    positionTakenInSymbol && console.log(positionTakenInSymbol, ' : positionTakenInSymbol - LTP: ',  +latestQuotes[`NFO|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
     callPreviousValue = ema9 < ema21;
 
 }
@@ -1286,7 +1286,7 @@ async function sellercheckCrossOverExit(ema9, ema21) {
       console.log("No call signal detected.");
       // Additional logic if needed
   }
-  positionTakenInSymbol && console.log(positionTakenInSymbol, ' : positionTakenInSymbol')
+  positionTakenInSymbol && console.log(positionTakenInSymbol, ' : positionTakenInSymbol - LTP: ',  +latestQuotes[`NFO|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
   callPreviousValue = ema9 < ema21;
 
 }
@@ -1312,7 +1312,7 @@ async function putcheckCrossOverExit(ema9, ema21) {
         console.log("No put signal detected.");
         // Additional logic if needed
     }
-    putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : putpositionTakenInSymbol')
+    putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : putpositionTakenInSymbol - LTP: ',  +latestQuotes[`NFO|${getTokenByTradingSymbol(putpositionTakenInSymbol)}`]?.lp )
     putPreviousValue = ema9 < ema21;
 }
 
@@ -1334,7 +1334,7 @@ async function sellerputcheckCrossOverExit(ema9, ema21) {
       console.log("No call signal detected.");
       // Additional logic if needed
   }
-  putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : putpositionTakenInSymbol')
+  putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : putpositionTakenInSymbol - LTP: ',  +latestQuotes[`NFO|${getTokenByTradingSymbol(putpositionTakenInSymbol)}`]?.lp )
   putPreviousValue = ema9 < ema21;
 
 }
@@ -1615,8 +1615,8 @@ emaRecurringFunction = async () => {
         const [callema9, callema21] = await ema9and21Values(params); //call
         const [putema9, putema21] = await ema9and21Values(params2); //put
 
-        console.log(callSymbolForEma, ':', callema9, callema21, ' : callema9, callema21. input for position')
-        console.log(putSymbolForEma,  ':', putema9, putema21, ' : callema9, callema21. input for position')
+        console.log(callSymbolForEma, ': ltp: ', +latestQuotes[`NFO|${getTokenByTradingSymbol(callSymbolForEma)}`]?.lp , ' : callema9, callema21. input for position', callema9, callema21)
+        console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`NFO|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
 
         // //buyer
         checkCrossOverExit(callema9, callema21)
@@ -1661,16 +1661,22 @@ emaRecurringFunction = async () => {
 
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
 getEma = async () => {
-  try {
+  var currentDate = new Date();
+  var seconds = currentDate.getSeconds();
+  // check when second is 2 on the clock for every minute
+  if (seconds === 2) {
+    try {
       await executeLogin();
       await startWebsocket();
       await updateITMSymbolfromOC();
-      intervalId = setInterval(await emaRecurringFunction, globalInput.delayTime);
-  } catch (error) {
-      console.error(error);
-      // send_notification(error, true)
-      // getBias();
+      await emaRecurringFunction();
+    } catch (error) {
+        console.error("Error occured: " + error);
+        // send_notification("Error occured: " + error)
+        // getBias();
+    }
   }
-};
-getEma();
+}
 
+// Check and call the method every 200 milliseconds
+intervalId = setInterval(getEma, 1000);
