@@ -27,6 +27,8 @@
     "openai": "^4.20.1",
     "papaparse": "^5.4.1",
     "speakeasy": "^2.0.0",
+    "talib": "^1.1.5",
+    "technicalindicators": "^3.1.0",
     "unzipper": "^0.10.14",
     "ws": "^7.4.0"
   },

@@ -28,8 +28,8 @@ const setPickedExchange = value => pickedExchange = value, getPickedExchange = (
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
 let multiplier = 2;
-let exitMTM = -1800 * multiplier;
-let gainExitMTM = 350 * multiplier;
+let exitMTM = -1500;
+let gainExitMTM = 350;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
@@ -37,6 +37,7 @@ let mtmValue = 0;
 let iterationCounter = 0;
 let exitFlag = false;
 let exitAllFlag = false;
+let positionsData;
 
 let callPositions= [];
 let putPositions= [];
@@ -204,29 +205,36 @@ async function checkAlert(api) {
 const takeDecision = async (api, up, vixQuoteCalc) => {
   try{
     await updatePositions(api);
-  } catch (error) {
+    
+    // goSubmissive if already in straddle
+    putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
+    callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
+    if(putStrike == callStrike) {vixQuoteCalc = 1}
+
+    //check condition before action
+    if (up && vixQuoteCalc > 0) {
+      await takeActionCallAway(api)
+    }
+    else if (!up && vixQuoteCalc > 0) {
+      await takeActionPutAway(api)
+    }
+    else if (!up && vixQuoteCalc <= 0) {
+          await takeActionCallCloser(api)
+    }
+    else if (up && vixQuoteCalc <= 0) {
+          await takeActionPutCloser(api)
+    }
+
+    //send distance and MtoM
+    await updatePositions(api);
+    putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
+    callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
+    send_notification('distance: '+(+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl, true)
+  }
+  catch (error) {
     throw error; // Rethrow the error to propagate it
   }
-  
-  
-  // goSubmissive if already in straddle
-  putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
-  callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
-  if(putStrike == callStrike) {vixQuoteCalc = 1}
-
-  if (up && vixQuoteCalc > 0) {
-    await takeActionCallAway(api)
-  }
-  else if (!up && vixQuoteCalc > 0) {
-    await takeActionPutAway(api)
-  }
-  else if (!up && vixQuoteCalc <= 0) {
-        await takeActionCallCloser(api)
-  }
-  else if (up && vixQuoteCalc <= 0) {
-        await takeActionPutCloser(api)
-      }
-    }
+}
 
 
     const exitAll = async (api) => {
@@ -347,7 +355,8 @@ const updatePositions = async (api) => {
   smallestCallPosition = {};
   smallestPutPosition = {};
 
-  const data = await api.get_positions();
+  positionsData = await api.get_positions();
+  const data = positionsData;
   if (Array.isArray(data)) {
     const sellPositions = data.filter(option => parseInt(option.netqty) < 0);
     sellPositions.sort((a, b) => parseFloat(a.lp) - parseFloat(b.lp));
@@ -416,10 +425,10 @@ const takeActionCallAway = async (api) => {
   //exit call
   await api.place_order(orderCE);
   await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
-  getPickedExchange() === 'BFO' ? await delay(2000): await delay(1000);
+  getPickedExchange() === 'BFO' ? await delay(3000): await delay(1500);
   //move away call
-  await api.place_order(orderSubCE);
   await api.place_order(orderSubCESL);
+  await api.place_order(orderSubCE);
   
 }
 const takeActionPutAway = async (api) => {
@@ -473,15 +482,14 @@ const takeActionPutAway = async (api) => {
   const orders = await api.get_orderbook();
 
   const filtered_data_SL_PE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'P' && item?.instname === 'OPTIDX'): [];
-    send_notification("exit "+ orderPE.tradingsymbol, true)
-    send_notification(orderSubPE.tradingsymbol, true)
+    send_notification("exited: "+ orderPE.tradingsymbol+"\nentered: "+orderSubPE.tradingsymbol+'\ncallPositions: '+callPositions.join('-')+'\nputPositions: '+putPositions.join('-'),true);
     //exit put
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
-    getPickedExchange() === 'BFO' ? await delay(2000): await delay(1000);
+    getPickedExchange() === 'BFO' ? await delay(3000): await delay(1500);
     //move away put
-    await api.place_order(orderSubPE);
     await api.place_order(orderSubPESL);
+    await api.place_order(orderSubPE);
 }
 const takeActionCallCloser = async (api) => {
 
@@ -530,15 +538,14 @@ const takeActionCallCloser = async (api) => {
   const orders = await api.get_orderbook();
 
   const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C' && item?.instname === 'OPTIDX'): [];
-  send_notification("exit "+ orderCE.tradingsymbol, true)
-    send_notification(orderAggCE.tradingsymbol, true)
+  send_notification("exited: "+ orderCE.tradingsymbol+"\nentered: "+orderAggCE.tradingsymbol+'\ncallPositions: '+callPositions.join('-')+'\nputPositions: '+putPositions.join('-'),true);
     //exit put
     await api.place_order(orderCE);
     await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
-    getPickedExchange() === 'BFO' ? await delay(2000): await delay(1000);
+    getPickedExchange() === 'BFO' ? await delay(3000): await delay(1500);
     //come closer put
-    await api.place_order(orderAggCE);
     await api.place_order(orderAggCESL);
+    await api.place_order(orderAggCE);
   
 
 }
@@ -589,16 +596,14 @@ const takeActionPutCloser = async (api) => {
   const orders = await api.get_orderbook();
 
   const filtered_data_SL_PE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'P' && item?.instname === 'OPTIDX'): [];
-    send_notification("exit "+ orderPE.tradingsymbol, true)
-    send_notification(orderAggPE.tradingsymbol, true)
+    send_notification("exited: "+ orderPE.tradingsymbol+"\nentered: "+orderAggPE.tradingsymbol+'\ncallPositions: '+callPositions.join('-')+'\nputPositions: '+putPositions.join('-'),true);
     //exit call
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
-    getPickedExchange() === 'BFO' ? await delay(2000): await delay(1000);
+    getPickedExchange() === 'BFO' ? await delay(3000): await delay(1500);
     //come closer put
-    await api.place_order(orderAggPE);
     await api.place_order(orderAggPESL);
-  
+    await api.place_order(orderAggPE);
 }
 
 const getCloserTokenSymbol = (item, level=1) => {
@@ -925,10 +930,10 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
         //check MTM
         await delay((mtmValue>500 || mtmValue<-1500 )? 1000:5000);
         if(filtered_data){
-            const SpotObj1 = await fetchSpotPrice(api, filtered_data[0].token, 'MCX');
+            const SpotObj1 = await fetchSpotPrice(api, filtered_data[0]?.token, 'MCX');
             if (!SpotObj1) { console.log('Not able to find the spot'); return null; }
             debug && console.log(SpotObj1.lp) // 245.70
-            const SpotObj2 = await fetchSpotPrice(api, filtered_data[1].token, 'MCX');
+            const SpotObj2 = await fetchSpotPrice(api, filtered_data[1]?.token, 'MCX');
             if (!SpotObj2) { console.log('Not able to find the spot'); return null; }
             debug && console.log(SpotObj2.lp) // 233.50
             mtmValue = 2*(Math.round(((+filtered_data[0].avgprc + +filtered_data[1].avgprc) - (+SpotObj1.lp + +SpotObj2.lp))*100));
