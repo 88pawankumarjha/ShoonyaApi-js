@@ -436,10 +436,10 @@ const takeActionCallAway = async (api) => {
   //exit call
   await api.place_order(orderCE);
   await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
-  getPickedExchange() === 'BFO' ? await delay(3000): await delay(1500);
+  getPickedExchange() === 'BFO' ? await delay(3500): await delay(1500);
   //move away call
-  await api.place_order(orderSubCESL);
   await api.place_order(orderSubCE);
+  await api.place_order(orderSubCESL);
   
 }
 const takeActionPutAway = async (api) => {
@@ -497,10 +497,10 @@ const takeActionPutAway = async (api) => {
     //exit put
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
-    getPickedExchange() === 'BFO' ? await delay(3000): await delay(1500);
+    getPickedExchange() === 'BFO' ? await delay(3500): await delay(1500);
     //move away put
-    await api.place_order(orderSubPESL);
     await api.place_order(orderSubPE);
+    await api.place_order(orderSubPESL);
 }
 const takeActionCallCloser = async (api) => {
 
@@ -553,10 +553,10 @@ const takeActionCallCloser = async (api) => {
     //exit put
     await api.place_order(orderCE);
     await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
-    getPickedExchange() === 'BFO' ? await delay(3000): await delay(1500);
+    getPickedExchange() === 'BFO' ? await delay(3500): await delay(1500);
     //come closer put
-    await api.place_order(orderAggCESL);
     await api.place_order(orderAggCE);
+    await api.place_order(orderAggCESL);
   
 
 }
@@ -611,10 +611,10 @@ const takeActionPutCloser = async (api) => {
     //exit call
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
-    getPickedExchange() === 'BFO' ? await delay(3000): await delay(1500);
+    getPickedExchange() === 'BFO' ? await delay(3500): await delay(1500);
     //come closer put
-    await api.place_order(orderAggPESL);
     await api.place_order(orderAggPE);
+    await api.place_order(orderAggPESL);
 }
 
 const getCloserTokenSymbol = (item, level=1) => {
