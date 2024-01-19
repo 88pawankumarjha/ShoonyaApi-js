@@ -227,12 +227,12 @@ const takeDecision = async (api, up, vixQuoteCalc, fromBot = false) => {
     else if (!up && vixQuoteCalc <= 0) {
           if(!fromBot) {await takeActionCallCloser(api)}
           else if(fromBot && !isTimeEqualsNotAfterProps(2,0,false)) {await takeActionCallCloser(api)}
-          else {console.log('avoiding auto bot trades to come closer post 2 PM')}
+          else {send_notification('Call avoiding auto bot trades to come closer post 2 PM', true)}
     }
     else if (up && vixQuoteCalc <= 0) {
           if(!fromBot) {await takeActionPutCloser(api)}
           else if(fromBot && !isTimeEqualsNotAfterProps(2,0,false)) {await takeActionPutCloser(api)}
-          else {console.log('avoiding auto bot trades to come closer post 2 PM')}
+          else {send_notification('Put avoiding auto bot trades to come closer post 2 PM', true)}
     }
 
     //send distance and MtoM
