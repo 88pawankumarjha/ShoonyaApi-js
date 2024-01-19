@@ -236,11 +236,11 @@ const takeDecision = async (api, up, vixQuoteCalc, fromBot = false) => {
     }
 
     //send distance and MtoM
-    await updatePositions(api);
-    putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
-    callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
-    send_notification('distance: '+(+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl + new Date(), true)
-    send_notification((+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ' : taking decision, after action - strike difference' + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl + new Date());
+    // await updatePositions(api);
+    // putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
+    // callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
+    // send_notification('distance: '+(+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl + new Date(), true)
+    // send_notification((+callStrike - +putStrike)/Math.abs(+ocGapCalc) + ' : taking decision, after action - strike difference' + ', MtoM: '+positionsData?.urmtom + ", rPnL: "+ +positionsData?.rpnl + new Date());
   }
   catch (error) {
     throw error; // Rethrow the error to propagate it
