@@ -23,7 +23,7 @@ const isTimeBefore1147PM = () => {
 };
 const isTimeAfter1147PM = () => !(isTimeAfter330PM && isTimeBefore1147PM());
 let pickedExchange = debug ? 'BFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
-const getPickedIndex = () => debug ? 'SENSEX' : ['UNKNOWN', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX'][new Date().getDay()] || 'UNKNOWN';
+getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
 const setPickedExchange = value => pickedExchange = value, getPickedExchange = () => pickedExchange;
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
