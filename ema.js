@@ -50,7 +50,7 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 4,
+  emaLotMultiplier: 2,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -1642,12 +1642,12 @@ emaRecurringFunction = async () => {
         //send notification
 
         // //buyer
-        // checkCrossOverExit(callema9, callema21)
-        // putcheckCrossOverExit(putema9, putema21)
+        checkCrossOverExit(callema9, callema21)
+        putcheckCrossOverExit(putema9, putema21)
 
         // //seller
-        sellercheckCrossOverExit(callema9, callema21)
-        sellerputcheckCrossOverExit(putema9, putema21)
+        // sellercheckCrossOverExit(callema9, callema21)
+        // sellerputcheckCrossOverExit(putema9, putema21)
         
       } catch (error) {
         console.error('Error:', error);
