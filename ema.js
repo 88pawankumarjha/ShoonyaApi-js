@@ -526,6 +526,9 @@ async function startWebsocket() {
 async function getOptionChain() {
     try {
         biasProcess.atmStrike = getAtmStrike();
+        if(new Date().toLocaleDateString() === new Date("2024-01-20").toLocaleDateString()) {
+            globalInput.inputOptTsym = "BANKEX2412057700PE"
+        }
         const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
         // console.log(optionChainResponse, 'optionChainResponse')
         if (optionChainResponse.stat === 'Ok') {

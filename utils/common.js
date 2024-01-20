@@ -8,7 +8,7 @@ let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
-const getIsBFO = () => [1, 5].includes(new Date().getDay());
+const getIsBFO = () => [1, 5, 6].includes(new Date().getDay());
 
 
 const isTimeAfter330PM = () => {
@@ -23,7 +23,7 @@ const isTimeBefore1147PM = () => {
 };
 const isTimeAfter1147PM = () => !(isTimeAfter330PM && isTimeBefore1147PM());
 let pickedExchange = debug ? 'BFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
-getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
+getPickedIndex = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
 const setPickedExchange = value => pickedExchange = value, getPickedExchange = () => pickedExchange;
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
