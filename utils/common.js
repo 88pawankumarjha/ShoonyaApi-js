@@ -243,7 +243,7 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
     //auto adjustments
     if(actionTypeInput == actionType.BOT) {
       //aggressive if vix is low
-      inputNumberSent = vixQuoteCalc > 0 ? magicNumber/Math.abs(+ocGapCalc): aggressiveMagicNumber/Math.abs(+ocGapCalc);
+      inputNumberSent = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
       //find closest to magic number
       closerNumber = findCloserToMagicNumber(smallestCallPosition?.lp, smallestPutPosition?.lp, inputNumberSent)
       if (closerNumber == 1) { // call is closer to magic number
@@ -499,7 +499,7 @@ const takeActionCallAway = async (api) => {
   const orders = await api.get_orderbook();
 
   const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C' && item?.instname === 'OPTIDX'): [];
-  send_notification("exited: "+ orderCE.tradingsymbol+"\nentered: "+orderSubCE.tradingsymbol+'\ncallPositions: '+callPositions.join('-')+'\nputPositions: '+putPositions.join('-'),true);
+  send_notification("exited: "+ orderCE.tradingsymbol+"\nentered: "+orderSubCE.tradingsymbol,true);
   //exit call
   await api.place_order(orderCE);
   await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
@@ -560,7 +560,7 @@ const takeActionPutAway = async (api) => {
   const orders = await api.get_orderbook();
 
   const filtered_data_SL_PE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'P' && item?.instname === 'OPTIDX'): [];
-    send_notification("exited: "+ orderPE.tradingsymbol+"\nentered: "+orderSubPE.tradingsymbol+'\ncallPositions: '+callPositions.join('-')+'\nputPositions: '+putPositions.join('-'),true);
+    send_notification("exited: "+ orderPE.tradingsymbol+"\nentered: "+orderSubPE.tradingsymbol,true);
     //exit put
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
@@ -616,7 +616,7 @@ const takeActionCallCloser = async (api) => {
   const orders = await api.get_orderbook();
 
   const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'C' && item?.instname === 'OPTIDX'): [];
-  send_notification("exited: "+ orderCE.tradingsymbol+"\nentered: "+orderAggCE.tradingsymbol+'\ncallPositions: '+callPositions.join('-')+'\nputPositions: '+putPositions.join('-'),true);
+  send_notification("exited: "+ orderCE.tradingsymbol+"\nentered: "+orderAggCE.tradingsymbol,true);
     //exit put
     await api.place_order(orderCE);
     await api.cancel_order(filtered_data_SL_CE[0]?.norenordno)
@@ -674,7 +674,7 @@ const takeActionPutCloser = async (api) => {
   const orders = await api.get_orderbook();
 
   const filtered_data_SL_PE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && identify_option_type(item.tsym) == 'P' && item?.instname === 'OPTIDX'): [];
-    send_notification("exited: "+ orderPE.tradingsymbol+"\nentered: "+orderAggPE.tradingsymbol+'\ncallPositions: '+callPositions.join('-')+'\nputPositions: '+putPositions.join('-'),true);
+    send_notification("exited: "+ orderPE.tradingsymbol+"\nentered: "+orderAggPE.tradingsymbol,true);
     //exit call
     await api.place_order(orderPE);
     await api.cancel_order(filtered_data_SL_PE[0]?.norenordno)
