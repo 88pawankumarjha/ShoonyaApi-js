@@ -246,6 +246,7 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
       inputNumberSent = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
       //find closest to magic number
       closerNumber = findCloserToMagicNumber(smallestCallPosition?.lp, smallestPutPosition?.lp, inputNumberSent)
+      send_notification(inputNumberSent + ': inputNumberSent, ' + closerNumber + ': closerNumber, ' + smallestCallPosition?.lp + ': smallestCallPosition?.lp, ' + smallestPutPosition?.lp + ': smallestPutPosition?.lp', true)
       if (closerNumber == 1) { // call is closer to magic number
         if(smallestCallPosition?.lp < inputNumberSent){
           if(smallestCallPosition?.lp < smallestPutPosition?.lp){
