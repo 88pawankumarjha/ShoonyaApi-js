@@ -246,27 +246,27 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
       inputNumberSent = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
       //find closest to magic number
       closerNumber = findCloserToMagicNumber(+smallestCallPosition?.lp, +smallestPutPosition?.lp, +inputNumberSent)
-      send_notification(inputNumberSent + ': inputNumberSent, ' + closerNumber + ': closerNumber, ' + smallestCallPosition?.lp + ': smallestCallPosition?.lp, ' + smallestPutPosition?.lp + ': smallestPutPosition?.lp', true)
+      // send_notification(inputNumberSent + ': inputNumberSent, ' + closerNumber + ': closerNumber, ' + smallestCallPosition?.lp + ': smallestCallPosition?.lp, ' + smallestPutPosition?.lp + ': smallestPutPosition?.lp', true)
       if (+closerNumber == 1) { // call is closer to magic number
         if(+smallestCallPosition?.lp < +inputNumberSent){
           if(+smallestCallPosition?.lp < +smallestPutPosition?.lp){
             vixQuoteCalc = -1;
             up = false;
-            send_notification("call comes closer1", true);
+            // send_notification("call comes closer1", true);
           }else{
             vixQuoteCalc = -1;
             up = true;
-            send_notification("put comes closer1", true);
+            // send_notification("put comes closer1", true);
           }
         } else {
           if(+smallestCallPosition?.lp < +smallestPutPosition?.lp){  
             vixQuoteCalc = 1;
             up = false;
-            send_notification("put goes farther1", true);
+            // send_notification("put goes farther1", true);
           }else{
             vixQuoteCalc = 1;
             up = true;
-            send_notification("call goes farther1", true);
+            // send_notification("call goes farther1", true);
           }
         }
       } else if (+closerNumber == 2){
@@ -274,38 +274,38 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
           if(+smallestPutPosition?.lp < +smallestCallPosition?.lp){
             vixQuoteCalc = -1;
             up = true;
-            send_notification("put comes closer2", true);
+            // send_notification("put comes closer2", true);
           }else{
             vixQuoteCalc = -1;
             up = false;
-            send_notification("call comes closer2", true);
+            // send_notification("call comes closer2", true);
           }
         } else {
           if(+smallestPutPosition?.lp < +smallestCallPosition?.lp){  
             vixQuoteCalc = 1;
             up = true;
-            send_notification("call goes farther2", true);
+            // send_notification("call goes farther2", true);
           }else{
             vixQuoteCalc = 1;
             up = false;
-            send_notification("put goes farther2", true);
+            // send_notification("put goes farther2", true);
           }
         }
       }
     }
 
-    send_notification(vixQuoteCalc + " : " + up +" --> vixQuoteCalc : up ", true);
+    // send_notification(vixQuoteCalc + " : " + up +" --> vixQuoteCalc : up ", true);
     
     //check condition before action
     if (up && vixQuoteCalc > 0) {
       await takeActionCallAway(api)
       send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) + 1 )+' : strike difference');
-      send_notification("call away", true);
+      // send_notification("call away", true);
     }
     else if (!up && vixQuoteCalc > 0) {
       await takeActionPutAway(api)
       send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) + 1 )+' : strike difference');
-      send_notification("put away", true);
+      // send_notification("put away", true);
     }
 
     // do not come closer via BOT after 2 PM
@@ -317,7 +317,7 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
           else {
               send_notification('Avoiding auto bot trades to come closer post 2 PM', true);
           }
-          send_notification("call closer", true);
+          // send_notification("call closer", true);
     }
     else if (up && vixQuoteCalc <= 0) {
           if(actionTypeInput == actionType.MANUAL) {await takeActionPutCloser(api);
@@ -327,7 +327,7 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
           else {
             send_notification('Avoiding auto bot trades to come closer post 2 PM', true);
           }
-          send_notification("put closer", true);
+          // send_notification("put closer", true);
     }
 
     
