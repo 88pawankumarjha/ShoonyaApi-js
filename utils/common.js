@@ -233,13 +233,6 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
     // goSubmissive if already in straddle
     putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
     callStrike = getStrike(smallestCallPosition?.tsym, getPickedExchange())
-    // do not go closer than straddle via BOT
-    if(putStrike == callStrike) {vixQuoteCalc = 1}
-    // do not come closer than 2 strikes distance via BOT
-    if(actionTypeInput == actionType.BOT && (((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) <= 2)) {
-      vixQuoteCalc = 1;
-      send_notification('Avoiding auto bot trades to come closer than 2 strike difference', true);
-    }
     //auto adjustments
     if(actionTypeInput == actionType.BOT) {
       //aggressive if vix is low
@@ -294,6 +287,15 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
       }
     }
 
+
+    // do not go closer than straddle via BOT
+    if(putStrike == callStrike) {vixQuoteCalc = 1}
+    // do not come closer than 2 strikes distance via BOT
+    if(actionTypeInput == actionType.BOT && (((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) <= 2)) {
+      vixQuoteCalc = 1;
+      send_notification('Avoiding auto bot trades to come closer than 2 strike difference', true);
+    }
+    
     // send_notification(vixQuoteCalc + " : " + up +" --> vixQuoteCalc : up ", true);
     
     //check condition before action
