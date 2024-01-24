@@ -30,6 +30,8 @@ let calcBias = 0;
 let multiplier = 2;
 let exitMTM = -1500;
 let gainExitMTM = 350;
+let magicNumber = 250;
+let aggressiveMagicNumber = 350;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
@@ -43,6 +45,12 @@ let callPositions= [];
 let putPositions= [];
 let smallestCallPosition = {};
 let smallestPutPosition = {};
+
+// Enum for context types
+const actionType = {
+  BOT: 'bot',
+  MANUAL: 'other',
+};
 
 async function send_callback_notification() {
   try {
@@ -69,25 +77,25 @@ bot.on('callback_query', (callbackQuery) => {
   else if (data === 'CA') {
     (async () => {
       send_notification('CA clicked', true)
-      await takeDecision(apiLocal, false, -1) // await takeDecision(api, up, vixQuoteCalc)
+      await takeDecision(apiLocal, false, -1, actionType.MANUAL)
     })();
   }
   else if (data === 'CS') {
     (async () => {
       send_notification('CS clicked', true)
-      await takeDecision(apiLocal, true, 1) // await takeDecision(api, up, vixQuoteCalc)
+      await takeDecision(apiLocal, true, 1, actionType.MANUAL)
     })();
   }
   else if (data === 'PA') {
     (async () => {
       send_notification('PA clicked', true)
-      await takeDecision(apiLocal, true, -1) // await takeDecision(api, up, vixQuoteCalc)
+      await takeDecision(apiLocal, true, -1, actionType.MANUAL)
     })();
   }
   else if (data === 'PS') {
     (async () => {
       send_notification('PS clicked', true)
-      await takeDecision(apiLocal, false, 1) // await takeDecision(api, up, vixQuoteCalc)
+      await takeDecision(apiLocal, false, 1, actionType.MANUAL)
     })();
   }
   else if (data === 'stop') stopSignal = !stopSignal;
@@ -197,12 +205,28 @@ async function checkAlert(api) {
             const vixQuoteCalc = await calcVix(api);
             debug && console.log(vixQuoteCalc, 'vixQuoteCalc')
             send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX = ${vixQuoteCalc}%, Bias ${calcBias}, '\n'${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}'\n'${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`, true);
-            await takeDecision(api, up, vixQuoteCalc, true)
+            await takeDecision(api, up, vixQuoteCalc, actionType.BOT)
         }
     }
 }
 
-const takeDecision = async (api, up, vixQuoteCalc, fromBot = false) => {
+function findCloserToMagicNumber(number1, number2, inputNumber) {
+  const difference1 = Math.abs(number1 - inputNumber); // magicNumber = 250, aggressiveMagicNumber = 350
+  const difference2 = Math.abs(number2 - inputNumber);
+
+  if (difference1 < difference2) {
+      return 1;
+  } else if (difference2 <= difference1) {
+      return 2; //number2 + " is closer to inputNumber 250";
+  }
+}
+
+// Example usage
+// const result = findCloserToMagicNumber(200, 300, 250);
+// console.log(result);
+
+
+const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
   try{
     await updatePositions(api);
     
@@ -212,28 +236,71 @@ const takeDecision = async (api, up, vixQuoteCalc, fromBot = false) => {
     // do not go closer than straddle via BOT
     if(putStrike == callStrike) {vixQuoteCalc = 1}
     // do not come closer than 2 strikes distance via BOT
-    if(((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) <= 2) {vixQuoteCalc = 1}
-    send_notification(((+callStrike - +putStrike)/Math.abs(+ocGapCalc))+' : taking decision, before action - strike difference');
-
+    if(actionTypeInput == actionType.BOT && (((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) <= 2)) {
+      vixQuoteCalc = 1;
+      send_notification('Avoiding auto bot trades to come closer than 2 strike difference', true);
+    }
+    //auto adjustments
+    if(actionTypeInput == actionType.BOT) {
+      //aggressive if vix is low
+      inputNumberSent = vixQuoteCalc > 0 ? magicNumber/Math.abs(+ocGapCalc): aggressiveMagicNumber/Math.abs(+ocGapCalc);
+      //find closest to magic number
+      closerNumber = findCloserToMagicNumber(smallestCallPosition?.lp, smallestPutPosition?.lp, inputNumberSent)
+      if (closerNumber == 1) { // call is closer to magic number
+        if(smallestCallPosition?.lp < inputNumberSent){
+          vixQuoteCalc = -1;
+          up = false;
+          //call comes closer
+        } else {
+          vixQuoteCalc = 1;
+          up = false;
+          //put goes farther
+        }
+      } else if (closerNumber == 2){
+        if(smallestPutPosition?.lp < inputNumberSent){
+          vixQuoteCalc = -1;
+          up = true;
+          //put comes closer
+        } else {
+          vixQuoteCalc = 1;
+          up = true;
+          //call goes farther
+        }
+      }
+    }
+    
     //check condition before action
     if (up && vixQuoteCalc > 0) {
       await takeActionCallAway(api)
+      send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) + 1 )+' : strike difference');
     }
     else if (!up && vixQuoteCalc > 0) {
       await takeActionPutAway(api)
+      send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) + 1 )+' : strike difference');
     }
 
     // do not come closer via BOT after 2 PM
     else if (!up && vixQuoteCalc <= 0) {
-          if(!fromBot) {await takeActionCallCloser(api)}
-          else if(fromBot && isTimeEqualsNotAfterProps(2,0,false)) {await takeActionCallCloser(api)}
-          else {send_notification('Call avoiding auto bot trades to come closer post 2 PM', true)}
+          if(actionTypeInput == actionType.MANUAL) {await takeActionCallCloser(api);
+            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference');
+          }
+          else if(actionTypeInput == actionType.BOT && isTimeEqualsNotAfterProps(2,0,false)) {await takeActionCallCloser(api);
+            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference');}
+          else {
+              send_notification('Avoiding auto bot trades to come closer post 2 PM', true);
+          }
     }
     else if (up && vixQuoteCalc <= 0) {
-          if(!fromBot) {await takeActionPutCloser(api)}
-          else if(fromBot && isTimeEqualsNotAfterProps(2,0,false)) {await takeActionPutCloser(api)}
-          else {send_notification('Put avoiding auto bot trades to come closer post 2 PM', true)}
+          if(actionTypeInput == actionType.MANUAL) {await takeActionPutCloser(api);
+            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference');}
+          else if(actionTypeInput == actionType.BOT && isTimeEqualsNotAfterProps(2,0,false)) {await takeActionPutCloser(api);
+            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference');}
+          else {
+            send_notification('Avoiding auto bot trades to come closer post 2 PM', true);
+          }
     }
+
+    
 
     //send distance and MtoM
     // await updatePositions(api);
