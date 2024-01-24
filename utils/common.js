@@ -248,24 +248,59 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
       closerNumber = findCloserToMagicNumber(smallestCallPosition?.lp, smallestPutPosition?.lp, inputNumberSent)
       if (closerNumber == 1) { // call is closer to magic number
         if(smallestCallPosition?.lp < inputNumberSent){
-          vixQuoteCalc = -1;
-          up = false;
-          //call comes closer
+          if(smallestCallPosition?.lp < smallestPutPosition?.lp){
+            vixQuoteCalc = -1;
+            up = false;
+            //call comes closer
+          }else{
+            vixQuoteCalc = -1;
+            up = true;
+            //put comes closer
+          }
         } else {
-          vixQuoteCalc = 1;
-          up = false;
-          //put goes farther
+          if(smallestCallPosition?.lp < smallestPutPosition?.lp){  
+            vixQuoteCalc = 1;
+            up = false;
+            //put goes farther
+          }else{
+            vixQuoteCalc = 1;
+            up = true;
+            //call goes farther
+          }
         }
       } else if (closerNumber == 2){
         if(smallestPutPosition?.lp < inputNumberSent){
-          vixQuoteCalc = -1;
-          up = true;
-          //put comes closer
+          if(smallestPutPosition?.lp < smallestCallPosition?.lp){
+            vixQuoteCalc = -1;
+            up = true;
+            //put comes closer
+          }else{
+            vixQuoteCalc = -1;
+            up = false;
+            //call comes closer
+          }
         } else {
-          vixQuoteCalc = 1;
-          up = true;
-          //call goes farther
+          if(smallestPutPosition?.lp < smallestCallPosition?.lp){  
+            vixQuoteCalc = 1;
+            up = true;
+            //call goes farther
+          }else{
+            vixQuoteCalc = 1;
+            up = false;
+            //put goes farther
+          }
         }
+
+
+        // if(smallestPutPosition?.lp < inputNumberSent){
+        //   vixQuoteCalc = -1;
+        //   up = true;
+        //   //put comes closer
+        // } else {
+        //   vixQuoteCalc = 1;
+        //   up = true;
+        //   //call goes farther
+        // }
       }
     }
     
