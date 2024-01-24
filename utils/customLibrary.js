@@ -57,6 +57,7 @@ module.exports.idxNameOcGap = new Map([
   ['BANKNIFTY', '100'],
   ['NIFTY', '50'],
   ['SENSEX', '100'],
+  ['CRUDEOIL', '50'],
 ]);
 //nearest ocGap
 module.exports.idxNameTokenMap = new Map([
@@ -65,6 +66,7 @@ module.exports.idxNameTokenMap = new Map([
   ['BANKNIFTY', '26009'],
   ['NIFTY', '26000'],
   ['SENSEX', '1'],
+  ['CRUDEOIL', '0'],
 ]);
 
 module.exports.downloadCsv = async (url, destination, axios, fs) => {
