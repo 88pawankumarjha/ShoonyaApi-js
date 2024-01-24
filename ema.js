@@ -50,7 +50,7 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 1,
+  emaLotMultiplier: 2,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -1292,6 +1292,11 @@ async function checkCrossOverExit(ema9, ema21) {
         positionTaken = false;
         positionTakenInSymbol = '';
         // Place your position-closing logic here
+        if (!putpositionTaken) {
+          console.log("Entry signal detected1. Take put position after 1 min if it has higher EMA9." + new Date());
+          putPreviousValue = true; //seller opp logic needed
+          // Place your position-closing logic here
+        }
     } else {
         console.log("No call signal detected."+ new Date());
         // Additional logic if needed
@@ -1351,6 +1356,18 @@ async function putcheckCrossOverExit(ema9, ema21) {
         putpositionTaken = false;
         putpositionTakenInSymbol = ''
         // Place your position-closing logic here
+        // if (!positionTaken) {
+        //   console.log("Entry signal detected2. Take call position." + new Date());
+        //   await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        //   positionTaken = true;
+        //   positionTakenInSymbol = biasProcess.atmCallSymbol;
+        //   // Place your position-closing logic here
+        // }
+        if (!positionTaken) {
+          console.log("Entry signal detected2. Take call position after 1 min if it has higher EMA9." + new Date());
+          callPreviousValue = true; //seller opp logic needed
+          // Place your position-closing logic here
+        }
     } else {
         console.log("No put signal detected."+ new Date());
         // Additional logic if needed
@@ -1407,15 +1424,9 @@ async function sellerputcheckCrossOverExit(ema9, ema21) {
 
 // // Example usage
 // putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
-// putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
-// putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
 // // Assuming a crossover has occurred, now check for exit signal
 // putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
-// putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
 // putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
-// putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
-// putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
-// putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
 // putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
 // putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
 
