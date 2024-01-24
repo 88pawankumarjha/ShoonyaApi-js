@@ -245,11 +245,11 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
       //aggressive if vix is low
       inputNumberSent = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
       //find closest to magic number
-      closerNumber = findCloserToMagicNumber(smallestCallPosition?.lp, smallestPutPosition?.lp, inputNumberSent)
+      closerNumber = findCloserToMagicNumber(+smallestCallPosition?.lp, +smallestPutPosition?.lp, +inputNumberSent)
       send_notification(inputNumberSent + ': inputNumberSent, ' + closerNumber + ': closerNumber, ' + smallestCallPosition?.lp + ': smallestCallPosition?.lp, ' + smallestPutPosition?.lp + ': smallestPutPosition?.lp', true)
-      if (closerNumber == 1) { // call is closer to magic number
-        if(smallestCallPosition?.lp < inputNumberSent){
-          if(smallestCallPosition?.lp < smallestPutPosition?.lp){
+      if (+closerNumber == 1) { // call is closer to magic number
+        if(+smallestCallPosition?.lp < +inputNumberSent){
+          if(+smallestCallPosition?.lp < +smallestPutPosition?.lp){
             vixQuoteCalc = -1;
             up = false;
             send_notification("call comes closer1", true);
@@ -259,7 +259,7 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
             send_notification("put comes closer1", true);
           }
         } else {
-          if(smallestCallPosition?.lp < smallestPutPosition?.lp){  
+          if(+smallestCallPosition?.lp < +smallestPutPosition?.lp){  
             vixQuoteCalc = 1;
             up = false;
             send_notification("put goes farther1", true);
@@ -269,9 +269,9 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
             send_notification("call goes farther1", true);
           }
         }
-      } else if (closerNumber == 2){
-        if(smallestPutPosition?.lp < inputNumberSent){
-          if(smallestPutPosition?.lp < smallestCallPosition?.lp){
+      } else if (+closerNumber == 2){
+        if(+smallestPutPosition?.lp < +inputNumberSent){
+          if(+smallestPutPosition?.lp < +smallestCallPosition?.lp){
             vixQuoteCalc = -1;
             up = true;
             send_notification("put comes closer2", true);
@@ -281,7 +281,7 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
             send_notification("call comes closer2", true);
           }
         } else {
-          if(smallestPutPosition?.lp < smallestCallPosition?.lp){  
+          if(+smallestPutPosition?.lp < +smallestCallPosition?.lp){  
             vixQuoteCalc = 1;
             up = true;
             send_notification("call goes farther2", true);
