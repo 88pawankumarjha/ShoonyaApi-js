@@ -1770,6 +1770,7 @@ getEma = async () => {
   if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,47,false))
   {
     await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+    await delay(3000);
     process.exit(0)
   }
 
