@@ -252,21 +252,21 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
           if(smallestCallPosition?.lp < smallestPutPosition?.lp){
             vixQuoteCalc = -1;
             up = false;
-            //call comes closer
+            send_notification("call comes closer1", true);
           }else{
             vixQuoteCalc = -1;
             up = true;
-            //put comes closer
+            send_notification("put comes closer1", true);
           }
         } else {
           if(smallestCallPosition?.lp < smallestPutPosition?.lp){  
             vixQuoteCalc = 1;
             up = false;
-            //put goes farther
+            send_notification("put goes farther1", true);
           }else{
             vixQuoteCalc = 1;
             up = true;
-            //call goes farther
+            send_notification("call goes farther1", true);
           }
         }
       } else if (closerNumber == 2){
@@ -274,66 +274,60 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
           if(smallestPutPosition?.lp < smallestCallPosition?.lp){
             vixQuoteCalc = -1;
             up = true;
-            //put comes closer
+            send_notification("put comes closer2", true);
           }else{
             vixQuoteCalc = -1;
             up = false;
-            //call comes closer
+            send_notification("call comes closer2", true);
           }
         } else {
           if(smallestPutPosition?.lp < smallestCallPosition?.lp){  
             vixQuoteCalc = 1;
             up = true;
-            //call goes farther
+            send_notification("call goes farther2", true);
           }else{
             vixQuoteCalc = 1;
             up = false;
-            //put goes farther
+            send_notification("put goes farther2", true);
           }
         }
-
-
-        // if(smallestPutPosition?.lp < inputNumberSent){
-        //   vixQuoteCalc = -1;
-        //   up = true;
-        //   //put comes closer
-        // } else {
-        //   vixQuoteCalc = 1;
-        //   up = true;
-        //   //call goes farther
-        // }
       }
     }
+
+    send_notification(vixQuoteCalc + " : " + up +" --> vixQuoteCalc : up ", true);
     
     //check condition before action
     if (up && vixQuoteCalc > 0) {
       await takeActionCallAway(api)
       send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) + 1 )+' : strike difference');
+      send_notification("call away", true);
     }
     else if (!up && vixQuoteCalc > 0) {
       await takeActionPutAway(api)
       send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) + 1 )+' : strike difference');
+      send_notification("put away", true);
     }
 
     // do not come closer via BOT after 2 PM
     else if (!up && vixQuoteCalc <= 0) {
           if(actionTypeInput == actionType.MANUAL) {await takeActionCallCloser(api);
-            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference');
-          }
+            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference')}
           else if(actionTypeInput == actionType.BOT && isTimeEqualsNotAfterProps(2,0,false)) {await takeActionCallCloser(api);
-            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference');}
+            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference')}
           else {
               send_notification('Avoiding auto bot trades to come closer post 2 PM', true);
           }
+          send_notification("call closer", true);
     }
     else if (up && vixQuoteCalc <= 0) {
           if(actionTypeInput == actionType.MANUAL) {await takeActionPutCloser(api);
-            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference');}
+            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference')}
           else if(actionTypeInput == actionType.BOT && isTimeEqualsNotAfterProps(2,0,false)) {await takeActionPutCloser(api);
-            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference');}
+            send_notification((+((+callStrike - +putStrike)/Math.abs(+ocGapCalc)) - 1 )+' : strike difference')}
           else {
             send_notification('Avoiding auto bot trades to come closer post 2 PM', true);
           }
+          send_notification("put closer", true);
     }
 
     
