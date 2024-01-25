@@ -36,6 +36,7 @@ let telegramSignals = {
   exitSignal: false,
   slower: false,
   faster: false,
+  isPlaying: true
 }
 let globalInput = {
   susertoken: '',
@@ -107,6 +108,8 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 let websocket;
 let websocket_closed= false;
 let intervalId;
+let intervalIdForEMA;
+const delayForEMA = 1000; 
 
 let latestQuotes = {};
 let latestOrders = {};
@@ -260,11 +263,11 @@ const getAtmStrike = () => {
 async function send_callback_notification() {
     try {
         const keyboard = {inline_keyboard: [[
-                { text: '🐌', callback_data: 'slower' },
-                { text: '🚀', callback_data: 'faster' },
-                { text: '💹', callback_data: 'toggleExchange' },
-                { text: '⏸', callback_data: 'stop' },
-                { text: '🛑', callback_data: 'exit' }
+                // { text: '🐌', callback_data: 'slower' },
+                // { text: '🚀', callback_data: 'faster' },
+                // { text: '💹', callback_data: 'toggleExchange' },
+                { text: '⏸', callback_data: 'isPlayingSignal' },
+                // { text: '🛑', callback_data: 'exit' }
               ]]};
       !debug && bot.sendMessage(chat_id_me, 'Choose server settings', { reply_markup: keyboard });
     } catch (error) { console.error(error);send_notification(error + ' error occured', true)}
@@ -283,10 +286,15 @@ async function send_callback_notification() {
     //   slower: false,
     //   faster: false,
     // }
+    if (data === 'isPlayingSignal') {
+      if(telegramSignals.isPlaying){pauseEma()}
+      else {resumeEma()}
+    }
     if (data === 'exit') telegramSignals.exitSignal = true;
     if (data === 'stop') telegramSignals.stopSignal = !telegramSignals.stopSignal;
     else if (data === 'toggleExchange') globalInput.pickedExchange = (globalInput.pickedExchange === 'NFO' ? 'BFO' : globalInput.pickedExchange === 'BFO' ? 'MCX' : 'NFO');
-    bot.sendMessage(chatId, `Exchange: ${globalInput.pickedExchange}, Paused: ${telegramSignals.stopSignal} - pause, exit, slower, faster are not implemented`);
+    // bot.sendMessage(chatId, `Exchange: ${globalInput.pickedExchange}, Paused: ${telegramSignals.stopSignal} - pause, exit, slower, faster are not implemented`);
+    bot.sendMessage(chatId, `EMA isPlaying: ${telegramSignals.isPlaying}`);
   });
 
 // login method
@@ -1292,11 +1300,11 @@ async function checkCrossOverExit(ema9, ema21) {
         positionTaken = false;
         positionTakenInSymbol = '';
         // Place your position-closing logic here
-        if (!putpositionTaken) {
-          console.log("Entry signal detected1. Take put position after 1 min if it has higher EMA9." + new Date());
-          putPreviousValue = true; //seller opp logic needed
-          // Place your position-closing logic here
-        }
+        // if (!putpositionTaken) {
+        //   console.log("Entry signal detected1. Take put position after 1 min if it has higher EMA9." + new Date());
+        //   putPreviousValue = true; //seller opp logic needed
+        //   // Place your position-closing logic here
+        // }
     } else {
         console.log("No call signal detected."+ new Date());
         // Additional logic if needed
@@ -1363,11 +1371,11 @@ async function putcheckCrossOverExit(ema9, ema21) {
         //   positionTakenInSymbol = biasProcess.atmCallSymbol;
         //   // Place your position-closing logic here
         // }
-        if (!positionTaken) {
-          console.log("Entry signal detected2. Take call position after 1 min if it has higher EMA9." + new Date());
-          callPreviousValue = true; //seller opp logic needed
-          // Place your position-closing logic here
-        }
+        // if (!positionTaken) {
+        //   console.log("Entry signal detected2. Take call position after 1 min if it has higher EMA9." + new Date());
+        //   callPreviousValue = true; //seller opp logic needed
+        //   // Place your position-closing logic here
+        // }
     } else {
         console.log("No put signal detected."+ new Date());
         // Additional logic if needed
@@ -1739,17 +1747,38 @@ getEma = async () => {
   }
 }
 
-runEma = async () => {
-  try{
+const runEma = async () => {
+  try {
     await executeLogin();
     await startWebsocket();
     await send_callback_notification();
     await updateITMSymbolfromOC();
-    intervalId = setInterval(getEma, 1000);
-  }catch (error) {
-    console.log( error)
-}
-}
+
+    if (telegramSignals.isPlaying) {
+      intervalIdForEMA = setInterval(getEma, delayForEMA);
+    }
+
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+// Function to pause the EMA calculations
+const pauseEma = () => {
+  if (telegramSignals.isPlaying) {
+    console.log("#########################pausing")
+    clearInterval(intervalIdForEMA);
+    telegramSignals.isPlaying = false;
+  }
+};
+
+// Function to resume the EMA calculations
+const resumeEma = () => {
+  if (!telegramSignals.isPlaying) {
+    console.log("#########################resuming")
+    intervalIdForEMA = setInterval(getEma, delayForEMA);
+    telegramSignals.isPlaying = true;
+  }
+};
 
 runEma();
-

@@ -523,8 +523,8 @@ const takeActionCallAway = async (api) => {
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: Number(Math.round(Number(localSLPrice || 10) * 3)+2),
-            trigger_price: Number(Math.round(Number(localSLPrice || 10) * 3)),
+            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), Number(localSLPrice[1])),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1]-0.5))),
             remarks: 'CommonOrderCEEntryAPISL'
           }
         
@@ -584,8 +584,8 @@ const takeActionPutAway = async (api) => {
             quantity: Math.abs(smallestPutPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: Number(Math.round(Number(localSLPrice || 10) * 3)+2),
-            trigger_price: Number(Math.round(Number(localSLPrice || 10) * 3)),
+            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), (Number(localSLPrice[1]))),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1]-0.5))),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -640,8 +640,8 @@ const takeActionCallCloser = async (api) => {
             quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: Number(Math.round(Number(localSLPrice || 10) * 3)+2),
-            trigger_price: Number(Math.round(Number(localSLPrice || 10) * 3)),
+            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), (Number(localSLPrice[1]))),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1]-0.5))),
             remarks: 'CommonOrderCEEntryAPISL'
           }
 
@@ -698,8 +698,8 @@ const takeActionPutCloser = async (api) => {
             quantity: (Math.abs(smallestPutPosition?.netqty)  - Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: Number(Math.round(Number(localSLPrice || 10) * 3)+2),
-            trigger_price: Number(Math.round(Number(localSLPrice || 10) * 3)),
+            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), (Number(localSLPrice[1]))),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1]-0.5))),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -746,7 +746,7 @@ async function getLTPfromSymbol(api, tsym) {
   // console.log(localToken, 'localToken')
   const ltpResponse = await api.get_quotes(getPickedExchange(), localToken);
   // console.log(ltpResponse.lp, 'ltpResponse.lp')
-  return ltpResponse.lp;
+  return [ltpResponse.lp, ltpResponse.uc];
 }
 
 async function getCloserTokenLTP(api, item, level=1) {

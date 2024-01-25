@@ -1698,7 +1698,7 @@ emaRecurringFunction = async () => {
         'exchange'   : globalInput.pickedExchange,
         'token' : globalInput.token,
         'starttime'    : '1705383000',
-        'interval' : '1'
+        'interval' : '3'
         }
 
       // params2 = {
@@ -1757,10 +1757,6 @@ emaRecurringFunction = async () => {
       }
     }
 
-
-
-    
-
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
 getEma = async () => {
   var currentDate = new Date();
@@ -1770,7 +1766,6 @@ getEma = async () => {
   if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,47,false))
   {
     await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    await delay(3000);
     process.exit(0)
   }
 
