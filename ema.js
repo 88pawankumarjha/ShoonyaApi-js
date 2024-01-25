@@ -1237,7 +1237,8 @@ let orderCE = {
   }
   try{
     orderCERespObj = await api.place_order(orderCE);
-    console.log(orderCERespObj, ' :orderLongRespObj')
+    console.log(orderCERespObj, ' :orderLongRespObj');
+    console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
   }
   catch(error){
     console.log(error)
@@ -1259,6 +1260,7 @@ const short = async (symbol, qty) => {
       try{
     orderPERespObj = await api.place_order(orderCE);
     console.log(orderPERespObj, ' :orderShortRespOb')
+    console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
   }
   catch(error){
     console.log(error)
