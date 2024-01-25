@@ -1242,6 +1242,7 @@ const long = async (symbol, qty) => {
   try{
     orderRespObj = await api.place_order(order);
     console.log(orderRespObj, ' :orderLongRespObj')
+    console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
   }
   catch(error){
     console.log(error)
@@ -1262,6 +1263,7 @@ const short = async (symbol, qty) => {
   try{
     orderRespObj = await api.place_order(order);
     console.log(orderRespObj, ' :orderShortRespOb')
+    console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
   }
   catch(error){
     console.log(error)
