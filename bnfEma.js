@@ -1,3 +1,34 @@
+// Req:
+// Version 1:
+
+// BNF
+// ema 12, ema26 on index
+
+// on cross up:
+//   buy nearest to 200 Rs Call option of current expiry 
+
+// on cross down:
+//   buy nearest to 200 Rs Put option of current expiry 
+  
+// Expiry day:
+//   Stop the algo at 2 PM and close all open positions
+
+// Telegram buttons - logs
+
+// Version 2:
+
+// Same strategy in Nft and Bnf 2 indexes at a time
+
+// Future ideas:
+
+// SL order 
+// Sell instead of Buy.
+// Buy Call / Sell Put at a time.
+// Telegram buttons - actions
+// Add more indexes and MCX support as well for same strategy
+
+
+
 // Initialization / nearest expiry / getAtmStrike
 // jupyter nbconvert --to script gpt.ipynb
 const debug = false;
@@ -20,9 +51,12 @@ const AdmZip = require('adm-zip');
 
 const { parse } = require('papaparse');
 const moment = require('moment');
-const { isTimeEqualsNotAfterProps, idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
+const { isTimeEqualsNotAfterProps, currentDateInIST, idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
   identify_option_type, fetchSpotPrice, getStrike } = require('./utils/customLibrary');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
+const TelegramBot = require('node-telegram-bot-api');
+const bot = new TelegramBot(telegramBotToken, { polling: true });
+const send_notification = async (message, me = false) => (message && console.log(message)) || (!debug && message && await bot.sendMessage((me && !telegramSignals.stopSignal) ? chat_id_me : chat_id, (me && !telegramSignals.stopSignal) ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 
 let globalBigInput = {
   filteredIndexCSV: undefined
@@ -470,7 +504,7 @@ postOrderPosTracking = (data) => {
     //todo verify this before &&
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
 
-    console.log(data?.trantype + ' order placed: ' + data?.tsym + ' at ' + data?.flprc + ' ' + new Date().toLocaleTimeString("en-IN", {timeZone: "Asia/Kolkata"}))
+    send_notification(data?.trantype + ' order placed: ' + data?.tsym + ' at ' + data?.flprc + ' ' + new Date().toLocaleTimeString("en-IN", {timeZone: "Asia/Kolkata"}))
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -995,10 +1029,10 @@ async function takeAction(goingUp) {
         remarks: 'WSNewOrderSubmissivePEEntryAPI'
     }
 
-    if(goingUp && !telegramSignals.stopSignal && !debug) {
+    if(goingUp && !debug) {
         await api.place_order(orderCE);
         biasProcess.vix > 0 ? await api.place_order(orderSubmissiveCE) : await api.place_order(orderAggressiveCE);
-    }else if (!goingUp && !telegramSignals.stopSignal && !debug){
+    }else if (!goingUp && !debug){
         await api.place_order(orderPE);
         biasProcess.vix > 0 ? await api.place_order(orderSubmissivePE) : await api.place_order(orderAggressivePE);
     }
@@ -1341,10 +1375,10 @@ const ema9and21Values = async (params) => {
     const intcPrices = reply.map(item => parseFloat(item.intc));
     
       // Get the last 9 items
-    const first9Items = intcPrices.slice(0,9);
+    const first9Items = intcPrices.slice(0,12);
 
     // Get the last 21 items
-    const first21Items = intcPrices.slice(0,21);
+    const first21Items = intcPrices.slice(0,26);
 
     // console.log(first9Items, ' : first9Items')
     // console.log(first21Items, ' : first21Items')
@@ -1375,7 +1409,7 @@ const ema9and21Values = async (params) => {
     // Calculate 9-period EMA
     const ema9Input = {
       values: first9Items,
-      period: 9,
+      period: 12,
     };
 
     const ema9 = new technicalindicators.EMA(ema9Input);
@@ -1386,14 +1420,15 @@ const ema9and21Values = async (params) => {
     // Calculate 21-period EMA
     const ema21Input = {
       values: first21Items,
-      period: 21,
+      period: 26,
     };
 
     const ema21 = new technicalindicators.EMA(ema21Input);
     const ema21Values = ema21.getResult();
 
-    // console.log('21-period EMA Values:', ema21Values);
-
+    console.log('26-period EMA Values:', ema21Values);
+    console.log('12-period EMA Values:', ema9Values);
+    
     return [ema9Values, ema21Values];
 
   }
@@ -1585,7 +1620,7 @@ emaRecurringFunction = async () => {
         const [callema9, callema21] = await ema9and21Values(params); //call
         // const [putema9, putema21] = await ema9and21Values(params2); //put
 
-        console.log('ltp '+ +latestQuotes[`NSE|${globalInput.token}`]?.lp + ', ema9 '+ parseFloat(callema9).toFixed(2) + ', ema21 ' + parseFloat(callema21).toFixed(2))
+        send_notification(globalInput.indexName+' ltp '+ +latestQuotes[`NSE|${globalInput.token}`]?.lp + ', ema12 '+ parseFloat(callema9).toFixed(2) + ', ema26 ' + parseFloat(callema21).toFixed(2))
         // console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
         
         //send notification
@@ -1632,13 +1667,19 @@ getEma = async () => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
 
-  //exit in the night and stop process.
-  if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,47,false))
-  {
-    await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    process.exit(0)
+  //exit at given time and stop process.
+  if (currentDateInIST() != globalInput.WEEKLY_EXPIRY){
+    if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,47,false))
+    if(isTimeEqualsNotAfterProps(15,25,false) && !(isTimeEqualsNotAfterProps(15,29,false))){
+      await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      process.exit(0)
+    }
+  }else{
+    if(isTimeEqualsNotAfterProps(14,25,false) && !(isTimeEqualsNotAfterProps(15,29,false))){
+      await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      process.exit(0)
+    }
   }
-
 
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
