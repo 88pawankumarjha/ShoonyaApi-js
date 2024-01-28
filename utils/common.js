@@ -225,16 +225,6 @@ async function checkAlert(api) {
             await takeActionCallCloser(api);
             send_notification('made a move based on time to take call closer', true)
           }
-        } else if (+pValue1Var > inputMagicNumber && +cValue1Var > inputMagicNumber){
-          if(+pValue1Var > +cValue1Var){
-            // bring put away
-            await takeActionPutAway(api);
-            send_notification('made a move based on time to take put away', true)
-          }else{
-            // bring call away
-            await takeActionCallAway(api);
-            send_notification('made a move based on time to take call away', true)
-          }
         } else {
           send_notification('no action taken based on time')
         }
