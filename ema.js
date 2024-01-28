@@ -21,7 +21,7 @@ const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
 const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
-  identify_option_type, fetchSpotPrice, getStrike } = require('./utils/customLibrary');
+  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium } = require('./utils/customLibrary');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
 const bot = new TelegramBot(telegramBotToken, { polling: true });
@@ -250,10 +250,11 @@ const Api = require("./lib/RestApi");
 let api = new Api({});
 
 const getAtmStrike = () => {
+  // TODO
+  // return 50700;
   // console.log(`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}`)
   // console.log(globalInput.token)
   // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
-  // process.exit(0)
   biasProcess.spotObject = latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`];
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
   return Math.round(biasProcess.spotObject?.lp / globalInput.ocGap) * globalInput.ocGap
@@ -458,15 +459,14 @@ postOrderPosTracking = (data) => {
     updateTwoSmallestPositionsAndNeighboursSubs();
     // Update call position subscription
     positionProcess.posCallSubStr = positionProcess.smallestCallPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionProcess.smallestCallPosition.tsym)}` : '';
-    //todo verify this before &&
+    
     positionProcess.posCallSubStr && dynamicallyAddSubscription(positionProcess.posCallSubStr);
     // Update put position subscription
     positionProcess.posPutSubStr = biasProcess.smallestPutPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.smallestPutPosition.tsym)}` : '';
-    //todo verify this before &&
+    
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
     console.log('order placed: ', data)
     send_notification(data?.trantype + ' order placed: ' + data?.tsym + ' at ' + data?.flprc, true )
-    send_notification(data?.trantype + ' order placed: ' + data?.tsym + ' at ' + data?.flprc)
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -579,12 +579,147 @@ async function updateITMSymbolfromOC() {
     await delay(1000)
     // Get the Nifty option chain
     biasProcess.optionChain = await getOptionChain();
+    // console.log(biasProcess.optionChain)
+    // post https://api.shoonya.com/NorenWClientTP/GetOptionChain jData={"uid":"FA63911",
+    // "exch":"BFO","tsym":"BANKEX24JAN57700PE","strprc":"50700","cnt":"15"}&jKey=c49727e66cb3d1eca0c2c048a7a3e0804dc9aacf45848b7835f6c93cc9bb0d92
+    // {
+    //   stat: 'Ok',
+    //   values: [
+    //     {
+    //       exch: 'BFO',
+    //       token: '1153140',
+    //       tsym: 'BANKEX24JAN50700CE',
+    //       optt: 'CE',
+    //       pp: '2',
+    //       ls: '15',
+    //       ti: '0.05',
+    //       strprc: '50700.00'
+    //     },
+    //     {
+    //       exch: 'BFO',
+    //       token: '1152365',
+    //       tsym: 'BANKEX24JAN50800CE',
+    //       optt: 'CE',
+    //       pp: '2',
+    //       ls: '15',
+    //       ti: '0.05',
+    //       strprc: '50800.00'
+    //     },
+    // ... 
+    // ... 
+    // {
+    //   exch: 'BFO',
+    //   token: '1137016',
+    //   tsym: 'BANKEX24JAN49300CE',
+    //   optt: 'CE',
+    //   pp: '2',
+    //   ls: '15',
+    //   ti: '0.05',
+    //   strprc: '49300.00'
+    // },
+    // {
+    //   exch: 'BFO',
+    //   token: '1136711',
+    //   tsym: 'BANKEX24JAN49200CE',
+    //   optt: 'CE',
+    //   pp: '2',
+    //   ls: '15',
+    //   ti: '0.05',
+    //   strprc: '49200.00'
+    // },
+    // {
+    //   exch: 'BFO',
+    //   token: '1153390',
+    //   tsym: 'BANKEX24JAN50700PE',
+    //   optt: 'PE',
+    //   pp: '2',
+    //   ls: '15',
+    //   ti: '0.05',
+    //   strprc: '50700.00'
+    // },
+    // {
+    //   exch: 'BFO',
+    //   token: '1152588',
+    //   tsym: 'BANKEX24JAN50800PE',
+    //   optt: 'PE',
+    //   pp: '2',
+    //   ls: '15',
+    //   ti: '0.05',
+    //   strprc: '50800.00'
+    // },
+    // ... 
+    // ... 
+//     {
+//       exch: 'BFO',
+//       token: '1137242',
+//       tsym: 'BANKEX24JAN49300PE',
+//       optt: 'PE',
+//       pp: '2',
+//       ls: '15',
+//       ti: '0.05',
+//       strprc: '49300.00'
+//     },
+//     {
+//       exch: 'BFO',
+//       token: '1136922',
+//       tsym: 'BANKEX24JAN49200PE',
+//       optt: 'PE',
+//       pp: '2',
+//       ls: '15',
+//       ti: '0.05',
+//       strprc: '49200.00'
+//     }
+//   ]
+// }
     await delay(1000)
     if (biasProcess.optionChain) {
         // Find the ITM symbol
         await delay(1000)
         updateITMSymbolAndStrike();
         await delay(1000)
+        // let quoteResp = await api.get_quotes(globalInput.pickedExchange, biasProcess.ocCallOptions[15].token)
+        
+        // {
+        //   '835288': '11.35',
+        //   '1136711': '1591.10',
+        //   '1136748': '823.45',
+        //   '1136770': '1399.35',
+        //   '1136806': '606.90',
+        //   '1136828': '1212.75',
+        //   '1136887': '453.50',
+        //   '1136903': '853.75',
+        //   '1137016': '1494.70',
+        //   '1137066': '1305.30',
+        //   '1137137': '1122.05',
+        //   '1137444': '907.85',
+        //   '1137493': '658.15',
+        //   '1137542': '484.55',
+        //   '1137607': '393.40',
+        //   '1137624': '1039.05',
+        //   '1152365': '306.40',
+        //   '1152724': '210.05',
+        //   '1153140': '342.75',
+        //   '1153214': '269.15',
+        //   '1153994': '140.45',
+        //   '1154243': '180.25',
+        //   '1154316': '109.60',
+        //   '1154790': '57.25',
+        //   '1154944': '73.95',
+        //   '1154987': '46.95',
+        //   '1157331': '31.55',
+        //   '1157442': '22.55',
+        //   '1158334': '14.25',
+        //   '1158879': '13.20'
+        // } optionChainDataMap
+
+        // const targetPrice = 200;
+        
+        // nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+        // nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+
+        // console.log(nearestCE); // 1152724
+        // console.log(nearestPE); // 1153390
+        
         debug && console.log(biasProcess, ' :biasProcess')
     }
 }
@@ -1260,7 +1395,6 @@ const short = async (symbol, qty) => {
       try{
     orderPERespObj = await api.place_order(orderCE);
     console.log(orderPERespObj, ' :orderShortRespOb')
-    console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
   }
   catch(error){
     console.log(error)
@@ -1269,6 +1403,7 @@ const short = async (symbol, qty) => {
 }
 let isCallATMchanged = '';
 let isPutATMchanged = '';
+
 let positionTaken = false;
 let callPreviousValue = false;
 let positionTakenInSymbol = '';
@@ -1278,27 +1413,33 @@ let putPreviousValue = false;
 let putpositionTakenInSymbol = '';
 
 async function checkCrossOverExit(ema9, ema21) {
+  try {
+    
+  // console.log(ema9, 'ema9')
+  // console.log(ema21, 'ema21')
 
     if(isCallATMchanged === '') {
       isCallATMchanged = true;
       callPreviousValue = !positionTaken ? ema9 < ema21: callPreviousValue;
     }
     if (callPreviousValue && !positionTaken && ema9 > ema21) {
-        console.log("Cross over detected1. Take call position." + new Date());
-        await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        console.log("Cross over detected1. Take long position." + new Date());
+        await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        reversePositionTakenInSymbol = biasProcess.atmPutSymbol;
         positionTakenInSymbol = biasProcess.atmCallSymbol;
         positionTaken = true;
         if (putpositionTaken) {
-          console.log("Exit signal detected1. Close put position." + new Date());
-          await short(putpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          console.log("Exit signal detected1. Close short position." + new Date());
+          await long(reverseputpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
           putpositionTaken = false;
           putpositionTakenInSymbol = ''
           // Place your position-closing logic here
         }
         // Place your position-taking logic here
-    } else if (positionTaken && ema9 < ema21) {
-        console.log("Exit signal detected1. Close call position." + new Date());
-        await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+    } 
+    else if (positionTaken && ema9 < ema21) {
+        console.log("Exit signal detected1. Close long position." + new Date());
+        await long(reversePositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         positionTaken = false;
         positionTakenInSymbol = '';
         // Place your position-closing logic here
@@ -1307,13 +1448,18 @@ async function checkCrossOverExit(ema9, ema21) {
         //   putPreviousValue = true; //seller opp logic needed
         //   // Place your position-closing logic here
         // }
-    } else {
+    }
+     else {
         console.log("No call signal detected."+ new Date());
         // Additional logic if needed
     }
-    positionTakenInSymbol && console.log(positionTakenInSymbol, ' : openCallPosition - LTP: ',  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
+    positionTakenInSymbol && console.log(positionTakenInSymbol, ' : openLongPosition - LTP: ',  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
     //send notification
     callPreviousValue = ema9 < ema21;
+
+  } catch (error) {
+   console.log(error) 
+  }
 
 }
 
@@ -1344,25 +1490,26 @@ async function sellercheckCrossOverExit(ema9, ema21) {
 async function putcheckCrossOverExit(ema9, ema21) {
   if(isPutATMchanged === '') {
     isPutATMchanged = true;
-    putPreviousValue = ema9 < ema21;
-    putPreviousValue = !putpositionTaken ? ema9 < ema21: callPreviousValue;
+    putPreviousValue = !putpositionTaken ? ema9 < ema21: putPreviousValue;
   }
   if (putPreviousValue && !putpositionTaken && ema9 > ema21) {
-        console.log("Cross over detected2. Take put position." + new Date());
-        await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        console.log("Cross over detected2. Take short position." + new Date());
+        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        reverseputpositionTakenInSymbol = biasProcess.atmCallSymbol;
         putpositionTakenInSymbol = biasProcess.atmPutSymbol;
         putpositionTaken = true;
         if (positionTaken) {
-          console.log("Exit signal detected2. Close call position." + new Date());
-          await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          console.log("Exit signal detected2. Close long position." + new Date());
+          await long(reversepositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
           positionTaken = false;
           positionTakenInSymbol = '';
           // Place your position-closing logic here
         }
         // Place your position-taking logic here
-    } else if (putpositionTaken && ema9 < ema21) {
-        console.log("Exit signal detected2. Close put position." + new Date());
-        await short(putpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+    } 
+    else if (putpositionTaken && ema9 < ema21) {
+        console.log("Exit signal detected2. Close short position." + new Date());
+        await long(reverseputpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         putpositionTaken = false;
         putpositionTakenInSymbol = ''
         // Place your position-closing logic here
@@ -1382,11 +1529,10 @@ async function putcheckCrossOverExit(ema9, ema21) {
         console.log("No put signal detected."+ new Date());
         // Additional logic if needed
     }
-    putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : openPutPosition - LTP: ',  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putpositionTakenInSymbol)}`]?.lp )
+    putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : openShortPosition - LTP: ',  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putpositionTakenInSymbol)}`]?.lp )
     //send notification
     putPreviousValue = ema9 < ema21;
 }
-
 
 async function sellerputcheckCrossOverExit(ema9, ema21) {
   if (putPreviousValue && !putpositionTaken && ema9 < ema21) {
@@ -1513,6 +1659,56 @@ const ema9and21Values = async (params) => {
 
 }// to mins from 11 to 11:10 on Jan 16
   
+
+const ema9and21ValuesIndicators = async (params) => {
+  try{
+    const reply = await api.get_time_price_series(params);
+
+    // console.log(reply[0], ' : reply'); 
+    // Extract 'intc' prices into a new array
+    const intcPrices = reply.map(item => parseFloat(item.intc));
+    
+    //last 50 items
+    const first9Items = intcPrices.slice(0,80).reverse();
+    const first21Items = first9Items;
+
+    // console.log(first21Items)
+    //     [
+    //       22112,  22121.2,
+    //    22119.45,    22122,
+    //    22125.15,  22132.5,
+    //    22132.25, 22126.65,
+    //     22130.1
+    //  ]  : first9Items
+    //  [
+    //       22112,  22121.2, 22119.45,
+    //       22122, 22125.15,  22132.5,
+    //    22132.25, 22126.65,  22130.1,
+    //    22131.75,    22130,    22123,
+    //     22122.5,  22121.9,  22130.4,
+    //    22125.65,    22123,  22122.9,
+    //    22120.35,  22120.2,    22120
+    //  ]  : first21Items
+
+    const { Indicators } = require('@ixjb94/indicators');
+
+    // Sample financial data (replace this with your data)
+    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 75];
+    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 75];
+
+    // Calculate 9-period EMA
+    let ta = new Indicators();
+    let ema9Values = await ta.ema(first9Items, 8);
+    // Calculate 21-period EMA
+    let ema21Values = await ta.ema(first21Items, 21);
+    //send last item from the array
+    return [ema9Values[ema9Values.length-1], ema21Values[ema21Values.length-1]];
+  }
+  catch (error) {
+    console.error('Error:', error);
+    throw error; // Rethrow the error to be caught in the calling function
+  }
+}
 //
   // [
   //   {
@@ -1678,11 +1874,12 @@ emaRecurringFunction = async () => {
         }
 
       try {
-        // const [callema9, callema21] = await ema9and21Values(params);
-        // console.log(callema9, callema21, ' : callema9, callema21')
+        
 
-        const [callema9, callema21] = await ema9and21Values(params); //call
-        const [putema9, putema21] = await ema9and21Values(params2); //put
+        // const [callema9, callema21] = await ema9and21Values(params); //call
+        // const [putema9, putema21] = await ema9and21Values(params2); //put
+        const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
+        const [putema9, putema21] = await ema9and21ValuesIndicators(params2); //put
 
         callStr = callSymbolForEma+ ': ltp: '+ +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(callSymbolForEma)}`]?.lp + ' : c9, c21: '+ parseFloat(callema9).toFixed(2)+ ' ' + parseFloat(callema21).toFixed(2);
         putStr = putSymbolForEma+  ': ltp: '+ +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp + ' : p9, p21: '+ parseFloat(putema9).toFixed(2)+ ' ' + parseFloat(putema21).toFixed(2);

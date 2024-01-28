@@ -523,8 +523,8 @@ const takeActionCallAway = async (api) => {
             quantity: Math.abs(smallestCallPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), Number(localSLPrice[1])),
-            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1]-0.5))),
+            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)+2), Number(localSLPrice[1])),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)), (Number(localSLPrice[1])-0.5)),
             remarks: 'CommonOrderCEEntryAPISL'
           }
         
@@ -584,8 +584,8 @@ const takeActionPutAway = async (api) => {
             quantity: Math.abs(smallestPutPosition?.netqty).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), (Number(localSLPrice[1]))),
-            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1]-0.5))),
+            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)+2), (Number(localSLPrice[1]))),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)), (Number(localSLPrice[1])-0.5)),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
@@ -641,7 +641,7 @@ const takeActionCallCloser = async (api) => {
             discloseqty: 0,
             price_type: 'SL-LMT',
             price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), (Number(localSLPrice[1]))),
-            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1]-0.5))),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1])-0.5)),
             remarks: 'CommonOrderCEEntryAPISL'
           }
 
@@ -699,7 +699,7 @@ const takeActionPutCloser = async (api) => {
             discloseqty: 0,
             price_type: 'SL-LMT',
             price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), (Number(localSLPrice[1]))),
-            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1]-0.5))),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1])-0.5)),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           

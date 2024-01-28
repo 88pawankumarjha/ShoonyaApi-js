@@ -52,7 +52,7 @@ const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
 const { isTimeEqualsNotAfterProps, currentDateInIST, idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
-  identify_option_type, fetchSpotPrice, getStrike } = require('./utils/customLibrary');
+  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, findTsymByToken } = require('./utils/customLibrary');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
 const bot = new TelegramBot(telegramBotToken, { polling: true });
@@ -1276,7 +1276,6 @@ const long = async (symbol, qty) => {
   try{
     orderRespObj = await api.place_order(order);
     console.log(orderRespObj, ' :orderLongRespObj')
-    console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
   }
   catch(error){
     console.log(error)
@@ -1297,7 +1296,6 @@ const short = async (symbol, qty) => {
   try{
     orderRespObj = await api.place_order(order);
     console.log(orderRespObj, ' :orderShortRespOb')
-    console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
   }
   catch(error){
     console.log(error)
@@ -1312,23 +1310,44 @@ let positionTakenInSymbol = '';
 let prevEma9LessThanEma21 = ''
 let crossedUp = ''
 
+const targetPrice = 200;
+
 async function EMAcheckCrossOverExit(ema9, ema21) {
+
+// console.log(nearestCE); // BANKNIFTY31JAN24C45500
+// console.log(nearestPE); // BANKNIFTY31JAN24P44500
+
+// console.log(findTsymByToken( biasProcess.ocCallOptions, nearestCE))
+// console.log(findTsymByToken( biasProcess.ocPutOptions, nearestPE))
+
   if (prevEma9LessThanEma21 === '') {
     prevEma9LessThanEma21 = ema9 < ema21;
     crossedUp = ema9 > ema21;
   }
   else if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
       console.log("Cross over detected. Take call position." + new Date());
-      await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmCallSymbol;
+      nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+
+      // Dynamically add a subscription
+      subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
+      dynamicallyAddSubscription(subStr);
+
+      await long(nearestCE, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = nearestCE;
       positionTaken = true;
       prevEma9LessThanEma21 = ema9 < ema21;
       crossedUp = ema9 > ema21;
       // Place your position-taking logic here
   } else if (!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) {
       console.log("Cross over detected. Take put position." + new Date());
-      await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmPutSymbol;
+      nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+
+      // Dynamically add a subscription
+      subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
+      dynamicallyAddSubscription(subStr);
+
+      await long(nearestPE, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = nearestPE;
       positionTaken = true;
       prevEma9LessThanEma21 = ema9 < ema21;
       crossedUp = ema9 > ema21;
@@ -1336,20 +1355,31 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
   else if (positionTaken) {
       if(crossedUp && ema9 < ema21){
         // exitLong addshort
-        console.log("Cross over detected. Take exitLong addshort position." + new Date());
         await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = biasProcess.atmPutSymbol;
+
+        console.log("Cross over detected. Take exitLong addshort position." + new Date());
+        nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+        // Dynamically add a subscription
+        subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
+        dynamicallyAddSubscription(subStr);
+        
+        await long(nearestPE, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = nearestPE;
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
       
       } else if (!crossedUp && ema9 > ema21){
         // exitShort addLong
-        console.log("Cross over detected. Take exitShort addLong position." + new Date());
         await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = biasProcess.atmCallSymbol;
+        console.log("Cross over detected. Take exitShort addLong position." + new Date());
+        nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+        // Dynamically add a subscription
+        subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
+        dynamicallyAddSubscription(subStr);
+        
+        await long(nearestCE, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = nearestCE;
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
@@ -1426,8 +1456,8 @@ const ema9and21Values = async (params) => {
     const ema21 = new technicalindicators.EMA(ema21Input);
     const ema21Values = ema21.getResult();
 
-    console.log('26-period EMA Values:', ema21Values);
-    console.log('12-period EMA Values:', ema9Values);
+    // console.log('26-period EMA Values:', ema21Values);
+    // console.log('12-period EMA Values:', ema9Values);
     
     return [ema9Values, ema21Values];
 
@@ -1439,6 +1469,56 @@ const ema9and21Values = async (params) => {
 
 }// to mins from 11 to 11:10 on Jan 16
   
+const ema9and21ValuesIndicators = async (params) => {
+  try{
+    const reply = await api.get_time_price_series(params);
+
+    // console.log(reply[0], ' : reply'); 
+    // Extract 'intc' prices into a new array
+    const intcPrices = reply.map(item => parseFloat(item.intc));
+    
+    //last 50 items
+    const first9Items = intcPrices.slice(0,80).reverse();
+    const first21Items = first9Items;
+
+    // console.log(first21Items)
+    //     [
+    //       22112,  22121.2,
+    //    22119.45,    22122,
+    //    22125.15,  22132.5,
+    //    22132.25, 22126.65,
+    //     22130.1
+    //  ]  : first9Items
+    //  [
+    //       22112,  22121.2, 22119.45,
+    //       22122, 22125.15,  22132.5,
+    //    22132.25, 22126.65,  22130.1,
+    //    22131.75,    22130,    22123,
+    //     22122.5,  22121.9,  22130.4,
+    //    22125.65,    22123,  22122.9,
+    //    22120.35,  22120.2,    22120
+    //  ]  : first21Items
+
+    const { Indicators } = require('@ixjb94/indicators');
+
+    // Sample financial data (replace this with your data)
+    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 75];
+    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 75];
+
+    // Calculate 9-period EMA
+    let ta = new Indicators();
+    let ema9Values = await ta.ema(first9Items, 12);
+    // Calculate 21-period EMA
+    let ema21Values = await ta.ema(first21Items, 26);
+    //send last item from the array
+    return [ema9Values[ema9Values.length-1], ema21Values[ema21Values.length-1]];
+  }
+  catch (error) {
+    console.error('Error:', error);
+    throw error; // Rethrow the error to be caught in the calling function
+  }
+
+}
 //
   // [
   //   {
@@ -1617,7 +1697,7 @@ emaRecurringFunction = async () => {
         // const [callema9, callema21] = await ema9and21Values(params);
         // console.log(callema9, callema21, ' : callema9, callema21')
 
-        const [callema9, callema21] = await ema9and21Values(params); //call
+        const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
         // const [putema9, putema21] = await ema9and21Values(params2); //put
 
         send_notification(globalInput.indexName+' ltp '+ +latestQuotes[`NSE|${globalInput.token}`]?.lp + ', ema12 '+ parseFloat(callema9).toFixed(2) + ', ema26 ' + parseFloat(callema21).toFixed(2))
@@ -1669,7 +1749,6 @@ getEma = async () => {
 
   //exit at given time and stop process.
   if (currentDateInIST() != globalInput.WEEKLY_EXPIRY){
-    if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,47,false))
     if(isTimeEqualsNotAfterProps(15,25,false) && !(isTimeEqualsNotAfterProps(15,29,false))){
       await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       process.exit(0)

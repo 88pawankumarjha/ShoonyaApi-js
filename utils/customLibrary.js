@@ -114,3 +114,79 @@ const formattedTime = istDateTimeFormat.format(currentDate);
 const [hours, minutes] = formattedTime.split(':').map(Number);
 return isEqualNotAfter ? (hours === inputHrs && minutes === inputMins) : (hours > inputHrs || (hours === inputHrs && minutes >= inputMins));
 };
+
+module.exports.currentDateInIST = () => {
+const currentDate = new Date();
+const formattedDate = currentDate.toISOString().split('T')[0]; // Get YYYY-MM-DD format
+const currentDateTimeInIST = `${formattedDate}`;
+return currentDateTimeInIST;
+};
+
+
+
+async function fetchOptionChainData(api, exchange, token) {
+try {
+  const quoteResp = await api.get_quotes(exchange, token);
+  return { token, LP: quoteResp?.lp? quoteResp?.lp : quoteResp?.c, TSYM: quoteResp.tsym }; // Extracting the token and LP from the response
+} catch (error) {
+  console.error(`Error fetching data for token ${token}:`, error.message);
+  return null;
+}
+}
+
+async function getOptionChainDataList(api, exchange, options) {
+try {
+  const optionChainDataList = await Promise.all(
+    options.map(option => fetchOptionChainData(api, exchange, option.token))
+  );
+
+  // Filter out null values (failed requests)
+  const filteredOptionChainDataList = optionChainDataList.filter(data => data !== null);
+
+  // Create a map of tokens to LTP values
+  const optionChainDataMap = {};
+  filteredOptionChainDataList.forEach(data => {
+    optionChainDataMap[data.TSYM] = data.LP;
+  });
+
+  return optionChainDataMap;
+} catch (error) {
+  console.error('Error fetching option chain data:', error.message);
+  return null;
+}
+}
+// Convert last traded prices to numbers and find the nearest option
+const nearestOption = (optionChainDataMap, targetPrice) => Object.entries(optionChainDataMap).reduce((nearest, [TSYM, ltp]) => {
+const priceDifference = Math.abs(parseFloat(ltp) - targetPrice);
+
+if (nearest === null || priceDifference < nearest.priceDifference) {
+  return { TSYM, ltp: parseFloat(ltp), priceDifference };
+}
+
+return nearest;
+}, null);
+
+module.exports.getOptionBasedOnNearestPremium = async (api, exch, options, targetPrice) => {
+const optionChainDataMap = await getOptionChainDataList(api, exch, options);
+return nearestOption(optionChainDataMap, targetPrice).TSYM; // 1152724 || 1153390
+}
+
+//usage:
+
+      // const targetPrice = 200;
+      
+      // nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+      // nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+
+      // console.log(nearestCE); // 1152724
+      // console.log(nearestPE); // 1153390
+
+module.exports.findTsymByToken = (values, tokenToFind) => {
+for (const value of values) {
+  if (value.token === tokenToFind) {
+    return value.tsym;
+  }
+}
+// Return null if the token is not found
+return null;
+}

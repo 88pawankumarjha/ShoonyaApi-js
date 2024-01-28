@@ -14,6 +14,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ixjb94/indicators": "^1.1.37",
     "adm-zip": "^0.5.10",
     "axios": "^0.21.4",
     "crypto-js": "^4.1.1",
