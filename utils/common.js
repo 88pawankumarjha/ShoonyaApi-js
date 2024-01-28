@@ -9,7 +9,7 @@ const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
 const getIsBFO = () => [1, 5, 6].includes(new Date().getDay());
-
+let vixQuoteCalc = 0;
 
 const isTimeAfter330PM = () => {
   //return true;
@@ -190,23 +190,55 @@ const checkL1Alert = (slOrders) => {
     return [pValue1Var, pValue2Var, cValue1Var, cValue2Var];
 }
 
+const timeToMakeAMove = () => {
+  return isTimeEqualsNotAfterProps(9,40,true) || isTimeEqualsNotAfterProps(10,40,true) || isTimeEqualsNotAfterProps(11,40,true) || isTimeEqualsNotAfterProps(12,40,true) || isTimeEqualsNotAfterProps(13,40,true);
+}
 async function checkAlert(api) {
     let [pValue1Var, pValue2Var, cValue1Var, cValue2Var] = checkL1Alert(slOrders);
     let [pExtra0Var, pExtra3Var, cExtra0Var, cExtra3Var] = checkL1Alert(slOrdersExtra);
     debug && console.log(pExtra0Var,pValue1Var,pValue2Var,pExtra3Var,' P'); //0.65 1.10 2.60 9.05
     debug && console.log(cExtra0Var,cValue1Var,cValue2Var,cExtra3Var,' C'); //1.35 3.70 14.10 57.50
-    if (parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {
-        let up = parseFloat(pValue2Var) < parseFloat(cValue1Var)
+    timeToMakeAMoveVal = timeToMakeAMove()
+    if (timeToMakeAMoveVal || parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {
+        if(!timeToMakeAMoveVal){let up = parseFloat(pValue2Var) < parseFloat(cValue1Var)
         let trendingUp = parseFloat(pValue1Var) > parseFloat(cExtra3Var)
         let trendingDown = parseFloat(cValue1Var) > parseFloat(pExtra3Var)
 //      vix high or early morning or Bias opposite then move away
 //      vix low or not early morning or Bias favouring then move closer
         if((up && calcBias > 0) || (!up && calcBias < 0) || trendingUp || trendingDown ){
-            const vixQuoteCalc = await calcVix(api);
+            vixQuoteCalc = await calcVix(api);
             debug && console.log(vixQuoteCalc, 'vixQuoteCalc')
             send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX = ${vixQuoteCalc}%, Bias ${calcBias}, '\n'${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}'\n'${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`, true);
             await takeDecision(api, up, vixQuoteCalc, actionType.BOT)
         }
+      }
+      else{
+        // time to make a move
+        let inputMagicNumber = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
+        if(+pValue1Var < inputMagicNumber && +cValue1Var < inputMagicNumber){
+          if(+pValue1Var < +cValue1Var){
+            // bring put closer
+            await takeActionPutCloser(api);
+            send_notification('made a move based on time to take put closer', true)
+          }else{
+            // bring call closer
+            await takeActionCallCloser(api);
+            send_notification('made a move based on time to take call closer', true)
+          }
+        } else if (+pValue1Var > inputMagicNumber && +cValue1Var > inputMagicNumber){
+          if(+pValue1Var > +cValue1Var){
+            // bring put away
+            await takeActionPutAway(api);
+            send_notification('made a move based on time to take put away', true)
+          }else{
+            // bring call away
+            await takeActionCallAway(api);
+            send_notification('made a move based on time to take call away', true)
+          }
+        } else {
+          send_notification('no action taken based on time')
+        }
+      }
     }
 }
 
