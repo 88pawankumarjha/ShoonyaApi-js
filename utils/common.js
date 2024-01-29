@@ -189,6 +189,7 @@ const checkL1Alert = (slOrders) => {
     }
     return [pValue1Var, pValue2Var, cValue1Var, cValue2Var];
 }
+let timeBasedMethodExecuted = false;
 
 const timeToMakeAMove = () => {
   return isTimeEqualsNotAfterProps(9,40,true) || isTimeEqualsNotAfterProps(10,40,true) || isTimeEqualsNotAfterProps(11,40,true) || isTimeEqualsNotAfterProps(12,40,true) || isTimeEqualsNotAfterProps(13,40,true);
@@ -199,35 +200,41 @@ async function checkAlert(api) {
     debug && console.log(pExtra0Var,pValue1Var,pValue2Var,pExtra3Var,' P'); //0.65 1.10 2.60 9.05
     debug && console.log(cExtra0Var,cValue1Var,cValue2Var,cExtra3Var,' C'); //1.35 3.70 14.10 57.50
     timeToMakeAMoveVal = timeToMakeAMove()
+    
     if (timeToMakeAMoveVal || parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {
-        if(!timeToMakeAMoveVal){let up = parseFloat(pValue2Var) < parseFloat(cValue1Var)
-        let trendingUp = parseFloat(pValue1Var) > parseFloat(cExtra3Var)
-        let trendingDown = parseFloat(cValue1Var) > parseFloat(pExtra3Var)
-//      vix high or early morning or Bias opposite then move away
-//      vix low or not early morning or Bias favouring then move closer
-        if((up && calcBias > 0) || (!up && calcBias < 0) || trendingUp || trendingDown ){
-            vixQuoteCalc = await calcVix(api);
-            debug && console.log(vixQuoteCalc, 'vixQuoteCalc')
-            send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX = ${vixQuoteCalc}%, Bias ${calcBias}, '\n'${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}'\n'${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`, true);
-            await takeDecision(api, up, vixQuoteCalc, actionType.BOT)
-        }
-      }
-      else{
-        // time to make a move
-        let inputMagicNumber = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
-        if(+pValue1Var < inputMagicNumber && +cValue1Var < inputMagicNumber){
-          if(+pValue1Var < +cValue1Var){
-            // bring put closer
-            await takeDecision(apiLocal, true, -1, actionType.BOT)
-            send_notification('made a move based on time to take put closer', true)
-          }else{
-            // bring call closer
-            await takeDecision(apiLocal, false, -1, actionType.BOT)
-            send_notification('made a move based on time to take call closer', true)
+        if(!timeToMakeAMoveVal){
+          let up = parseFloat(pValue2Var) < parseFloat(cValue1Var)
+          let trendingUp = parseFloat(pValue1Var) > parseFloat(cExtra3Var)
+          let trendingDown = parseFloat(cValue1Var) > parseFloat(pExtra3Var)
+  //      vix high or early morning or Bias opposite then move away
+  //      vix low or not early morning or Bias favouring then move closer
+          if((up && calcBias > 0) || (!up && calcBias < 0) || trendingUp || trendingDown ){
+              vixQuoteCalc = await calcVix(api);
+              debug && console.log(vixQuoteCalc, 'vixQuoteCalc')
+              send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX = ${vixQuoteCalc}%, Bias ${calcBias}, '\n'${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}'\n'${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`, true);
+              await takeDecision(api, up, vixQuoteCalc, actionType.BOT)
           }
-        } else {
-          send_notification('no action taken based on time')
         }
+        else{
+          timeBasedMethodExecuted = true;
+          // time to make a move
+          let inputMagicNumber = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
+          if(+pValue1Var < inputMagicNumber && +cValue1Var < inputMagicNumber){
+            if(+pValue1Var < +cValue1Var){
+              // bring put closer
+              await takeDecision(apiLocal, true, -1, actionType.BOT)
+              send_notification('made a move based on time to take put closer', true)
+            }else{
+              // bring call closer
+              await takeDecision(apiLocal, false, -1, actionType.BOT)
+              send_notification('made a move based on time to take call closer', true)
+            }
+          } else {
+            send_notification('no action taken based on time')
+          }
+          setTimeout(() => {
+            timeBasedMethodExecuted = false;
+          }, 60000); // Reset the flag after 60 seconds (1 minute)
       }
     }
 }
