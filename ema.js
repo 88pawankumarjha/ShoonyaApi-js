@@ -1424,6 +1424,7 @@ async function checkCrossOverExit(ema9, ema21) {
     }
     if (callPreviousValue && !positionTaken && ema9 > ema21) {
         console.log("Cross over detected1. Take long position." + new Date());
+        await updateITMSymbolfromOC();
         await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         reversePositionTakenInSymbol = biasProcess.atmPutSymbol;
         positionTakenInSymbol = biasProcess.atmCallSymbol;
@@ -1494,6 +1495,7 @@ async function putcheckCrossOverExit(ema9, ema21) {
   }
   if (putPreviousValue && !putpositionTaken && ema9 > ema21) {
         console.log("Cross over detected2. Take short position." + new Date());
+        await updateITMSymbolfromOC();
         await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         reverseputpositionTakenInSymbol = biasProcess.atmCallSymbol;
         putpositionTakenInSymbol = biasProcess.atmPutSymbol;
