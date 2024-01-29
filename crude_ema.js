@@ -1474,6 +1474,55 @@ async function sellerputcheckCrossOverExit(ema9, ema21) {
 // putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
 // putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
 
+const ema9and21ValuesIndicators = async (params) => {
+  try{
+    const reply = await api.get_time_price_series(params);
+
+    // console.log(reply[0], ' : reply'); 
+    // Extract 'intc' prices into a new array
+    const intcPrices = reply.map(item => parseFloat(item.intc));
+    
+    //last 50 items
+    const first9Items = intcPrices.slice(0,80).reverse();
+    const first21Items = first9Items;
+
+    // console.log(first21Items)
+    //     [
+    //       22112,  22121.2,
+    //    22119.45,    22122,
+    //    22125.15,  22132.5,
+    //    22132.25, 22126.65,
+    //     22130.1
+    //  ]  : first9Items
+    //  [
+    //       22112,  22121.2, 22119.45,
+    //       22122, 22125.15,  22132.5,
+    //    22132.25, 22126.65,  22130.1,
+    //    22131.75,    22130,    22123,
+    //     22122.5,  22121.9,  22130.4,
+    //    22125.65,    22123,  22122.9,
+    //    22120.35,  22120.2,    22120
+    //  ]  : first21Items
+
+    const { Indicators } = require('@ixjb94/indicators');
+
+    // Sample financial data (replace this with your data)
+    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 75];
+    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 75];
+
+    // Calculate 9-period EMA
+    let ta = new Indicators();
+    let ema9Values = await ta.ema(first9Items, 8);
+    // Calculate 21-period EMA
+    let ema21Values = await ta.ema(first21Items, 21);
+    //send last item from the array
+    return [ema9Values[ema9Values.length-1], ema21Values[ema21Values.length-1]];
+  }
+  catch (error) {
+    console.error('Error:', error);
+    throw error; // Rethrow the error to be caught in the calling function
+  }
+}
 
 const ema9and21Values = async (params) => {
   try{
@@ -1712,7 +1761,7 @@ emaRecurringFunction = async () => {
         // const [callema9, callema21] = await ema9and21Values(params);
         // console.log(callema9, callema21, ' : callema9, callema21')
 
-        const [callema9, callema21] = await ema9and21Values(params); //call
+        const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
         // const [putema9, putema21] = await ema9and21Values(params2); //put
 
         send_notification('crudeoil: ltp '+ +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + ', ema9 '+ parseFloat(callema9).toFixed(2) + ', ema21 ' + parseFloat(callema21).toFixed(2))

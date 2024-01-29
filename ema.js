@@ -537,7 +537,7 @@ async function startWebsocket() {
 async function getOptionChain() {
     try {
         biasProcess.atmStrike = getAtmStrike();
-                const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
+        const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
         // console.log(optionChainResponse, 'optionChainResponse')
         if (optionChainResponse.stat === 'Ok') {
             debug && console.log(optionChainResponse, 'optionChainResponse')
@@ -1766,6 +1766,11 @@ emaRecurringFunction = async () => {
         await updateITMSymbolfromOC();
         isCallATMchanged = '';
         isPutATMchanged = '';
+
+        //TODO
+        //when ATM is changed and position is open, exit the open position
+        // if even on ATM option the EMA signal is green then take new position in ATM
+
       }
       
       // FINNIFTY16JAN24C21450
