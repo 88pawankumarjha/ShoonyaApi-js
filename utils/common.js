@@ -218,11 +218,11 @@ async function checkAlert(api) {
         if(+pValue1Var < inputMagicNumber && +cValue1Var < inputMagicNumber){
           if(+pValue1Var < +cValue1Var){
             // bring put closer
-            await takeActionPutCloser(api);
+            await takeDecision(apiLocal, true, -1, actionType.BOT)
             send_notification('made a move based on time to take put closer', true)
           }else{
             // bring call closer
-            await takeActionCallCloser(api);
+            await takeDecision(apiLocal, false, -1, actionType.BOT)
             send_notification('made a move based on time to take call closer', true)
           }
         } else {
