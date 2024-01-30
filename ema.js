@@ -62,14 +62,17 @@ let biasProcess = {
   ocPutOptions: undefined,
   itmCallSymbol: undefined,
   itmCallStrikePrice: undefined,
-  ocPutOptions: undefined,
   atmCallSymbol: undefined,
   atmCallStrikePrice: undefined,
+  otmCallSymbol: undefined,
+  otmCallStrikePrice: undefined,
   callSubStr: undefined,
   itmPutSymbol: undefined,
   itmPutStrikePrice: undefined,
   atmPutSymbol: undefined,
   atmPutStrikePrice: undefined,
+  otmPutSymbol: undefined,
+  otmPutStrikePrice: undefined,
   putSubStr: undefined,
   vix: undefined,
   spotObject: undefined
@@ -88,6 +91,10 @@ const resetBiasProcess = () => {
   biasProcess.atmCallStrikePrice = undefined,
   biasProcess.atmPutSymbol = undefined,
   biasProcess.atmPutStrikePrice = undefined,
+  biasProcess.otmCallSymbol = undefined,
+  biasProcess.otmCallStrikePrice = undefined,
+  biasProcess.otmPutSymbol = undefined,
+  biasProcess.otmPutStrikePrice = undefined,
   biasProcess.atmStrike = undefined,
   biasProcess.spotObject = undefined,
   biasProcess.callSubStr = undefined,
@@ -572,6 +579,10 @@ function updateITMSymbolAndStrike(optionType) {
     biasProcess.atmCallStrikePrice = biasProcess.ocCallOptions[15].strprc;
     biasProcess.atmPutSymbol = biasProcess.ocPutOptions[15].tsym;
     biasProcess.atmPutStrikePrice = biasProcess.ocPutOptions[15].strprc;
+    biasProcess.otmCallSymbol = biasProcess.ocCallOptions[16].tsym;
+    biasProcess.otmCallStrikePrice = biasProcess.ocCallOptions[16].strprc;
+    biasProcess.atmPutSymbol = biasProcess.ocPutOptions[14].tsym;
+    biasProcess.atmPutStrikePrice = biasProcess.ocPutOptions[14].strprc;
     return;
 }
 
@@ -1437,8 +1448,8 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
         // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
         // dynamicallyAddSubscription(subStr);
   
-        await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = biasProcess.atmPutSymbol;
+        await short(biasProcess.otmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.otmPutSymbol;
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
@@ -1451,8 +1462,8 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
         // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
         // dynamicallyAddSubscription(subStr);
   
-        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = biasProcess.atmCallSymbol;
+        await short(biasProcess.otmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.otmCallSymbol;
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
@@ -1468,8 +1479,8 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
           // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
           // dynamicallyAddSubscription(subStr);
           
-          await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-          positionTakenInSymbol = biasProcess.atmCallSymbol;
+          await short(biasProcess.otmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.otmCallSymbol;
           positionTaken = true;
           prevEma9LessThanEma21 = ema9 < ema21;
           crossedUp = ema9 > ema21;
@@ -1483,8 +1494,8 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
           // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
           // dynamicallyAddSubscription(subStr);
           
-          await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-          positionTakenInSymbol = biasProcess.atmPutSymbol;
+          await short(biasProcess.otmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.otmPutSymbol;
           positionTaken = true;
           prevEma9LessThanEma21 = ema9 < ema21;
           crossedUp = ema9 > ema21;
