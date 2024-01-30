@@ -1412,6 +1412,11 @@ let putpositionTaken = false;
 let putPreviousValue = false;
 let putpositionTakenInSymbol = '';
 
+let prevEma9LessThanEma21 = ''
+let crossedUp = ''
+
+const targetPrice = 200;
+
 async function EMAcheckCrossOverExit(ema9, ema21) {
 
   // console.log(nearestCE); // BANKNIFTY31JAN24C45500
