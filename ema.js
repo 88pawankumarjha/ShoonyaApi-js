@@ -51,7 +51,7 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 4,
+  emaLotMultiplier: 2,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -1415,8 +1415,7 @@ let putpositionTakenInSymbol = '';
 let prevEma9LessThanEma21 = ''
 let crossedUp = ''
 
-const magicNumber = 500;
-let targetPrice = +magicNumber/+globalInput.LotSize;
+const targetPrice = 200;
 
 async function EMAcheckCrossOverExit(ema9, ema21) {
 
@@ -1437,15 +1436,9 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
         // Dynamically add a subscription
         // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
         // dynamicallyAddSubscription(subStr);
-
-        nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, +targetPrice)
   
-        // Dynamically add a subscription
-        subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
-        dynamicallyAddSubscription(subStr);
-  
-        await short(nearestPE, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = nearestPE;
+        await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.atmPutSymbol;
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
@@ -1457,14 +1450,9 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
         // Dynamically add a subscription
         // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
         // dynamicallyAddSubscription(subStr);
-        nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, +targetPrice)
   
-        // Dynamically add a subscription
-        subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
-        dynamicallyAddSubscription(subStr);
-
-        await short(nearestCE, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = nearestCE;
+        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.atmCallSymbol;
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
@@ -1479,13 +1467,9 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
           // // Dynamically add a subscription
           // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
           // dynamicallyAddSubscription(subStr);
-          nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, +targetPrice)
-  
-          // Dynamically add a subscription
-          subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
-          dynamicallyAddSubscription(subStr);
-          await short(nearestCE, globalInput.LotSize * globalInput.emaLotMultiplier)
-          positionTakenInSymbol = nearestCE;
+          
+          await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.atmCallSymbol;
           positionTaken = true;
           prevEma9LessThanEma21 = ema9 < ema21;
           crossedUp = ema9 > ema21;
@@ -1499,13 +1483,8 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
           // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
           // dynamicallyAddSubscription(subStr);
           
-        nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, +targetPrice)
-  
-        // Dynamically add a subscription
-        subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
-        dynamicallyAddSubscription(subStr);
-          await short(nearestPE, globalInput.LotSize * globalInput.emaLotMultiplier)
-          positionTakenInSymbol = nearestPE;
+          await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.atmPutSymbol;
           positionTaken = true;
           prevEma9LessThanEma21 = ema9 < ema21;
           crossedUp = ema9 > ema21;
