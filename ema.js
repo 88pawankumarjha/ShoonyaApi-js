@@ -1412,6 +1412,88 @@ let putpositionTaken = false;
 let putPreviousValue = false;
 let putpositionTakenInSymbol = '';
 
+async function EMAcheckCrossOverExit(ema9, ema21) {
+
+  // console.log(nearestCE); // BANKNIFTY31JAN24C45500
+  // console.log(nearestPE); // BANKNIFTY31JAN24P44500
+  
+  // console.log(findTsymByToken( biasProcess.ocCallOptions, nearestCE))
+  // console.log(findTsymByToken( biasProcess.ocPutOptions, nearestPE))
+  
+    if (prevEma9LessThanEma21 === '') {
+      prevEma9LessThanEma21 = ema9 < ema21;
+      crossedUp = ema9 > ema21;
+    }
+    else if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
+        console.log("Cross over detected. Take long position." + new Date());
+        // nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+  
+        // Dynamically add a subscription
+        // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
+        // dynamicallyAddSubscription(subStr);
+  
+        await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.atmPutSymbol;
+        positionTaken = true;
+        prevEma9LessThanEma21 = ema9 < ema21;
+        crossedUp = ema9 > ema21;
+        // Place your position-taking logic here
+    } else if (!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) {
+        console.log("Cross over detected. Take short position." + new Date());
+        // nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+  
+        // Dynamically add a subscription
+        // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
+        // dynamicallyAddSubscription(subStr);
+  
+        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.atmCallSymbol;
+        positionTaken = true;
+        prevEma9LessThanEma21 = ema9 < ema21;
+        crossedUp = ema9 > ema21;
+    }
+    else if (positionTaken) {
+        if(crossedUp && ema9 < ema21){
+          // exitLong addshort
+          await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+  
+          console.log("Cross over detected. Take exitLong addshort position." + new Date());
+          // nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+          // // Dynamically add a subscription
+          // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
+          // dynamicallyAddSubscription(subStr);
+          
+          await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.atmCallSymbol;
+          positionTaken = true;
+          prevEma9LessThanEma21 = ema9 < ema21;
+          crossedUp = ema9 > ema21;
+        
+        } else if (!crossedUp && ema9 > ema21){
+          // exitShort addLong
+          await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          // console.log("Cross over detected. Take exitShort addLong position." + new Date());
+          // nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+          // // Dynamically add a subscription
+          // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
+          // dynamicallyAddSubscription(subStr);
+          
+          await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.atmPutSymbol;
+          positionTaken = true;
+          prevEma9LessThanEma21 = ema9 < ema21;
+          crossedUp = ema9 > ema21;
+        }
+    } else {
+        console.log("No signal detected."+ new Date());
+        // Additional logic if needed
+    }
+    positionTakenInSymbol && send_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
+    //send notification
+    prevEma9LessThanEma21 = ema9 < ema21;
+    crossedUp = ema9 > ema21;
+  }
+  
 async function checkCrossOverExit(ema9, ema21) {
   try {
     
@@ -1756,7 +1838,170 @@ const ema9and21ValuesIndicators = async (params) => {
   //     oi: '0'
   //   }
   // ]  : reply
+
+  const indexBasedEmaRecurringFunction = async () => {
+    try{
   
+      if (getAtmStrike()!= biasProcess.atmStrike){
+        resetBiasProcess();
+        await updateITMSymbolfromOC()
+      }
+      
+      
+      // FINNIFTY16JAN24C21450
+      // 21450.00
+      // FINNIFTY16JAN24P21450
+
+      // console.log(biasProcess.atmStrike)
+      // console.log(biasProcess.atmCallSymbol)
+      // console.log(biasProcess.atmCallStrikePrice)
+      // console.log(biasProcess.atmPutSymbol)
+      // console.log(biasProcess.atmPutStrikePrice) 
+
+
+      // Dynamically add a subscription after 10 seconds
+      atmCallSubStr = biasProcess.atmCallSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmCallSymbol)}` : '';
+      atmPutSubStr = biasProcess.atmPutSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmPutSymbol)}` : '';
+      dynamicallyAddSubscription(atmCallSubStr);
+      dynamicallyAddSubscription(atmPutSubStr);
+
+      
+      // console.log(`${biasProcess.atmCallSymbol}:`, latestQuotes[atmCallSubStr] ? latestQuotes[atmCallSubStr]?.lp : "N/A", "Order:", latestOrders[atmCallSubStr]);
+      // console.log(`${biasProcess.atmPutSymbol}:`, latestQuotes[atmPutSubStr] ? latestQuotes[atmPutSubStr]?.lp : "N/A", "Order:", latestOrders[atmPutSubStr]);
+
+      // console.log(latestQuotes[atmCallSubStr], 'atmCallSubStr');
+
+      // {
+      //   t: 'tf',
+      //   e: 'NFO',
+      //   tk: '45764',
+      //   lp: '21.55',
+      //   pc: '-70.09',
+      //   ft: '1705394694'
+      // } atmCallSubStr
+
+      // {
+      //   t: 'tk',
+      //   e: 'NFO',
+      //   tk: '45764',
+      //   ts: 'FINNIFTY16JAN24C21450',
+      //   pp: '2',
+      //   ls: '40',
+      //   ti: '0.05',
+      //   lp: '0.05',
+      //   pc: '-99.93',
+      //   c: '72.05',
+      //   ft: '1705402249',
+      //   o: '70.00',
+      //   h: '80.85',
+      //   l: '0.05',
+      //   ap: '18.51',
+      //   v: '1245198800',
+      //   oi: '11984440',
+      //   poi: '1510120',
+      //   bp1: '0.00',
+      //   sp1: '0.05',
+      //   bq1: '0',
+      //   sq1: '3521840'
+      // } atmCallSubStr
+
+      // values["uid"]       = self.__username;
+      //     values["exch"]      = params.exchange;
+      //     values["token"]     = params.token;          
+      //     values["st"]        = params.starttime;
+      //     if(params.endtime !== undefined)
+      //       values["et"]        = params.endtime;
+      //     if(params.interval !== undefined)
+      //       values["intrv"]     = params.interval;
+
+
+      // params = {
+      //   'exchange'   : 'NFO',
+      //   'token' : getTokenByTradingSymbol(biasProcess.atmCallSymbol),
+      //   'starttime'    : '1705383000',
+      //   'endtime' : new Date().getTime() / 1000,
+      //   'interval' : '1'
+      //   }
+
+
+
+      // Get current date and time in IST
+      const currentDateIST = new Date();
+
+      // Set the time to 2 o'clock
+      currentDateIST.setHours(0, 0, 0, 0);
+
+      // Subtract 5 day to get the 5 days earlier time
+      currentDateIST.setDate(currentDateIST.getDate() - 5);
+
+      // Get epoch time in milliseconds
+      const epochTime = currentDateIST.getTime();
+      epochTimeTrimmed = epochTime.toString().slice(0, -3);
+
+      // let callSymbolForEma = positionTaken? positionTakenInSymbol:biasProcess.atmCallSymbol;
+      // let putSymbolForEma = putpositionTaken? putpositionTakenInSymbol:biasProcess.atmPutSymbol;
+
+      params = {
+        'exchange'   : globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX',
+        'token' : globalInput.token,
+        'starttime'    : epochTimeTrimmed,
+        'interval' : '1'
+        }
+
+      // params2 = {
+      //   'exchange'   : globalInput.pickedExchange,
+      //   'token' : getTokenByTradingSymbol(putSymbolForEma),
+      //   'starttime'    : epochTimeTrimmed,
+      //   'interval' : '1'
+      //   }
+
+      try {
+        
+
+        // const [callema9, callema21] = await ema9and21Values(params); //call
+        // const [putema9, putema21] = await ema9and21Values(params2); //put
+        const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
+        // const [putema9, putema21] = await ema9and21ValuesIndicators(params2); //put
+
+        // callStr = callSymbolForEma+ ': ltp: '+ +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(callSymbolForEma)}`]?.lp + ' : c9, c21: '+ parseFloat(callema9).toFixed(2)+ ' ' + parseFloat(callema21).toFixed(2);
+        // putStr = putSymbolForEma+  ': ltp: '+ +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp + ' : p9, p21: '+ parseFloat(putema9).toFixed(2)+ ' ' + parseFloat(putema21).toFixed(2);
+
+        // send_notification(callStr)
+        // send_notification(putStr)
+        send_notification(globalInput.indexName+' ltp '+ +latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]?.lp + ', fastEMA '+ parseFloat(callema9).toFixed(2) + ', slowEMA ' + parseFloat(callema21).toFixed(2))
+
+
+        //send notification
+
+        // //buyer
+        await EMAcheckCrossOverExit(callema9, callema21)
+        // putcheckCrossOverExit(putema9, putema21)
+
+        // //seller
+        // sellercheckCrossOverExit(callema9, callema21)
+        // sellerputcheckCrossOverExit(putema9, putema21)
+        
+      } catch (error) {
+        console.error('Error:', error);
+      }
+      
+
+      
+      // Check a condition to determine whether to stop the recurring function
+      if (websocket_closed) {
+        clearInterval(intervalId);
+        // console.log(latestOrders, 'latestOrders')
+        // console.log('Recurring function stopped.');
+      }
+    } catch (error) {
+      // handle the exception locally
+      console.error("Child method encountered an exception:", error.message);
+      // optionally, rethrow the exception if needed
+      throw error;
+  }
+  }
+
+
   // updateEMA when atmStrike changes
 emaRecurringFunction = async () => {
     try{
@@ -1944,7 +2189,7 @@ getEma = async () => {
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     try {
-      await emaRecurringFunction();
+      await indexBasedEmaRecurringFunction();
     } catch (error) {
         console.error("Error occured: " + error);
         // send_notification("Error occured: " + error)
