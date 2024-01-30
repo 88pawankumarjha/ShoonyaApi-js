@@ -20,8 +20,8 @@ const AdmZip = require('adm-zip');
 
 const { parse } = require('papaparse');
 const moment = require('moment');
-const { isTimeEqualsNotAfterProps, idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
-  identify_option_type, fetchSpotPrice, getStrike } = require('./utils/customLibrary');
+const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
+  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium } = require('./utils/customLibrary');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
 const bot = new TelegramBot(telegramBotToken, { polling: true });
@@ -30,13 +30,13 @@ const send_notification = async (message, me = false) => (message && console.log
 let globalBigInput = {
   filteredIndexCSV: undefined
 }
-// getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
-getPickedIndexHere = () => debug ? 'CRUDEOIL' : ['CRUDEOIL', 'CRUDEOIL', 'CRUDEOIL', 'CRUDEOIL', 'CRUDEOIL', 'CRUDEOIL', 'CRUDEOIL'][new Date().getDay()] || 'CRUDEOIL';
+getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
 let telegramSignals = {
   stopSignal: false,
   exitSignal: false,
   slower: false,
   faster: false,
+  isPlaying: true
 }
 let globalInput = {
   susertoken: '',
@@ -51,7 +51,7 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 1,
+  emaLotMultiplier: 2,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -108,6 +108,8 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 let websocket;
 let websocket_closed= false;
 let intervalId;
+let intervalIdForEMA;
+const delayForEMA = 1000; 
 
 let latestQuotes = {};
 let latestOrders = {};
@@ -174,8 +176,7 @@ function unzipFile(zipFilePath) {
 
 async function findNearestExpiry() {
   let csvUrl, zipFilePath, csvFilePath;
-  // const exchangeType = globalInput.indexName.includes('EX') ? 'BFO' : 'NFO';
-  const exchangeType = globalInput.indexName.includes('CRUDEOIL') ? 'MCX' : 'MCX';
+  const exchangeType = globalInput.indexName.includes('EX') ? 'BFO' : 'NFO';
   csvUrl = `https://api.shoonya.com/${exchangeType}_symbols.txt.zip`;
   const zipFileUrl = csvUrl;
   // Replace 'downloaded_file.zip' with the desired file name
@@ -198,13 +199,8 @@ async function findNearestExpiry() {
     // Read CSV data into a JavaScript object
     const csvData = fs.readFileSync(csvFilePath, 'utf-8');
     const { data: symbolDf } = parse(csvData, { header: true });
-
     
-    
-    globalBigInput.filteredIndexCSV = filterAndMapDates(moment, symbolDf.filter((row) => ['OPTFUT', 'FUTCOM'].includes(row.Instrument) && row.Symbol === globalInput.indexName));
-    // MCX,425852,100,1,CRUDEOIL,CRUDEOIL14FEB24C6250,14-FEB-2024,OPTFUT,CE,6250,0.1,
-    // MCX,260602,100,1,CRUDEOIL,CRUDEOIL16FEB24,16-FEB-2024,FUTCOM,XX,0,1,
-
+    globalBigInput.filteredIndexCSV = filterAndMapDates(moment, symbolDf.filter((row) => ['OPTIDX', 'FUTIDX'].includes(row.Instrument) && row.TradingSymbol.startsWith(globalInput.indexName)));
     // console.log(globalBigInput.filteredIndexCSV);
     // [
     //  {
@@ -221,26 +217,19 @@ async function findNearestExpiry() {
     //   '': ''
     // },
     //BFO,833613,15,BKXFUT,BANKEX24FEBFUT,26-FEB-2024,FUTIDX,XX,0,0.05,
-    const expiryList = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => row.Instrument === 'OPTFUT').map((row) => row.Expiry))];
-    // console.log(expiryList)
-    // MCX,425852,100,1,CRUDEOIL,CRUDEOIL14FEB24C6250,14-FEB-2024,OPTFUT,CE,6250,0.1,
+    const expiryList = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => row.Instrument === 'OPTIDX').map((row) => row.Expiry))];
     const expiryFutList = globalBigInput.filteredIndexCSV
-      .filter((row) => row.Instrument === 'FUTCOM')
+      .filter((row) => row.Instrument === 'FUTIDX')
       .map((row) => ({ Exchange: row.Exchange, LotSize: row.LotSize, TradingSymbol: row.TradingSymbol, Expiry: row.Expiry }));
-      // MCX,260602,100,1,CRUDEOIL,CRUDEOIL16FEB24,16-FEB-2024,FUTCOM,XX,0,1,
     expiryList.sort();
     expiryFutList.sort((a, b) => moment(a.Expiry).diff(moment(b.Expiry)));
     
-    globalInput.inputOptTsym = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => (row.Instrument === 'OPTFUT' && row.Expiry === expiryList[0])).map((row) => row.TradingSymbol))][0];
-    // MCX,425852,100,1,CRUDEOIL,CRUDEOIL14FEB24C6250,14-FEB-2024,OPTFUT,CE,6250,0.1,
+    globalInput.inputOptTsym = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => (row.Instrument === 'OPTIDX' && row.Expiry === expiryList[0])).map((row) => row.TradingSymbol))][0];
     // console.log(globalInput.inputOptTsym, 'globalInput.inputOptTsym')
     globalInput.WEEKLY_EXPIRY = expiryList[0];
     globalInput.MONTHLY_EXPIRY = expiryFutList[0].Expiry;
     globalInput.pickedExchange = expiryFutList[0].Exchange;
     globalInput.LotSize = expiryFutList[0].LotSize;
-
-    // console.log(globalInput)
-
   } catch (error) {
     console.error('Error:', error.message);
   } 
@@ -254,22 +243,18 @@ async function findNearestExpiry() {
     // }
   // }
 };
-
-runFindNearestExpiry = async () => {
-  await findNearestExpiry();
-}
-
 // Execute the findNearestExpiry function
-runFindNearestExpiry();
+findNearestExpiry();
 
 const Api = require("./lib/RestApi");
 let api = new Api({});
 
 const getAtmStrike = () => {
+  // TODO
+  // return 50700;
   // console.log(`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}`)
   // console.log(globalInput.token)
   // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
-  // process.exit(0)
   biasProcess.spotObject = latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`];
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
   return Math.round(biasProcess.spotObject?.lp / globalInput.ocGap) * globalInput.ocGap
@@ -279,11 +264,11 @@ const getAtmStrike = () => {
 async function send_callback_notification() {
     try {
         const keyboard = {inline_keyboard: [[
-                { text: '🐌', callback_data: 'slower' },
-                { text: '🚀', callback_data: 'faster' },
-                { text: '💹', callback_data: 'toggleExchange' },
-                { text: '⏸', callback_data: 'stop' },
-                { text: '🛑', callback_data: 'exit' }
+                // { text: '🐌', callback_data: 'slower' },
+                // { text: '🚀', callback_data: 'faster' },
+                // { text: '💹', callback_data: 'toggleExchange' },
+                { text: '⏸', callback_data: 'isPlayingSignal' },
+                // { text: '🛑', callback_data: 'exit' }
               ]]};
       !debug && bot.sendMessage(chat_id_me, 'Choose server settings', { reply_markup: keyboard });
     } catch (error) { console.error(error);send_notification(error + ' error occured', true)}
@@ -302,10 +287,15 @@ async function send_callback_notification() {
     //   slower: false,
     //   faster: false,
     // }
+    if (data === 'isPlayingSignal') {
+      if(telegramSignals.isPlaying){pauseEma()}
+      else {resumeEma()}
+    }
     if (data === 'exit') telegramSignals.exitSignal = true;
     if (data === 'stop') telegramSignals.stopSignal = !telegramSignals.stopSignal;
     else if (data === 'toggleExchange') globalInput.pickedExchange = (globalInput.pickedExchange === 'NFO' ? 'BFO' : globalInput.pickedExchange === 'BFO' ? 'MCX' : 'NFO');
-    bot.sendMessage(chatId, `Exchange: ${globalInput.pickedExchange}, Paused: ${telegramSignals.stopSignal} - pause, exit, slower, faster are not implemented`);
+    // bot.sendMessage(chatId, `Exchange: ${globalInput.pickedExchange}, Paused: ${telegramSignals.stopSignal} - pause, exit, slower, faster are not implemented`);
+    bot.sendMessage(chatId, `EMA isPlaying: ${telegramSignals.isPlaying}`);
   });
 
 // login method
@@ -469,15 +459,14 @@ postOrderPosTracking = (data) => {
     updateTwoSmallestPositionsAndNeighboursSubs();
     // Update call position subscription
     positionProcess.posCallSubStr = positionProcess.smallestCallPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionProcess.smallestCallPosition.tsym)}` : '';
-    //todo verify this before &&
+    
     positionProcess.posCallSubStr && dynamicallyAddSubscription(positionProcess.posCallSubStr);
     // Update put position subscription
     positionProcess.posPutSubStr = biasProcess.smallestPutPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.smallestPutPosition.tsym)}` : '';
-    //todo verify this before &&
+    
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
-
-    send_notification(data?.trantype + ' order placed: ' + data?.tsym + ' at ' + data?.flprc + ' ' + new Date().toLocaleTimeString("en-IN", {timeZone: "Asia/Kolkata"}), true )
-    send_notification(data?.trantype + ' order placed: ' + data?.tsym + ' at ' + data?.flprc + ' ' + new Date().toLocaleTimeString("en-IN", {timeZone: "Asia/Kolkata"}))
+    console.log('order placed: ', data)
+    send_notification(data?.trantype + ' order placed: ' + data?.tsym + ' at ' + data?.flprc, true )
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -506,7 +495,7 @@ function receiveOrders(data) {
 function open(data) {
     // console.log(`NSE|${globalInput.token}`)
     
-    const initialInstruments = [`${globalInput.indexName.includes('CRUDEOIL') ? 'MCX' : 'MCX'}|${globalInput.token}`, 'NSE|26017']; 
+    const initialInstruments = [`${globalInput.indexName.includes('EX') ? 'BSE' : 'NSE'}|${globalInput.token}`, 'NSE|26017']; 
 
     //vix:
     // {
@@ -548,11 +537,10 @@ async function startWebsocket() {
 async function getOptionChain() {
     try {
         biasProcess.atmStrike = getAtmStrike();
-        
         const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
         // console.log(optionChainResponse, 'optionChainResponse')
         if (optionChainResponse.stat === 'Ok') {
-            debug && console.log(optionChainResponse, 'optionChainResponse')            
+            debug && console.log(optionChainResponse, 'optionChainResponse')
             return optionChainResponse;
         } else {
             console.error('Error getting option chain:', optionChainResponse);
@@ -575,19 +563,15 @@ function updateITMSymbolAndStrike(optionType) {
     // Assign ITM symbols and strike prices
     debug && console.log(biasProcess.ocCallOptions, 'callOptions')
     debug && console.log(biasProcess.ocPutOptions, 'putOptions')
-    
     biasProcess.itmCallSymbol = biasProcess.ocCallOptions[14].tsym;
     biasProcess.itmCallStrikePrice = biasProcess.ocCallOptions[14].strprc;
     biasProcess.itmPutSymbol = biasProcess.ocPutOptions[16].tsym;
     biasProcess.itmPutStrikePrice = biasProcess.ocPutOptions[16].strprc;
-    
+    debug && console.log(biasProcess.ocPutOptions, 'putOptions')
     biasProcess.atmCallSymbol = biasProcess.ocCallOptions[15].tsym;
     biasProcess.atmCallStrikePrice = biasProcess.ocCallOptions[15].strprc;
     biasProcess.atmPutSymbol = biasProcess.ocPutOptions[15].tsym;
     biasProcess.atmPutStrikePrice = biasProcess.ocPutOptions[15].strprc;
-
-    // console.log(biasProcess, 'bp')
-    
     return;
 }
 
@@ -595,12 +579,147 @@ async function updateITMSymbolfromOC() {
     await delay(1000)
     // Get the Nifty option chain
     biasProcess.optionChain = await getOptionChain();
+    // console.log(biasProcess.optionChain)
+    // post https://api.shoonya.com/NorenWClientTP/GetOptionChain jData={"uid":"FA63911",
+    // "exch":"BFO","tsym":"BANKEX24JAN57700PE","strprc":"50700","cnt":"15"}&jKey=c49727e66cb3d1eca0c2c048a7a3e0804dc9aacf45848b7835f6c93cc9bb0d92
+    // {
+    //   stat: 'Ok',
+    //   values: [
+    //     {
+    //       exch: 'BFO',
+    //       token: '1153140',
+    //       tsym: 'BANKEX24JAN50700CE',
+    //       optt: 'CE',
+    //       pp: '2',
+    //       ls: '15',
+    //       ti: '0.05',
+    //       strprc: '50700.00'
+    //     },
+    //     {
+    //       exch: 'BFO',
+    //       token: '1152365',
+    //       tsym: 'BANKEX24JAN50800CE',
+    //       optt: 'CE',
+    //       pp: '2',
+    //       ls: '15',
+    //       ti: '0.05',
+    //       strprc: '50800.00'
+    //     },
+    // ... 
+    // ... 
+    // {
+    //   exch: 'BFO',
+    //   token: '1137016',
+    //   tsym: 'BANKEX24JAN49300CE',
+    //   optt: 'CE',
+    //   pp: '2',
+    //   ls: '15',
+    //   ti: '0.05',
+    //   strprc: '49300.00'
+    // },
+    // {
+    //   exch: 'BFO',
+    //   token: '1136711',
+    //   tsym: 'BANKEX24JAN49200CE',
+    //   optt: 'CE',
+    //   pp: '2',
+    //   ls: '15',
+    //   ti: '0.05',
+    //   strprc: '49200.00'
+    // },
+    // {
+    //   exch: 'BFO',
+    //   token: '1153390',
+    //   tsym: 'BANKEX24JAN50700PE',
+    //   optt: 'PE',
+    //   pp: '2',
+    //   ls: '15',
+    //   ti: '0.05',
+    //   strprc: '50700.00'
+    // },
+    // {
+    //   exch: 'BFO',
+    //   token: '1152588',
+    //   tsym: 'BANKEX24JAN50800PE',
+    //   optt: 'PE',
+    //   pp: '2',
+    //   ls: '15',
+    //   ti: '0.05',
+    //   strprc: '50800.00'
+    // },
+    // ... 
+    // ... 
+//     {
+//       exch: 'BFO',
+//       token: '1137242',
+//       tsym: 'BANKEX24JAN49300PE',
+//       optt: 'PE',
+//       pp: '2',
+//       ls: '15',
+//       ti: '0.05',
+//       strprc: '49300.00'
+//     },
+//     {
+//       exch: 'BFO',
+//       token: '1136922',
+//       tsym: 'BANKEX24JAN49200PE',
+//       optt: 'PE',
+//       pp: '2',
+//       ls: '15',
+//       ti: '0.05',
+//       strprc: '49200.00'
+//     }
+//   ]
+// }
     await delay(1000)
     if (biasProcess.optionChain) {
         // Find the ITM symbol
         await delay(1000)
         updateITMSymbolAndStrike();
         await delay(1000)
+        // let quoteResp = await api.get_quotes(globalInput.pickedExchange, biasProcess.ocCallOptions[15].token)
+        
+        // {
+        //   '835288': '11.35',
+        //   '1136711': '1591.10',
+        //   '1136748': '823.45',
+        //   '1136770': '1399.35',
+        //   '1136806': '606.90',
+        //   '1136828': '1212.75',
+        //   '1136887': '453.50',
+        //   '1136903': '853.75',
+        //   '1137016': '1494.70',
+        //   '1137066': '1305.30',
+        //   '1137137': '1122.05',
+        //   '1137444': '907.85',
+        //   '1137493': '658.15',
+        //   '1137542': '484.55',
+        //   '1137607': '393.40',
+        //   '1137624': '1039.05',
+        //   '1152365': '306.40',
+        //   '1152724': '210.05',
+        //   '1153140': '342.75',
+        //   '1153214': '269.15',
+        //   '1153994': '140.45',
+        //   '1154243': '180.25',
+        //   '1154316': '109.60',
+        //   '1154790': '57.25',
+        //   '1154944': '73.95',
+        //   '1154987': '46.95',
+        //   '1157331': '31.55',
+        //   '1157442': '22.55',
+        //   '1158334': '14.25',
+        //   '1158879': '13.20'
+        // } optionChainDataMap
+
+        // const targetPrice = 200;
+        
+        // nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+        // nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+
+        // console.log(nearestCE); // 1152724
+        // console.log(nearestPE); // 1153390
+        
         debug && console.log(biasProcess, ' :biasProcess')
     }
 }
@@ -1243,18 +1362,18 @@ const long = async (symbol, qty) => {
 let orderCE = {
     buy_or_sell: 'B',
     product_type: 'M',
-    exchange: 'MCX',
-    tradingsymbol: symbol || 'CRUDEOIL14DEC23P6700',
-    quantity: (100*globalInput.emaLotMultiplier).toString(), // multiplier
-    discloseqty: (100*globalInput.emaLotMultiplier).toString(), // multiplier
-    price_type: 'LMT',
-    price: +(latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(symbol)}`]?.lp) + 2 || 0,
-    remarks: 'PawanLongCrudeAPI'
+    exchange: globalInput.pickedExchange,
+    tradingsymbol: symbol,
+    quantity: Math.abs(qty).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'BuyAPI'
   }
   try{
     orderCERespObj = await api.place_order(orderCE);
-    console.log(orderCERespObj, ' :orderCERespObj')
-    console.log(symbol, qty, ' :symbol qty long')
+    console.log(orderCERespObj, ' :orderLongRespObj');
+    console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
   }
   catch(error){
     console.log(error)
@@ -1263,169 +1382,184 @@ let orderCE = {
 }
 const short = async (symbol, qty) => {
     let orderCE = {
-      buy_or_sell: 'S',
-      product_type: 'M',
-      exchange: 'MCX',
-      tradingsymbol: symbol || 'CRUDEOIL14DEC23P6700',
-      quantity: (100*globalInput.emaLotMultiplier).toString(), // multiplier
-      discloseqty: (100*globalInput.emaLotMultiplier).toString(), // multiplier
-      price_type: 'LMT',
-      price: +(latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(symbol)}`]?.lp) - 2 || 0,
-      remarks: 'PawanShortCrudeAPI'
+        buy_or_sell: 'S',
+        product_type: 'M',
+        exchange: globalInput.pickedExchange,
+        tradingsymbol: symbol,
+        quantity: Math.abs(qty).toString(),
+        discloseqty: 0,
+        price_type: 'MKT',
+        price: 0,
+        remarks: 'SellAPI'
       }
       try{
     orderPERespObj = await api.place_order(orderCE);
-    console.log(orderPERespObj, ' :orderPERespOb')
-    console.log(symbol, qty, ' :symbol qty short')
+    console.log(orderPERespObj, ' :orderShortRespOb')
   }
   catch(error){
     console.log(error)
   }
     
 }
-
-
+let isCallATMchanged = '';
+let isPutATMchanged = '';
 
 let positionTaken = false;
-// let callPreviousValue = false;
+let callPreviousValue = false;
 let positionTakenInSymbol = '';
+
+let putpositionTaken = false;
+let putPreviousValue = false;
+let putpositionTakenInSymbol = '';
 
 let prevEma9LessThanEma21 = ''
 let crossedUp = ''
 
-async function sellercrudecheckCrossOverExit(ema9, ema21) {
-  if (prevEma9LessThanEma21 === '') {
-    prevEma9LessThanEma21 = ema9 < ema21;
-    crossedUp = ema9 > ema21;
-    send_notification('first prevEma9LessThanEma21 stored for reference as '+ prevEma9LessThanEma21);
-  }
-  else if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
-      send_notification("Cross over detected. Take call position." + new Date());
-      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmPutSymbol;
-      positionTaken = true;
+const targetPrice = 200;
+
+async function EMAcheckCrossOverExit(ema9, ema21) {
+
+  // console.log(nearestCE); // BANKNIFTY31JAN24C45500
+  // console.log(nearestPE); // BANKNIFTY31JAN24P44500
+  
+  // console.log(findTsymByToken( biasProcess.ocCallOptions, nearestCE))
+  // console.log(findTsymByToken( biasProcess.ocPutOptions, nearestPE))
+  
+    if (prevEma9LessThanEma21 === '') {
       prevEma9LessThanEma21 = ema9 < ema21;
       crossedUp = ema9 > ema21;
-      // Place your position-taking logic here
-  } else if (!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) {
-      send_notification("Cross over detected. Take put position." + new Date());
-      await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmCallSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-  }
-  else if (positionTaken) {
-      if(crossedUp && ema9 < ema21){
-        // exitLong addshort
-        await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = biasProcess.atmCallSymbol;
-        positionTaken = true;
-        prevEma9LessThanEma21 = ema9 < ema21;
-        crossedUp = ema9 > ema21;
-      
-      } else if (!crossedUp && ema9 > ema21){
-        // exitShort addLong
-        await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+    }
+    else if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
+        console.log("Cross over detected. Take long position." + new Date());
+        // nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+  
+        // Dynamically add a subscription
+        // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
+        // dynamicallyAddSubscription(subStr);
+  
         await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         positionTakenInSymbol = biasProcess.atmPutSymbol;
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
-      }
-  } else {
-      console.log("No signal detected."+ new Date());
-      // Additional logic if needed
-  }
-  positionTakenInSymbol && send_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
-  //send notification
-  prevEma9LessThanEma21 = ema9 < ema21;
-  crossedUp = ema9 > ema21;
-}
-
-async function crudecheckCrossOverExit(ema9, ema21) {
-  if (prevEma9LessThanEma21 === '') {
+        // Place your position-taking logic here
+    } else if (!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) {
+        console.log("Cross over detected. Take short position." + new Date());
+        // nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+  
+        // Dynamically add a subscription
+        // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
+        // dynamicallyAddSubscription(subStr);
+  
+        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.atmCallSymbol;
+        positionTaken = true;
+        prevEma9LessThanEma21 = ema9 < ema21;
+        crossedUp = ema9 > ema21;
+    }
+    else if (positionTaken) {
+        if(crossedUp && ema9 < ema21){
+          // exitLong addshort
+          await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+  
+          console.log("Cross over detected. Take exitLong addshort position." + new Date());
+          // nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+          // // Dynamically add a subscription
+          // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
+          // dynamicallyAddSubscription(subStr);
+          
+          await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.atmCallSymbol;
+          positionTaken = true;
+          prevEma9LessThanEma21 = ema9 < ema21;
+          crossedUp = ema9 > ema21;
+        
+        } else if (!crossedUp && ema9 > ema21){
+          // exitShort addLong
+          await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          // console.log("Cross over detected. Take exitShort addLong position." + new Date());
+          // nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+          // // Dynamically add a subscription
+          // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
+          // dynamicallyAddSubscription(subStr);
+          
+          await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.atmPutSymbol;
+          positionTaken = true;
+          prevEma9LessThanEma21 = ema9 < ema21;
+          crossedUp = ema9 > ema21;
+        }
+    } else {
+        console.log("No signal detected."+ new Date());
+        // Additional logic if needed
+    }
+    positionTakenInSymbol && send_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
+    //send notification
     prevEma9LessThanEma21 = ema9 < ema21;
     crossedUp = ema9 > ema21;
-    send_notification('first prevEma9LessThanEma21 stored for reference as '+ prevEma9LessThanEma21);
   }
-  else if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
-      send_notification("Cross over detected. Take call position." + new Date());
-      await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmCallSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-      // Place your position-taking logic here
-  } else if (!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) {
-      send_notification("Cross over detected. Take put position." + new Date());
-      await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmPutSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-  }
-  else if (positionTaken) {
-      if(crossedUp && ema9 < ema21){
-        // exitLong addshort
-        await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = biasProcess.atmPutSymbol;
-        positionTaken = true;
-        prevEma9LessThanEma21 = ema9 < ema21;
-        crossedUp = ema9 > ema21;
-      
-      } else if (!crossedUp && ema9 > ema21){
-        // exitShort addLong
-        await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = biasProcess.atmCallSymbol;
-        positionTaken = true;
-        prevEma9LessThanEma21 = ema9 < ema21;
-        crossedUp = ema9 > ema21;
-      }
-  } else {
-      console.log("No signal detected."+ new Date());
-      // Additional logic if needed
-  }
-  positionTakenInSymbol && send_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
-  //send notification
-  prevEma9LessThanEma21 = ema9 < ema21;
-  crossedUp = ema9 > ema21;
-}
+  
 async function checkCrossOverExit(ema9, ema21) {
+  try {
+    
+  // console.log(ema9, 'ema9')
+  // console.log(ema21, 'ema21')
+
+    if(isCallATMchanged === '') {
+      isCallATMchanged = true;
+      callPreviousValue = !positionTaken ? ema9 < ema21: callPreviousValue;
+    }
     if (callPreviousValue && !positionTaken && ema9 > ema21) {
-        console.log("Cross over detected. Take call position." + new Date());
-        await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        console.log("Cross over detected1. Take long position." + new Date());
+        await updateITMSymbolfromOC();
+        await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        reversePositionTakenInSymbol = biasProcess.atmPutSymbol;
         positionTakenInSymbol = biasProcess.atmCallSymbol;
         positionTaken = true;
+        if (putpositionTaken) {
+          console.log("Exit signal detected1. Close short position." + new Date());
+          await long(reverseputpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          putpositionTaken = false;
+          putpositionTakenInSymbol = ''
+          // Place your position-closing logic here
+        }
         // Place your position-taking logic here
-    } else if (positionTaken && ema9 < ema21) {
-        console.log("Exit signal detected. Close call position." + new Date());
-        await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+    } 
+    else if (positionTaken && ema9 < ema21) {
+        console.log("Exit signal detected1. Close long position." + new Date());
+        await long(reversePositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         positionTaken = false;
         positionTakenInSymbol = '';
         // Place your position-closing logic here
-    } else {
+        // if (!putpositionTaken) {
+        //   console.log("Entry signal detected1. Take put position after 1 min if it has higher EMA9." + new Date());
+        //   putPreviousValue = true; //seller opp logic needed
+        //   // Place your position-closing logic here
+        // }
+    }
+     else {
         console.log("No call signal detected."+ new Date());
         // Additional logic if needed
     }
-    positionTakenInSymbol && console.log(positionTakenInSymbol, ' : openCallPosition - LTP: ',  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
+    positionTakenInSymbol && console.log(positionTakenInSymbol, ' : openLongPosition - LTP: ',  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
     //send notification
     callPreviousValue = ema9 < ema21;
+
+  } catch (error) {
+   console.log(error) 
+  }
 
 }
 
 async function sellercheckCrossOverExit(ema9, ema21) {
   if (callPreviousValue && !positionTaken && ema9 < ema21) {
-    console.log("Cross over detected. Take call position." + new Date());
+    console.log("Cross over detected1. Take call position." + new Date());
     await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
     positionTakenInSymbol = biasProcess.atmCallSymbol;
     positionTaken = true;
     // Place your position-taking logic here
   } else if (positionTaken && ema9 > ema21) {
-    console.log("Exit signal detected. Close call position." + new Date());
+    console.log("Exit signal detected1. Close call position." + new Date());
     await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
     positionTaken = false;
     positionTakenInSymbol = '';
@@ -1440,42 +1574,64 @@ async function sellercheckCrossOverExit(ema9, ema21) {
 
 }
 
-let putpositionTaken = false;
-let putPreviousValue = false;
-let putpositionTakenInSymbol = '';
 
 async function putcheckCrossOverExit(ema9, ema21) {
-    if (putPreviousValue && !putpositionTaken && ema9 > ema21) {
-        console.log("Cross over detected. Take put position." + new Date());
-        await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+  if(isPutATMchanged === '') {
+    isPutATMchanged = true;
+    putPreviousValue = !putpositionTaken ? ema9 < ema21: putPreviousValue;
+  }
+  if (putPreviousValue && !putpositionTaken && ema9 > ema21) {
+        console.log("Cross over detected2. Take short position." + new Date());
+        await updateITMSymbolfromOC();
+        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        reverseputpositionTakenInSymbol = biasProcess.atmCallSymbol;
         putpositionTakenInSymbol = biasProcess.atmPutSymbol;
         putpositionTaken = true;
+        if (positionTaken) {
+          console.log("Exit signal detected2. Close long position." + new Date());
+          await long(reversepositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTaken = false;
+          positionTakenInSymbol = '';
+          // Place your position-closing logic here
+        }
         // Place your position-taking logic here
-    } else if (putpositionTaken && ema9 < ema21) {
-        console.log("Exit signal detected. Close put position." + new Date());
-        await short(putpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+    } 
+    else if (putpositionTaken && ema9 < ema21) {
+        console.log("Exit signal detected2. Close short position." + new Date());
+        await long(reverseputpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         putpositionTaken = false;
         putpositionTakenInSymbol = ''
         // Place your position-closing logic here
+        // if (!positionTaken) {
+        //   console.log("Entry signal detected2. Take call position." + new Date());
+        //   await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        //   positionTaken = true;
+        //   positionTakenInSymbol = biasProcess.atmCallSymbol;
+        //   // Place your position-closing logic here
+        // }
+        // if (!positionTaken) {
+        //   console.log("Entry signal detected2. Take call position after 1 min if it has higher EMA9." + new Date());
+        //   callPreviousValue = true; //seller opp logic needed
+        //   // Place your position-closing logic here
+        // }
     } else {
         console.log("No put signal detected."+ new Date());
         // Additional logic if needed
     }
-    putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : openPutPosition - LTP: ',  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putpositionTakenInSymbol)}`]?.lp )
+    putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : openShortPosition - LTP: ',  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putpositionTakenInSymbol)}`]?.lp )
     //send notification
     putPreviousValue = ema9 < ema21;
 }
 
-
 async function sellerputcheckCrossOverExit(ema9, ema21) {
   if (putPreviousValue && !putpositionTaken && ema9 < ema21) {
-    console.log("Cross over detected. Take put position." + new Date());
+    console.log("Cross over detected2. Take put position." + new Date());
     await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
     putpositionTakenInSymbol = biasProcess.atmPutSymbol;
     putpositionTaken = true;
     // Place your position-taking logic here
   } else if (positionTaken && ema9 > ema21) {
-    console.log("Exit signal detected. Close put position." + new Date());
+    console.log("Exit signal detected2. Close put position." + new Date());
     await long(putpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
     putpositionTaken = false;
     putpositionTakenInSymbol = '';
@@ -1513,67 +1669,12 @@ async function sellerputcheckCrossOverExit(ema9, ema21) {
 
 // // Example usage
 // putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
-// putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
-// putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
 // // Assuming a crossover has occurred, now check for exit signal
 // putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
-// putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
-// putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
-// putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
 // putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
 // putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
-// putcheckCrossOverExit(130.0, 190.0);  // Example values for exit signal
 // putcheckCrossOverExit(182.51111111111112, 177.22857142857143);
 
-const ema9and21ValuesIndicators = async (params) => {
-  try{
-    const reply = await api.get_time_price_series(params);
-
-    // console.log(reply[0], ' : reply'); 
-    // Extract 'intc' prices into a new array
-    const intcPrices = reply.map(item => parseFloat(item.intc));
-    
-    //last 50 items
-    const first9Items = intcPrices.slice(0,80).reverse();
-    const first21Items = first9Items;
-
-    // console.log(first21Items)
-    //     [
-    //       22112,  22121.2,
-    //    22119.45,    22122,
-    //    22125.15,  22132.5,
-    //    22132.25, 22126.65,
-    //     22130.1
-    //  ]  : first9Items
-    //  [
-    //       22112,  22121.2, 22119.45,
-    //       22122, 22125.15,  22132.5,
-    //    22132.25, 22126.65,  22130.1,
-    //    22131.75,    22130,    22123,
-    //     22122.5,  22121.9,  22130.4,
-    //    22125.65,    22123,  22122.9,
-    //    22120.35,  22120.2,    22120
-    //  ]  : first21Items
-
-    const { Indicators } = require('@ixjb94/indicators');
-
-    // Sample financial data (replace this with your data)
-    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 75];
-    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 75];
-
-    // Calculate 9-period EMA
-    let ta = new Indicators();
-    let ema9Values = await ta.ema(first9Items, 8);
-    // Calculate 21-period EMA
-    let ema21Values = await ta.ema(first21Items, 21);
-    //send last item from the array
-    return [ema9Values[ema9Values.length-1], ema21Values[ema21Values.length-1]];
-  }
-  catch (error) {
-    console.error('Error:', error);
-    throw error; // Rethrow the error to be caught in the calling function
-  }
-}
 
 const ema9and21Values = async (params) => {
   try{
@@ -1647,6 +1748,56 @@ const ema9and21Values = async (params) => {
 
 }// to mins from 11 to 11:10 on Jan 16
   
+
+const ema9and21ValuesIndicators = async (params) => {
+  try{
+    const reply = await api.get_time_price_series(params);
+
+    // console.log(reply[0], ' : reply'); 
+    // Extract 'intc' prices into a new array
+    const intcPrices = reply.map(item => parseFloat(item.intc));
+    
+    //last 50 items
+    const first9Items = intcPrices.slice(0,80).reverse();
+    const first21Items = first9Items;
+
+    // console.log(first21Items)
+    //     [
+    //       22112,  22121.2,
+    //    22119.45,    22122,
+    //    22125.15,  22132.5,
+    //    22132.25, 22126.65,
+    //     22130.1
+    //  ]  : first9Items
+    //  [
+    //       22112,  22121.2, 22119.45,
+    //       22122, 22125.15,  22132.5,
+    //    22132.25, 22126.65,  22130.1,
+    //    22131.75,    22130,    22123,
+    //     22122.5,  22121.9,  22130.4,
+    //    22125.65,    22123,  22122.9,
+    //    22120.35,  22120.2,    22120
+    //  ]  : first21Items
+
+    const { Indicators } = require('@ixjb94/indicators');
+
+    // Sample financial data (replace this with your data)
+    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 75];
+    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 75];
+
+    // Calculate 9-period EMA
+    let ta = new Indicators();
+    let ema9Values = await ta.ema(first9Items, 8);
+    // Calculate 21-period EMA
+    let ema21Values = await ta.ema(first21Items, 21);
+    //send last item from the array
+    return [ema9Values[ema9Values.length-1], ema21Values[ema21Values.length-1]];
+  }
+  catch (error) {
+    console.error('Error:', error);
+    throw error; // Rethrow the error to be caught in the calling function
+  }
+}
 //
   // [
   //   {
@@ -1692,14 +1843,184 @@ const ema9and21Values = async (params) => {
   //     oi: '0'
   //   }
   // ]  : reply
+
+  const indexBasedEmaRecurringFunction = async () => {
+    try{
   
+      if (getAtmStrike()!= biasProcess.atmStrike){
+        resetBiasProcess();
+        await updateITMSymbolfromOC()
+      }
+      
+      
+      // FINNIFTY16JAN24C21450
+      // 21450.00
+      // FINNIFTY16JAN24P21450
+
+      // console.log(biasProcess.atmStrike)
+      // console.log(biasProcess.atmCallSymbol)
+      // console.log(biasProcess.atmCallStrikePrice)
+      // console.log(biasProcess.atmPutSymbol)
+      // console.log(biasProcess.atmPutStrikePrice) 
+
+
+      // Dynamically add a subscription after 10 seconds
+      atmCallSubStr = biasProcess.atmCallSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmCallSymbol)}` : '';
+      atmPutSubStr = biasProcess.atmPutSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmPutSymbol)}` : '';
+      dynamicallyAddSubscription(atmCallSubStr);
+      dynamicallyAddSubscription(atmPutSubStr);
+
+      
+      // console.log(`${biasProcess.atmCallSymbol}:`, latestQuotes[atmCallSubStr] ? latestQuotes[atmCallSubStr]?.lp : "N/A", "Order:", latestOrders[atmCallSubStr]);
+      // console.log(`${biasProcess.atmPutSymbol}:`, latestQuotes[atmPutSubStr] ? latestQuotes[atmPutSubStr]?.lp : "N/A", "Order:", latestOrders[atmPutSubStr]);
+
+      // console.log(latestQuotes[atmCallSubStr], 'atmCallSubStr');
+
+      // {
+      //   t: 'tf',
+      //   e: 'NFO',
+      //   tk: '45764',
+      //   lp: '21.55',
+      //   pc: '-70.09',
+      //   ft: '1705394694'
+      // } atmCallSubStr
+
+      // {
+      //   t: 'tk',
+      //   e: 'NFO',
+      //   tk: '45764',
+      //   ts: 'FINNIFTY16JAN24C21450',
+      //   pp: '2',
+      //   ls: '40',
+      //   ti: '0.05',
+      //   lp: '0.05',
+      //   pc: '-99.93',
+      //   c: '72.05',
+      //   ft: '1705402249',
+      //   o: '70.00',
+      //   h: '80.85',
+      //   l: '0.05',
+      //   ap: '18.51',
+      //   v: '1245198800',
+      //   oi: '11984440',
+      //   poi: '1510120',
+      //   bp1: '0.00',
+      //   sp1: '0.05',
+      //   bq1: '0',
+      //   sq1: '3521840'
+      // } atmCallSubStr
+
+      // values["uid"]       = self.__username;
+      //     values["exch"]      = params.exchange;
+      //     values["token"]     = params.token;          
+      //     values["st"]        = params.starttime;
+      //     if(params.endtime !== undefined)
+      //       values["et"]        = params.endtime;
+      //     if(params.interval !== undefined)
+      //       values["intrv"]     = params.interval;
+
+
+      // params = {
+      //   'exchange'   : 'NFO',
+      //   'token' : getTokenByTradingSymbol(biasProcess.atmCallSymbol),
+      //   'starttime'    : '1705383000',
+      //   'endtime' : new Date().getTime() / 1000,
+      //   'interval' : '1'
+      //   }
+
+
+
+      // Get current date and time in IST
+      const currentDateIST = new Date();
+
+      // Set the time to 2 o'clock
+      currentDateIST.setHours(0, 0, 0, 0);
+
+      // Subtract 5 day to get the 5 days earlier time
+      currentDateIST.setDate(currentDateIST.getDate() - 5);
+
+      // Get epoch time in milliseconds
+      const epochTime = currentDateIST.getTime();
+      epochTimeTrimmed = epochTime.toString().slice(0, -3);
+
+      // let callSymbolForEma = positionTaken? positionTakenInSymbol:biasProcess.atmCallSymbol;
+      // let putSymbolForEma = putpositionTaken? putpositionTakenInSymbol:biasProcess.atmPutSymbol;
+
+      params = {
+        'exchange'   : globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX',
+        'token' : globalInput.token,
+        'starttime'    : epochTimeTrimmed,
+        'interval' : '1'
+        }
+
+      // params2 = {
+      //   'exchange'   : globalInput.pickedExchange,
+      //   'token' : getTokenByTradingSymbol(putSymbolForEma),
+      //   'starttime'    : epochTimeTrimmed,
+      //   'interval' : '1'
+      //   }
+
+      try {
+        
+
+        // const [callema9, callema21] = await ema9and21Values(params); //call
+        // const [putema9, putema21] = await ema9and21Values(params2); //put
+        const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
+        // const [putema9, putema21] = await ema9and21ValuesIndicators(params2); //put
+
+        // callStr = callSymbolForEma+ ': ltp: '+ +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(callSymbolForEma)}`]?.lp + ' : c9, c21: '+ parseFloat(callema9).toFixed(2)+ ' ' + parseFloat(callema21).toFixed(2);
+        // putStr = putSymbolForEma+  ': ltp: '+ +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp + ' : p9, p21: '+ parseFloat(putema9).toFixed(2)+ ' ' + parseFloat(putema21).toFixed(2);
+
+        // send_notification(callStr)
+        // send_notification(putStr)
+        send_notification(globalInput.indexName+' ltp '+ +latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]?.lp + ', fastEMA '+ parseFloat(callema9).toFixed(2) + ', slowEMA ' + parseFloat(callema21).toFixed(2))
+
+
+        //send notification
+
+        // //buyer
+        await EMAcheckCrossOverExit(callema9, callema21)
+        // putcheckCrossOverExit(putema9, putema21)
+
+        // //seller
+        // sellercheckCrossOverExit(callema9, callema21)
+        // sellerputcheckCrossOverExit(putema9, putema21)
+        
+      } catch (error) {
+        console.error('Error:', error);
+      }
+      
+
+      
+      // Check a condition to determine whether to stop the recurring function
+      if (websocket_closed) {
+        clearInterval(intervalId);
+        // console.log(latestOrders, 'latestOrders')
+        // console.log('Recurring function stopped.');
+      }
+    } catch (error) {
+      // handle the exception locally
+      console.error("Child method encountered an exception:", error.message);
+      // optionally, rethrow the exception if needed
+      throw error;
+  }
+  }
+
+
   // updateEMA when atmStrike changes
 emaRecurringFunction = async () => {
     try{
   
       if (getAtmStrike()!= biasProcess.atmStrike){
         resetBiasProcess();
-        await updateITMSymbolfromOC()
+        await updateITMSymbolfromOC();
+        isCallATMchanged = '';
+        isPutATMchanged = '';
+
+        //TODO
+        //when ATM is changed and position is open, exit the open position
+        // if even on ATM option the EMA signal is green then take new position in ATM
+
       }
       
       // FINNIFTY16JAN24C21450
@@ -1780,50 +2101,54 @@ emaRecurringFunction = async () => {
 
 
       // Get current date and time in IST
-      // const currentDateIST = new Date();
+      const currentDateIST = new Date();
 
-      // // Set the time to 2 o'clock
-      // currentDateIST.setHours(2, 0, 0, 0);
+      // Set the time to 2 o'clock
+      currentDateIST.setHours(0, 0, 0, 0);
 
-      // // Subtract one day to get the previous day
-      // currentDateIST.setDate(currentDateIST.getDate() - 1);
+      // Subtract 5 day to get the 5 days earlier time
+      currentDateIST.setDate(currentDateIST.getDate() - 5);
 
-      // // Get epoch time in milliseconds
-      // const epochTime = currentDateIST.getTime();
+      // Get epoch time in milliseconds
+      const epochTime = currentDateIST.getTime();
+      epochTimeTrimmed = epochTime.toString().slice(0, -3);
 
       let callSymbolForEma = positionTaken? positionTakenInSymbol:biasProcess.atmCallSymbol;
-      // let putSymbolForEma = putpositionTaken? putpositionTakenInSymbol:biasProcess.atmPutSymbol;
-      
+      let putSymbolForEma = putpositionTaken? putpositionTakenInSymbol:biasProcess.atmPutSymbol;
+
       params = {
         'exchange'   : globalInput.pickedExchange,
-        'token' : globalInput.token,
-        'starttime'    : '1705383000',
-        'interval' : '3'
+        'token' : getTokenByTradingSymbol(callSymbolForEma),
+        'starttime'    : epochTimeTrimmed,
+        'interval' : '1'
         }
 
-      // params2 = {
-      //   'exchange'   : globalInput.pickedExchange,
-      //   'token' : getTokenByTradingSymbol(putSymbolForEma),
-      //   'starttime'    : '1705383000',
-      //   'interval' : '1'
-      //   }
+      params2 = {
+        'exchange'   : globalInput.pickedExchange,
+        'token' : getTokenByTradingSymbol(putSymbolForEma),
+        'starttime'    : epochTimeTrimmed,
+        'interval' : '1'
+        }
 
       try {
-        // const [callema9, callema21] = await ema9and21Values(params);
-        // console.log(callema9, callema21, ' : callema9, callema21')
-
-        const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
-        // const [putema9, putema21] = await ema9and21Values(params2); //put
-
-        send_notification('crudeoil: ltp '+ +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + ', ema9 '+ parseFloat(callema9).toFixed(2) + ', ema21 ' + parseFloat(callema21).toFixed(2))
-        // console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
         
+
+        // const [callema9, callema21] = await ema9and21Values(params); //call
+        // const [putema9, putema21] = await ema9and21Values(params2); //put
+        const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
+        const [putema9, putema21] = await ema9and21ValuesIndicators(params2); //put
+
+        callStr = callSymbolForEma+ ': ltp: '+ +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(callSymbolForEma)}`]?.lp + ' : c9, c21: '+ parseFloat(callema9).toFixed(2)+ ' ' + parseFloat(callema21).toFixed(2);
+        putStr = putSymbolForEma+  ': ltp: '+ +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp + ' : p9, p21: '+ parseFloat(putema9).toFixed(2)+ ' ' + parseFloat(putema21).toFixed(2);
+
+        send_notification(callStr)
+        send_notification(putStr)
+
         //send notification
 
         // //buyer
-        await sellercrudecheckCrossOverExit(callema9, callema21)
-        // await crudecheckCrossOverExit(callema9, callema21)
-        // await crudecheckCrossOverExit(putema9, putema21)
+        checkCrossOverExit(callema9, callema21)
+        putcheckCrossOverExit(putema9, putema21)
 
         // //seller
         // sellercheckCrossOverExit(callema9, callema21)
@@ -1858,23 +2183,18 @@ emaRecurringFunction = async () => {
       }
     }
 
+
+
+    
+
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
 getEma = async () => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
-
-  //exit in the night and stop process.
-  if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,47,false))
-  {
-    await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    process.exit(0)
-  }
-
-
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     try {
-      await emaRecurringFunction();
+      await indexBasedEmaRecurringFunction();
     } catch (error) {
         console.error("Error occured: " + error);
         // send_notification("Error occured: " + error)
@@ -1883,27 +2203,38 @@ getEma = async () => {
   }
 }
 
-const setNearestCrudeFutureToken = async () => {
-
-  let query = `CRUDEOIL`;
-  let futureObj = await api.searchscrip(exchange='MCX', searchtext=query)
-  let futureToken = futureObj.values[3].token; //258003 //3 as it skips crudeoil, crudeoilm and its future
-  globalInput.token = futureToken;
-
-  // console.log(globalInput.token, 'token')
-  
-}
-runEma = async () => {
-  try{
+const runEma = async () => {
+  try {
     await executeLogin();
-    await setNearestCrudeFutureToken();
-    await send_callback_notification();
     await startWebsocket();
+    await send_callback_notification();
     await updateITMSymbolfromOC();
-    intervalId = setInterval(getEma, 1000);
-  }catch (error) {
-    console.log( error)
+
+    if (telegramSignals.isPlaying) {
+      intervalIdForEMA = setInterval(getEma, delayForEMA);
+    }
+
+  } catch (error) {
+    console.log(error);
   }
+};
+
+// Function to pause the EMA calculations
+const pauseEma = () => {
+  if (telegramSignals.isPlaying) {
+    console.log("#########################pausing")
+    clearInterval(intervalIdForEMA);
+    telegramSignals.isPlaying = false;
   }
+};
+
+// Function to resume the EMA calculations
+const resumeEma = () => {
+  if (!telegramSignals.isPlaying) {
+    console.log("#########################resuming")
+    intervalIdForEMA = setInterval(getEma, delayForEMA);
+    telegramSignals.isPlaying = true;
+  }
+};
 
 runEma();
