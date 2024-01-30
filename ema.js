@@ -1415,7 +1415,7 @@ let putpositionTakenInSymbol = '';
 let prevEma9LessThanEma21 = ''
 let crossedUp = ''
 
-const magicNumber = 300;
+const magicNumber = 500;
 let targetPrice = 0;
 
 async function EMAcheckCrossOverExit(ema9, ema21) {
