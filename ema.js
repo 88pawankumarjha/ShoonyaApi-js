@@ -51,7 +51,7 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 2,
+  emaLotMultiplier: 4,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
