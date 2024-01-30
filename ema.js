@@ -1416,7 +1416,7 @@ let prevEma9LessThanEma21 = ''
 let crossedUp = ''
 
 const magicNumber = 500;
-let targetPrice = 0;
+let targetPrice = +magicNumber/+globalInput.LotSize;
 
 async function EMAcheckCrossOverExit(ema9, ema21) {
 
@@ -1438,7 +1438,7 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
         // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
         // dynamicallyAddSubscription(subStr);
 
-        nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+        nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, +targetPrice)
   
         // Dynamically add a subscription
         subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
@@ -1457,7 +1457,7 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
         // Dynamically add a subscription
         // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
         // dynamicallyAddSubscription(subStr);
-        nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+        nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, +targetPrice)
   
         // Dynamically add a subscription
         subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
@@ -1479,7 +1479,7 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
           // // Dynamically add a subscription
           // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
           // dynamicallyAddSubscription(subStr);
-          nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
+          nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, +targetPrice)
   
           // Dynamically add a subscription
           subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
@@ -1499,7 +1499,7 @@ async function EMAcheckCrossOverExit(ema9, ema21) {
           // subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestCE)}`;
           // dynamicallyAddSubscription(subStr);
           
-        nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
+        nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, +targetPrice)
   
         // Dynamically add a subscription
         subStr = `${globalInput.pickedExchange}|${getTokenByTradingSymbol(nearestPE)}`;
@@ -2035,7 +2035,6 @@ emaRecurringFunction = async () => {
       if (getAtmStrike()!= biasProcess.atmStrike){
         resetBiasProcess();
         await updateITMSymbolfromOC();
-        targetPrice = magicNumber/Math.abs(+smallestCallPosition?.ls)
         isCallATMchanged = '';
         isPutATMchanged = '';
 
