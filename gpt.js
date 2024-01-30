@@ -440,7 +440,7 @@ postOrderPosTracking = () => {
     //todo verify this before &&
     positionProcess.posCallSubStr && dynamicallyAddSubscription(positionProcess.posCallSubStr);
     // Update put position subscription
-    positionProcess.posPutSubStr = biasProcess.smallestPutPosition?.tsym ? `NFO|${getTokenByTradingSymbol(biasProcess.smallestPutPosition.tsym)}` : '';
+    positionProcess.posPutSubStr = positionProcess.smallestPutPosition?.tsym ? `NFO|${getTokenByTradingSymbol(positionProcess.smallestPutPosition.tsym)}` : '';
     //todo verify this before &&
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
 }

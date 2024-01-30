@@ -472,7 +472,7 @@ postOrderPosTracking = (data) => {
     //todo verify this before &&
     positionProcess.posCallSubStr && dynamicallyAddSubscription(positionProcess.posCallSubStr);
     // Update put position subscription
-    positionProcess.posPutSubStr = biasProcess.smallestPutPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.smallestPutPosition.tsym)}` : '';
+    positionProcess.posPutSubStr = positionProcess.smallestPutPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionProcess.smallestPutPosition.tsym)}` : '';
     //todo verify this before &&
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
 
@@ -1778,18 +1778,18 @@ emaRecurringFunction = async () => {
       //   }
 
 
-
       // Get current date and time in IST
-      // const currentDateIST = new Date();
+      const currentDateIST = new Date();
 
-      // // Set the time to 2 o'clock
-      // currentDateIST.setHours(2, 0, 0, 0);
+      // Set the time to 2 o'clock
+      currentDateIST.setHours(0, 0, 0, 0);
 
-      // // Subtract one day to get the previous day
-      // currentDateIST.setDate(currentDateIST.getDate() - 1);
+      // Subtract 5 day to get the 5 days earlier time
+      currentDateIST.setDate(currentDateIST.getDate() - 5);
 
-      // // Get epoch time in milliseconds
-      // const epochTime = currentDateIST.getTime();
+      // Get epoch time in milliseconds
+      const epochTime = currentDateIST.getTime();
+      epochTimeTrimmed = epochTime.toString().slice(0, -3);
 
       let callSymbolForEma = positionTaken? positionTakenInSymbol:biasProcess.atmCallSymbol;
       // let putSymbolForEma = putpositionTaken? putpositionTakenInSymbol:biasProcess.atmPutSymbol;
@@ -1797,7 +1797,7 @@ emaRecurringFunction = async () => {
       params = {
         'exchange'   : globalInput.pickedExchange,
         'token' : globalInput.token,
-        'starttime'    : '1705383000',
+        'starttime'    : epochTimeTrimmed,
         'interval' : '3'
         }
 
@@ -1821,8 +1821,8 @@ emaRecurringFunction = async () => {
         //send notification
 
         // //buyer
-        // await sellercrudecheckCrossOverExit(callema9, callema21)
-        await crudecheckCrossOverExit(callema9, callema21)
+        await sellercrudecheckCrossOverExit(callema9, callema21)
+        // await crudecheckCrossOverExit(callema9, callema21)
         // await crudecheckCrossOverExit(putema9, putema21)
 
         // //seller
