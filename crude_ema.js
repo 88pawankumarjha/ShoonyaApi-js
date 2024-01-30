@@ -1293,6 +1293,57 @@ let positionTakenInSymbol = '';
 let prevEma9LessThanEma21 = ''
 let crossedUp = ''
 
+async function sellercrudecheckCrossOverExit(ema9, ema21) {
+  if (prevEma9LessThanEma21 === '') {
+    prevEma9LessThanEma21 = ema9 < ema21;
+    crossedUp = ema9 > ema21;
+    send_notification('first prevEma9LessThanEma21 stored for reference as '+ prevEma9LessThanEma21);
+  }
+  else if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
+      send_notification("Cross over detected. Take call position." + new Date());
+      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = biasProcess.atmPutSymbol;
+      positionTaken = true;
+      prevEma9LessThanEma21 = ema9 < ema21;
+      crossedUp = ema9 > ema21;
+      // Place your position-taking logic here
+  } else if (!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) {
+      send_notification("Cross over detected. Take put position." + new Date());
+      await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = biasProcess.atmCallSymbol;
+      positionTaken = true;
+      prevEma9LessThanEma21 = ema9 < ema21;
+      crossedUp = ema9 > ema21;
+  }
+  else if (positionTaken) {
+      if(crossedUp && ema9 < ema21){
+        // exitLong addshort
+        await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.atmCallSymbol;
+        positionTaken = true;
+        prevEma9LessThanEma21 = ema9 < ema21;
+        crossedUp = ema9 > ema21;
+      
+      } else if (!crossedUp && ema9 > ema21){
+        // exitShort addLong
+        await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.atmPutSymbol;
+        positionTaken = true;
+        prevEma9LessThanEma21 = ema9 < ema21;
+        crossedUp = ema9 > ema21;
+      }
+  } else {
+      console.log("No signal detected."+ new Date());
+      // Additional logic if needed
+  }
+  positionTakenInSymbol && send_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
+  //send notification
+  prevEma9LessThanEma21 = ema9 < ema21;
+  crossedUp = ema9 > ema21;
+}
+
 async function crudecheckCrossOverExit(ema9, ema21) {
   if (prevEma9LessThanEma21 === '') {
     prevEma9LessThanEma21 = ema9 < ema21;
@@ -1770,6 +1821,7 @@ emaRecurringFunction = async () => {
         //send notification
 
         // //buyer
+        // await sellercrudecheckCrossOverExit(callema9, callema21)
         await crudecheckCrossOverExit(callema9, callema21)
         // await crudecheckCrossOverExit(putema9, putema21)
 
