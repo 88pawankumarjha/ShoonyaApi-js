@@ -413,7 +413,8 @@ updatePositions = async => {
                 const puts = data.filter(option => parseInt(option.netqty) < 0 && option.tsym.match(/P\d+$/));
                 positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
                 positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
-                send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
+                // send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
+                console.log('positionsData: '+data)
                 debug && console.log(positionProcess, ' : positionProcess');    
             } else {
                 console.error('positions data is not an array.');
