@@ -1461,10 +1461,10 @@ const emaMonitorATMs = async () => {
 //   longPositionTaken = false;
 // }, 35000);
 
-const takeLong = async (full=false) => {
+const takeLong = async (full=false, shortOnly=false) => {
   // full ? exit short position if any and take long : exit short if any
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  if(positionProcess.smallestCallPosition?.tsym) {
+  if(!shortOnly && positionProcess.smallestCallPosition?.tsym) {
     order = {
       buy_or_sell: 'B',
       product_type: 'M',
@@ -1496,10 +1496,10 @@ const takeLong = async (full=false) => {
   }
 }
 
-const takeShort = async (full=false) => {
+const takeShort = async (full=false, shortOnly=false) => {
   // full ? exit long position if any and take short : exit long if any
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  if(positionProcess.smallestPutPosition?.tsym) {
+  if(!shortOnly && positionProcess.smallestPutPosition?.tsym) {
     order = {
       buy_or_sell: 'B',
       product_type: 'M',
@@ -1544,6 +1544,20 @@ const triggerATMChangeActions = async () => {
 }
 
 async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {
+
+    if(longPositionTaken && shortPositionTaken){
+      if(emaMonitorCallUp || emaMonitorPutUp){  
+        triggerATMChangeActions();
+      }
+    }
+    if(!emaMonitorCallUp && !emaMonitorPutUp){
+      //take both short positions
+      await takeLong(true, true)
+      await takeShort(true, true);
+      longPositionTaken = true;
+      shortPositionTaken = true;
+    }
+    
     if (emaMonitorCallUp && !longPositionTaken) {
       await takeLong(true)
       longPositionTaken = true;
@@ -1565,6 +1579,8 @@ async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {
     else {
       console.log("No action taken on short side");
     }
+
+    
 }
 
 const optionBasedEmaRecurringFunction = async () => {
