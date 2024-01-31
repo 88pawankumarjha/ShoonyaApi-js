@@ -1474,8 +1474,8 @@ const takeLong = async (full=false) => {
       price: 0,
       remarks: 'API'
     }
-    // await api.place_order(order);
-    console.log(order)
+    await api.place_order(order);
+    // console.log(order)
   }
   if(full){
     order = {
@@ -1489,8 +1489,8 @@ const takeLong = async (full=false) => {
       price: 0,
       remarks: 'API'
     }
-    // await api.place_order(order);
-    console.log(order)
+    await api.place_order(order);
+    // console.log(order)
   }
 }
 
