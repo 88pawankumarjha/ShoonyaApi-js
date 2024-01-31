@@ -22,11 +22,11 @@ const { parse } = require('papaparse');
 const moment = require('moment');
 const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
   identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium } = require('./utils/customLibrary');
-// let { authparams } = require("./creds");
-let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
-const TelegramBot = require('node-telegram-bot-api');
-const bot = new TelegramBot(telegramBotToken, { polling: true });
-const send_notification = async (message, me = false) => (message && console.log(message)) || (!debug && message && await bot.sendMessage((me && !telegramSignals.stopSignal) ? chat_id_me : chat_id, (me && !telegramSignals.stopSignal) ? message : message.replace(/\) /g, ")\n")).catch(console.error));
+let { authparams } = require("./creds");
+// let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
+// const TelegramBot = require('node-telegram-bot-api');
+// const bot = new TelegramBot(telegramBotToken, { polling: true });
+// const send_notification = async (message, me = false) => (message && console.log(message)) || (!debug && message && await bot.sendMessage((me && !telegramSignals.stopSignal) ? chat_id_me : chat_id, (me && !telegramSignals.stopSignal) ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 
 let globalBigInput = {
   filteredIndexCSV: undefined
@@ -269,44 +269,44 @@ const getAtmStrike = () => {
 }
 
 // telegram callbackQuery
-async function send_callback_notification() {
-    try {
-        const keyboard = {inline_keyboard: [[
-                // { text: '🐌', callback_data: 'slower' },
-                // { text: '🚀', callback_data: 'faster' },
-                // { text: '💹', callback_data: 'toggleExchange' },
-                { text: '⏸', callback_data: 'isPlayingSignal' },
-                // { text: '🛑', callback_data: 'exit' }
-              ]]};
-      !debug && bot.sendMessage(chat_id_me, 'Choose server settings', { reply_markup: keyboard });
-    } catch (error) { console.error(error);
-      send_notification(error + ' error occured', true)
-    }
-  }
-  bot.on('callback_query', (callbackQuery) => {
-    const chatId = callbackQuery.message.chat.id;
-    const data = callbackQuery.data;
-    const exchange = globalInput.pickedExchange;
-    // if (data === 'slower') setCustomInterval(true);
-    // else if (data === 'faster') setCustomInterval(false);
-    // else if (data === 'stop') stopSignal = !stopSignal;
+// async function send_callback_notification() {
+//     try {
+//         const keyboard = {inline_keyboard: [[
+//                 // { text: '🐌', callback_data: 'slower' },
+//                 // { text: '🚀', callback_data: 'faster' },
+//                 // { text: '💹', callback_data: 'toggleExchange' },
+//                 { text: '⏸', callback_data: 'isPlayingSignal' },
+//                 // { text: '🛑', callback_data: 'exit' }
+//               ]]};
+//       !debug && bot.sendMessage(chat_id_me, 'Choose server settings', { reply_markup: keyboard });
+//     } catch (error) { console.error(error);
+//       // send_notification(error + ' error occured', true)
+//     }
+//   }
+//   bot.on('callback_query', (callbackQuery) => {
+//     const chatId = callbackQuery.message.chat.id;
+//     const data = callbackQuery.data;
+//     const exchange = globalInput.pickedExchange;
+//     // if (data === 'slower') setCustomInterval(true);
+//     // else if (data === 'faster') setCustomInterval(false);
+//     // else if (data === 'stop') stopSignal = !stopSignal;
 
-    // telegramSignals = {
-    //   stopSignal: false,
-    //   exitSignal: false,
-    //   slower: false,
-    //   faster: false,
-    // }
-    if (data === 'isPlayingSignal') {
-      if(telegramSignals.isPlaying){pauseEma()}
-      else {resumeEma()}
-    }
-    if (data === 'exit') telegramSignals.exitSignal = true;
-    if (data === 'stop') telegramSignals.stopSignal = !telegramSignals.stopSignal;
-    else if (data === 'toggleExchange') globalInput.pickedExchange = (globalInput.pickedExchange === 'NFO' ? 'BFO' : globalInput.pickedExchange === 'BFO' ? 'MCX' : 'NFO');
-    // bot.sendMessage(chatId, `Exchange: ${globalInput.pickedExchange}, Paused: ${telegramSignals.stopSignal} - pause, exit, slower, faster are not implemented`);
-    bot.sendMessage(chatId, `EMA isPlaying: ${telegramSignals.isPlaying}`);
-  });
+//     // telegramSignals = {
+//     //   stopSignal: false,
+//     //   exitSignal: false,
+//     //   slower: false,
+//     //   faster: false,
+//     // }
+//     if (data === 'isPlayingSignal') {
+//       if(telegramSignals.isPlaying){pauseEma()}
+//       else {resumeEma()}
+//     }
+//     if (data === 'exit') telegramSignals.exitSignal = true;
+//     if (data === 'stop') telegramSignals.stopSignal = !telegramSignals.stopSignal;
+//     else if (data === 'toggleExchange') globalInput.pickedExchange = (globalInput.pickedExchange === 'NFO' ? 'BFO' : globalInput.pickedExchange === 'BFO' ? 'MCX' : 'NFO');
+//     // bot.sendMessage(chatId, `Exchange: ${globalInput.pickedExchange}, Paused: ${telegramSignals.stopSignal} - pause, exit, slower, faster are not implemented`);
+//     bot.sendMessage(chatId, `EMA isPlaying: ${telegramSignals.isPlaying}`);
+//   });
 
 // login method
 const { spawn } = require('child_process');
@@ -413,7 +413,7 @@ updatePositions = async => {
                 const puts = data.filter(option => parseInt(option.netqty) < 0 && option.tsym.match(/P\d+$/));
                 positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
                 positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
-                send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
+                console.log('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
                 debug && console.log(positionProcess, ' : positionProcess');    
             } else {
                 console.error('positions data is not an array.');
@@ -478,7 +478,7 @@ postOrderPosTracking = (data) => {
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
     console.log('order placed: ', data)
     str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc + ' ' + data?.status == 'REJECTED' ? data?.rejreason: '';
-    send_notification(str, true)
+    console.log(str, true)
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -1171,7 +1171,7 @@ async function checkAlert() {
     resStr += `\nPE: ${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`;
     }
     // resStr += (pExtraVars.length !== 0) ? `\nPE: ${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}` : '';
-    // send_notification(resStr);
+    // console.log(resStr);
     resStr = '';
 
     if (parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {
@@ -1181,7 +1181,7 @@ async function checkAlert() {
 //      vix high or early morning then move away
 //      vix low or not early morning then move closer
         if((up && biasOutput.bias > 0) || (!up && biasOutput.bias < 0) || trendingUp || trendingDown ){
-            // send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX ${biasProcess.vix}%, Bias ${biasOutput.bias}, 
+            // console.log(`Going ${up ? 'UP':'DOWN️'}, VIX ${biasProcess.vix}%, Bias ${biasOutput.bias}, 
             //     \nCE: ${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}\nPE: ${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}
             //     \n3:05pm-2distance, 2:40-3, 1:40-4, 12:40-5, 11:40-6, 10:40-7, 9:40-8, 9:18-9`, true);
             await takeAction(up)
@@ -1440,7 +1440,7 @@ const emaMonitorATMs = async () => {
       }
     const [callema9, callema21] = await ema9and21ValuesIndicators(paramsCall);
     const [putema9, putema21] = await ema9and21ValuesIndicators(paramsPut);
-    send_notification("EmaMonitorCallPutFastSlow: " + callema9 + ' ' + callema21 + ' ' + putema9 + ' ' + putema21)
+    console.log("EmaMonitorCallPutFastSlow: " + callema9 + ' ' + callema21 + ' ' + putema9 + ' ' + putema21)
     emaUpCall = callema9 > callema21 
     emaUpPut = putema9 > putema21
     return [emaUpCall, emaUpPut];
@@ -1582,7 +1582,7 @@ getEma = async () => {
       await optionBasedEmaRecurringFunction();
     } catch (error) {
         console.error("Error occured: " + error);
-        send_notification("Error occured: " + error)
+        console.log("Error occured: " + error)
         // getBias();
     }
   }
@@ -1592,7 +1592,7 @@ const runEma = async () => {
   try {
     await executeLogin();
     await startWebsocket();
-    await send_callback_notification();
+    // await send_callback_notification();
     await updateITMSymbolfromOC();
     if (telegramSignals.isPlaying) {
       intervalIdForEMA = setInterval(getEma, delayForEMA);
