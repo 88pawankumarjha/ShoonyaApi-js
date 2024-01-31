@@ -477,8 +477,8 @@ postOrderPosTracking = async (data) => {
     positionProcess.posPutSubStr = positionProcess.smallestPutPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionProcess.smallestPutPosition.tsym)}` : '';
     
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
-    console.log('order placed: ', data)
-    str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc + ' ' + data?.status == 'REJECTED' ? data?.rejreason: '';
+    // console.log('order placed: ', data)
+    str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc + ' '+ new Date();
     send_notification(str, true)
 }
 
@@ -1138,11 +1138,11 @@ async function takeAction(goingUp) {
     }
 
     if(goingUp && !telegramSignals.stopSignal && !debug) {
-        await api.place_order(orderCE);
-        biasProcess.vix > 0 ? await api.place_order(orderSubmissiveCE) : await api.place_order(orderAggressiveCE);
+        // await api.place_order(orderCE);
+        // biasProcess.vix > 0 ? await api.place_order(orderSubmissiveCE) : await api.place_order(orderAggressiveCE);
     }else if (!goingUp && !telegramSignals.stopSignal && !debug){
-        await api.place_order(orderPE);
-        biasProcess.vix > 0 ? await api.place_order(orderSubmissivePE) : await api.place_order(orderAggressivePE);
+        // await api.place_order(orderPE);
+        // biasProcess.vix > 0 ? await api.place_order(orderSubmissivePE) : await api.place_order(orderAggressivePE);
     }
     // console.log(orderCE, 'orderCE')
     // console.log(orderPE, 'orderPE')
@@ -1534,52 +1534,58 @@ const takeShort = async (full=false, shortOnly=false) => {
 
 let longPositionTaken = false; // Variable to track long position status
 let shortPositionTaken = false; // Variable to track short position status
+let bothPositionsTaken = false; // Variable to track short position status
 
 const triggerATMChangeActions = async () => {
   //exit positions
-  await takeShort(false); // not full only exit long
+  await takeShort(false, false); // not full only exit long
   longPositionTaken = false;
-  await takeLong(false);
+  await takeLong(false, false);
   shortPositionTaken = false;
 }
 
 async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {
 
-    // if(longPositionTaken && shortPositionTaken){
-    //   if(emaMonitorCallUp || emaMonitorPutUp){  
-    //     triggerATMChangeActions();
-    //   }
-    // }
-    // if(!emaMonitorCallUp && !emaMonitorPutUp){
-    //   //take both short positions
-    //   await takeLong(true, true)
-    //   await takeShort(true, true);
-    //   longPositionTaken = true;
-    //   shortPositionTaken = true;
-    // }
-    
-    if (emaMonitorCallUp && !longPositionTaken) {
-      await takeLong(true)
-      longPositionTaken = true;
-    } else if (!emaMonitorCallUp && longPositionTaken) {
-      await takeShort(false); // not full only exit long
-      longPositionTaken = false;
+    if(bothPositionsTaken){
+      if(emaMonitorCallUp || emaMonitorPutUp){  
+        await triggerATMChangeActions();
+        bothPositionsTaken = false;
+        send_notification('exiting from both positions',true)
+      }
     }
-    else {
-      console.log("No action taken on long side");
-    }
-    
-    if (emaMonitorPutUp && !shortPositionTaken) {
-      await takeShort(true);
+    if(!bothPositionsTaken && !emaMonitorCallUp && !emaMonitorPutUp){
+      //take both short positions
+      await triggerATMChangeActions();
+      await takeLong(true, true)
+      await takeShort(true, true);
+      bothPositionsTaken = true;
       shortPositionTaken = true;
-    } else if (!emaMonitorPutUp && shortPositionTaken) {
-      await takeLong(false);
-      shortPositionTaken = false;
+      longPositionTaken = true;
+      send_notification('entering both positions',true)
     }
-    else {
-      console.log("No action taken on short side");
+    
+    if(!bothPositionsTaken){
+      if (emaMonitorCallUp && !longPositionTaken) {
+        await takeLong(true)
+        longPositionTaken = true;
+        send_notification('entering long positions',true)
+      } else if (!emaMonitorCallUp && longPositionTaken) {
+        await takeShort(false); // not full only exit long
+        longPositionTaken = false;
+        send_notification('exiting long positions',true)
+      }
+      
+      if (emaMonitorPutUp && !shortPositionTaken) {
+        await takeShort(true);
+        shortPositionTaken = true;
+        send_notification('entering short positions',true)
+      } else if (!emaMonitorPutUp && shortPositionTaken) {
+        await takeLong(false);
+        shortPositionTaken = false;
+        send_notification('exiting short positions',true)
+      }
     }
-
+    send_notification("State longPositionTaken shortPositionTaken bothPositionsTaken: " + longPositionTaken + ' ' + shortPositionTaken + ' ' + bothPositionsTaken)
     
 }
 
