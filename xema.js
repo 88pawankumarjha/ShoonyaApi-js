@@ -1545,18 +1545,18 @@ const triggerATMChangeActions = async () => {
 
 async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {
 
-    if(longPositionTaken && shortPositionTaken){
-      if(emaMonitorCallUp || emaMonitorPutUp){  
-        triggerATMChangeActions();
-      }
-    }
-    if(!emaMonitorCallUp && !emaMonitorPutUp){
-      //take both short positions
-      await takeLong(true, true)
-      await takeShort(true, true);
-      longPositionTaken = true;
-      shortPositionTaken = true;
-    }
+    // if(longPositionTaken && shortPositionTaken){
+    //   if(emaMonitorCallUp || emaMonitorPutUp){  
+    //     triggerATMChangeActions();
+    //   }
+    // }
+    // if(!emaMonitorCallUp && !emaMonitorPutUp){
+    //   //take both short positions
+    //   await takeLong(true, true)
+    //   await takeShort(true, true);
+    //   longPositionTaken = true;
+    //   shortPositionTaken = true;
+    // }
     
     if (emaMonitorCallUp && !longPositionTaken) {
       await takeLong(true)
