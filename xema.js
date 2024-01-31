@@ -1055,7 +1055,7 @@ async function takeAction(goingUp) {
 
     let orderCE = {
         buy_or_sell: 'B',
-        product_type: 'I',
+        product_type: 'M',
         exchange: globalInput.pickedExchange,
         tradingsymbol: positionProcess.smallestCallPosition?.tsym,
         quantity: Math.abs(positionProcess.smallestCallPosition?.netqty).toString(),
@@ -1068,7 +1068,7 @@ async function takeAction(goingUp) {
 
     let orderPE = {
         buy_or_sell: 'B',
-        product_type: 'I',
+        product_type: 'M',
         exchange: globalInput.pickedExchange,
         tradingsymbol: positionProcess.smallestPutPosition?.tsym,
         quantity: Math.abs(positionProcess.smallestPutPosition?.netqty).toString(),
@@ -1089,7 +1089,7 @@ async function takeAction(goingUp) {
 
     let orderAggressiveCE = {
         buy_or_sell: 'S',
-        product_type: 'I',
+        product_type: 'M',
         exchange: globalInput.pickedExchange,
         tradingsymbol: orderAggressiveCallPosition,
         quantity: Math.abs(+positionProcess.smallestCallPosition?.netqty + +positionProcess.smallestCallPosition?.ls).toString(),
@@ -1101,7 +1101,7 @@ async function takeAction(goingUp) {
 
     let orderSubmissiveCE = {
         buy_or_sell: 'S',
-        product_type: 'I',
+        product_type: 'M',
         exchange: globalInput.pickedExchange,
         tradingsymbol: orderSubmissiveCallPosition,
         quantity: Math.abs(+positionProcess.smallestCallPosition?.netqty + +positionProcess.smallestCallPosition?.ls).toString(),
@@ -1113,7 +1113,7 @@ async function takeAction(goingUp) {
 
     let orderAggressivePE = {
         buy_or_sell: 'S',
-        product_type: 'I',
+        product_type: 'M',
         exchange: globalInput.pickedExchange,
         tradingsymbol: orderAggressivePutPosition,
         quantity: Math.abs(+positionProcess.smallestPutPosition?.netqty + +positionProcess.smallestPutPosition?.ls).toString(),
@@ -1125,7 +1125,7 @@ async function takeAction(goingUp) {
 
     let orderSubmissivePE = {
         buy_or_sell: 'S',
-        product_type: 'I',
+        product_type: 'M',
         exchange: globalInput.pickedExchange,
         tradingsymbol: orderSubmissivePutPosition,
         quantity: Math.abs(+positionProcess.smallestPutPosition?.netqty + +positionProcess.smallestPutPosition?.ls).toString(),
@@ -1465,7 +1465,7 @@ const takeLong = async (full=false) => {
   if(positionProcess.smallestCallPosition?.tsym) {
     order = {
       buy_or_sell: 'B',
-      product_type: 'I',
+      product_type: 'M',
       exchange: globalInput.pickedExchange,
       tradingsymbol: positionProcess.smallestCallPosition?.tsym,
       quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
@@ -1480,7 +1480,7 @@ const takeLong = async (full=false) => {
   if(full){
     order = {
       buy_or_sell: 'S',
-      product_type: 'I',
+      product_type: 'M',
       exchange: globalInput.pickedExchange,
       tradingsymbol: biasProcess.otmPutSymbol,
       quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
@@ -1500,7 +1500,7 @@ const takeShort = async (full=false) => {
   if(positionProcess.smallestPutPosition?.tsym) {
     order = {
       buy_or_sell: 'B',
-      product_type: 'I',
+      product_type: 'M',
       exchange: globalInput.pickedExchange,
       tradingsymbol: positionProcess.smallestPutPosition?.tsym,
       quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
@@ -1515,7 +1515,7 @@ const takeShort = async (full=false) => {
   if(full){
     order = {
       buy_or_sell: 'S',
-      product_type: 'I',
+      product_type: 'M',
       exchange: globalInput.pickedExchange,
       tradingsymbol: biasProcess.otmCallSymbol,
       quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
