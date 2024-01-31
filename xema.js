@@ -1439,7 +1439,7 @@ const emaMonitorATMs = async () => {
       }
     const [callema9, callema21] = await ema9and21ValuesIndicators(paramsCall);
     const [putema9, putema21] = await ema9and21ValuesIndicators(paramsPut);
-
+    send_notification("EmaMonitorCallPutFastSlow: " + callema9 + ' ' + callema21 + ' ' + putema9 + ' ' + putema21)
     emaUpCall = callema9 > callema21 
     emaUpPut = putema9 > putema21
     return [emaUpCall, emaUpPut];
