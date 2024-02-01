@@ -21,7 +21,7 @@ const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
 const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
-  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium } = require('./utils/customLibrary');
+  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, calcPnL } = require('./utils/customLibrary');
 // let { authparams } = require("./creds");
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
@@ -401,7 +401,7 @@ const resetPuts = () => {
 // !debug && await api.place_order(orderCE);
 
 
-updatePositions = async => {
+updatePositions = async () => {
     api.get_positions()
         .then((data) => { 
             debug && console.log(data, ' : positions data');
@@ -423,7 +423,6 @@ updatePositions = async => {
                 try{
                   const targetPositioncallMtoM = data.find(position => position.tsym === positionProcess.smallestCallPosition?.tsym)?.urmtom;
                   const targetPositionputMtoM = data.find(position => position.tsym === positionProcess.smallestPutPosition?.tsym)?.urmtom;
-                  send_notification('MtoMs call put : ' + targetPositioncallMtoM + ' + ' + targetPositionputMtoM + ' = ' + (+targetPositioncallMtoM + +targetPositionputMtoM), true)
                 }catch(error){
                   console.log(error)
                 }
@@ -480,6 +479,10 @@ updateTwoSmallestPositionsAndNeighboursSubs = async (autoSubs = true) => {
 
 
 postOrderPosTracking = async (data) => {
+    
+    pnl = await calcPnL(api);
+    send_notification('PnL : ' + pnl, true)
+    
     await updateTwoSmallestPositionsAndNeighboursSubs(false);
     // Update call position subscription
     positionProcess.posCallSubStr = positionProcess.smallestCallPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionProcess.smallestCallPosition.tsym)}` : '';
@@ -490,7 +493,7 @@ postOrderPosTracking = async (data) => {
     
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
     // console.log('order placed: ', data)
-    str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc + ' '+ new Date();
+    str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc;
     send_notification(str, true)
 }
 

@@ -23,6 +23,17 @@ module.exports.calcVix = async (api) => {
   return parseFloat((((vixQuote?.lp - vixQuote?.c)/vixQuote?.c)*100) || 1).toFixed(2) || 1;
 }
 
+module.exports.calcPnL = async (api) => {
+const positions = await api.get_positions();
+const total_pnl = positions.reduce((acc, pos) => {
+  const ur_mtm = parseFloat(pos.urmtom);
+  const r_pnl = parseFloat(pos.rpnl);
+  return acc + ur_mtm + r_pnl;
+}, 0);
+return total_pnl;
+};
+
+
 const getStrike = (tsym, pickedExchange) => {
   if (pickedExchange === 'NFO'){//BANKNIFTY22NOV23C43800, FINNIFTY28NOV23C19300, NIFTY23NOV23C19750
           return +tsym.slice(-5);

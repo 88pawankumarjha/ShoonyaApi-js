@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const { telegramBotToken } = require('../creds');
 const { chat_id_me } = require('../creds');
 const { chat_id } = require('../creds');
-const { isTimeEqualsNotAfterProps, identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByTsymPutAgg, nearByTsymPutSub, nearByTsymCallAgg, nearByTsymCallSub, nearByPositions } = require('./customLibrary');
+const { isTimeEqualsNotAfterProps, identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByTsymPutAgg, nearByTsymPutSub, nearByTsymCallAgg, nearByTsymCallSub, nearByPositions, calcPnL } = require('./customLibrary');
 let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
@@ -362,7 +362,9 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
     }
 
     
-
+    pnl = await calcPnL(api);
+    send_notification('PnL : ' + pnl, true)
+    
     //send distance and MtoM
     // await updatePositions(api);
     // putStrike = getStrike(smallestPutPosition?.tsym, getPickedExchange())
