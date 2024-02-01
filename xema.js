@@ -32,6 +32,7 @@ let globalBigInput = {
   filteredIndexCSV: undefined
 }
 getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
+getEMAQtyFor2L = () => debug ? 100 : [100, 60, 80, 60, 100, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
 let telegramSignals = {
   stopSignal: false,
   exitSignal: false,
@@ -52,7 +53,8 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 2,
+  emaLotMultiplier: undefined,
+  emaLotMultiplierQty: getEMAQtyFor2L(),
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -238,6 +240,7 @@ async function findNearestExpiry() {
     globalInput.MONTHLY_EXPIRY = expiryFutList[0].Expiry;
     globalInput.pickedExchange = expiryFutList[0].Exchange;
     globalInput.LotSize = expiryFutList[0].LotSize;
+    globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty/globalInput.LotSize);
   } catch (error) {
     console.error('Error:', error.message);
   } 
@@ -1417,9 +1420,10 @@ const ema9and21ValuesIndicators = async (params) => {
 const emaMonitorATMs = async () => {
   try{
     if (getAtmStrike()!= biasProcess.atmStrike){
+      send_notification('ATM changed',true)
       resetBiasProcess();
-      await updateITMSymbolfromOC()
       await triggerATMChangeActions()
+      await updateITMSymbolfromOC()
     }
     // atmCallSubStr = biasProcess.atmCallSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmCallSymbol)}` : '';
     // atmPutSubStr = biasProcess.atmPutSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmPutSymbol)}` : '';
@@ -1605,7 +1609,7 @@ const enterXemaShort = async () => {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otmCallSymbol,
+    tradingsymbol: biasProcess.atmCallSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
