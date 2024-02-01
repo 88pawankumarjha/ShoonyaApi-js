@@ -52,7 +52,7 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 4,
+  emaLotMultiplier: 2,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -414,7 +414,16 @@ updatePositions = async => {
                 positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
                 positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
                 // send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
-                // console.log('positionsData: '+data)
+                console.log('positionProcess.smallestCallPosition: '+positionProcess.smallestCallPosition?.tsym)
+                console.log('positionProcess.smallestPutPosition: '+positionProcess.smallestPutPosition?.tsym)
+                // console.log('data: '+data)
+                try{
+                  const targetPositioncallMtoM = data.find(position => position.tsym === positionProcess.smallestCallPosition?.tsym)?.urmtom;
+                  const targetPositionputMtoM = data.find(position => position.tsym === positionProcess.smallestPutPosition?.tsym)?.urmtom;
+                  send_notification('MtoMs call put : ' + targetPositioncallMtoM + ' + ' + targetPositionputMtoM + ' = ' + (+targetPositioncallMtoM + +targetPositionputMtoM), true)
+                }catch(error){
+                  console.log(error)
+                }
                 debug && console.log(positionProcess, ' : positionProcess');    
             } else {
                 console.error('positions data is not an array.');
@@ -1534,59 +1543,85 @@ const takeShort = async (full=false, shortOnly=false) => {
 
 let longPositionTaken = false; // Variable to track long position status
 let shortPositionTaken = false; // Variable to track short position status
-let bothPositionsTaken = false; // Variable to track short position status
+
 
 const triggerATMChangeActions = async () => {
   //exit positions
-  await takeShort(false, false); // not full only exit long
+  await exitXemaLong();
   longPositionTaken = false;
-  await takeLong(false, false);
+  await exitXemaShort();
   shortPositionTaken = false;
 }
 
-async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {
+//buy Put
+const exitXemaLong = async () => {
+  await updateTwoSmallestPositionsAndNeighboursSubs(false);
+  order = {
+    buy_or_sell: 'B',
+    product_type: 'M',
+    exchange: globalInput.pickedExchange,
+    tradingsymbol: positionProcess.smallestPutPosition?.tsym,
+    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'API'
+  }
+  positionProcess.smallestPutPosition?.tsym && await api.place_order(order);
+}
+const enterXemaLong = async () => {
+  order = {
+    buy_or_sell: 'S',
+    product_type: 'M',
+    exchange: globalInput.pickedExchange,
+    tradingsymbol: biasProcess.otmPutSymbol,
+    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'API'
+  }
+  await api.place_order(order);
+}
 
-    if(bothPositionsTaken){
-      if(emaMonitorCallUp || emaMonitorPutUp){  
-        await triggerATMChangeActions();
-        bothPositionsTaken = false;
-        send_notification('exiting from both positions',true)
-      }
-    }
-    if(!bothPositionsTaken && !emaMonitorCallUp && !emaMonitorPutUp){
-      //take both short positions
-      await triggerATMChangeActions();
-      await takeLong(true, true)
-      await takeShort(true, true);
-      bothPositionsTaken = true;
-      shortPositionTaken = true;
-      longPositionTaken = true;
-      send_notification('entering both positions',true)
-    }
+//Exit short Call
+const exitXemaShort = async () => {
+  await updateTwoSmallestPositionsAndNeighboursSubs(false);
+  order = {
+    buy_or_sell: 'B',
+    product_type: 'M',
+    exchange: globalInput.pickedExchange,
+    tradingsymbol: positionProcess.smallestCallPosition?.tsym,
+    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'API'
+  }
+  positionProcess.smallestCallPosition?.tsym && await api.place_order(order);
+}
+const enterXemaShort = async () => {
+  order = {
+    buy_or_sell: 'S',
+    product_type: 'M',
+    exchange: globalInput.pickedExchange,
+    tradingsymbol: biasProcess.otmCallSymbol,
+    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'API'
+  }
+  await api.place_order(order);
+}
+
+async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {    
+    if (!emaMonitorPutUp && !longPositionTaken){await enterXemaLong();longPositionTaken = true;send_notification('entering long positions',true)}
+    if (emaMonitorPutUp && longPositionTaken){await exitXemaLong();longPositionTaken = false;send_notification('exiting long positions',true)}
+    if(!emaMonitorCallUp && !shortPositionTaken) {await enterXemaShort();shortPositionTaken = true;send_notification('entering short positions',true)}
+    if(emaMonitorCallUp && shortPositionTaken) {await exitXemaShort();shortPositionTaken = false;send_notification('exiting short positions',true)}
     
-    if(!bothPositionsTaken){
-      if (emaMonitorCallUp && !longPositionTaken) {
-        await takeLong(true)
-        longPositionTaken = true;
-        send_notification('entering long positions',true)
-      } else if (!emaMonitorCallUp && longPositionTaken) {
-        await takeShort(false); // not full only exit long
-        longPositionTaken = false;
-        send_notification('exiting long positions',true)
-      }
-      
-      if (emaMonitorPutUp && !shortPositionTaken) {
-        await takeShort(true);
-        shortPositionTaken = true;
-        send_notification('entering short positions',true)
-      } else if (!emaMonitorPutUp && shortPositionTaken) {
-        await takeLong(false);
-        shortPositionTaken = false;
-        send_notification('exiting short positions',true)
-      }
-    }
-    send_notification("State longPositionTaken shortPositionTaken bothPositionsTaken: " + longPositionTaken + ' ' + shortPositionTaken + ' ' + bothPositionsTaken)
-    
+    send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken)
 }
 
 const optionBasedEmaRecurringFunction = async () => {
@@ -1617,6 +1652,45 @@ const runEma = async () => {
     await startWebsocket();
     await send_callback_notification();
     await updateITMSymbolfromOC();
+    
+    // limits = await api.get_limits()
+    // console.log(limits, ' limits')
+
+
+  //   request_time: '23:28:00 31-01-2024',
+  //   stat: 'Ok',
+  //   prfname: 'SHOONYA1',
+  //   cash: '206923.34',
+  //   payin: '0.00',
+  //   payout: '0.00',
+  //   brkcollamt: '0.00',
+  //   unclearedcash: '0.00',
+  //   aux_daycash: '0.00',
+  //   aux_brkcollamt: '0.00',
+  //   aux_unclearedcash: '0.00',
+  //   daycash: '0.00',
+  //   turnoverlmt: '999999999999.00',
+  //   pendordvallmt: '999999999999.00',
+  //   remarks_amt: '0.00',
+  //   turnover: '786041727.25',
+  //   marginused: '20470.00',
+  //   peak_mar: '189634.50',
+  //   margincurper: '9.13',
+  //   premium: '17310.25',
+  //   brokerage: '1579.78',
+  //   premium_d_i: '-4095.00',
+  //   premium_d_m: '935.25',
+  //   premium_c_m: '20470.00',
+  //   brkage_d_i: '68.69',
+  //   brkage_d_m: '887.15',
+  //   brkage_c_m: '623.94',
+  //   blk_amt: '0.00',
+  //   mr_der_u: '9.35',
+  //   mr_com_u: '204.70',
+  //   mr_der_a: '155452.29'
+  // }  limits
+// process.exit(0)
+            
     if (telegramSignals.isPlaying) {
       intervalIdForEMA = setInterval(getEma, delayForEMA);
     }
