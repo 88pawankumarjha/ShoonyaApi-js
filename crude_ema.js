@@ -1821,8 +1821,8 @@ emaRecurringFunction = async () => {
         //send notification
 
         // //buyer
-        await sellercrudecheckCrossOverExit(callema9, callema21)
-        // await crudecheckCrossOverExit(callema9, callema21)
+        // await sellercrudecheckCrossOverExit(callema9, callema21)
+        await crudecheckCrossOverExit(callema9, callema21)
         // await crudecheckCrossOverExit(putema9, putema21)
 
         // //seller
