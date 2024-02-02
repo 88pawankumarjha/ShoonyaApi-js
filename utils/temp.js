@@ -386,8 +386,8 @@ updatePositions = async => {
             // Check if data is an array
             else if (Array.isArray(data)) {
                 // Separate calls and puts for NFO - these are sold options with smallest LTP
-                const calls = data.filter(option => parseInt(option.netqty) < 0 && option.tsym.match(/C\d+$/));
-                const puts = data.filter(option => parseInt(option.netqty) < 0 && option.tsym.match(/P\d+$/));
+                const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
+                const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
                 positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option.lp) < parseFloat(min.lp) ? option : min), calls[0]) : resetCalls();
                 positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option.lp) < parseFloat(min.lp) ? option : min), puts[0]) : resetPuts();
                 debug && console.log(positionProcess, ' : positionProcess');    

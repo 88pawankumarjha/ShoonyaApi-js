@@ -412,20 +412,13 @@ updatePositions = async () => {
             // Check if data is an array
             else if (Array.isArray(data)) {
                 // Separate calls and puts for NFO - these are sold options with smallest LTP
-                const calls = data.filter(option => parseInt(option.netqty) < 0 && option.tsym.match(/C\d+$/));
-                const puts = data.filter(option => parseInt(option.netqty) < 0 && option.tsym.match(/P\d+$/));
+                const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
+                const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
                 positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
                 positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
                 // send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
                 console.log('positionProcess.smallestCallPosition: '+positionProcess.smallestCallPosition?.tsym)
                 console.log('positionProcess.smallestPutPosition: '+positionProcess.smallestPutPosition?.tsym)
-                // console.log('data: '+data)
-                try{
-                  const targetPositioncallMtoM = data.find(position => position.tsym === positionProcess.smallestCallPosition?.tsym)?.urmtom;
-                  const targetPositionputMtoM = data.find(position => position.tsym === positionProcess.smallestPutPosition?.tsym)?.urmtom;
-                }catch(error){
-                  console.log(error)
-                }
                 debug && console.log(positionProcess, ' : positionProcess');    
             } else {
                 console.error('positions data is not an array.');
@@ -479,10 +472,6 @@ updateTwoSmallestPositionsAndNeighboursSubs = async (autoSubs = true) => {
 
 
 postOrderPosTracking = async (data) => {
-    
-    pnl = await calcPnL(api);
-    send_notification('PnL : ' + pnl, true)
-    
     await updateTwoSmallestPositionsAndNeighboursSubs(false);
     // Update call position subscription
     positionProcess.posCallSubStr = positionProcess.smallestCallPosition?.tsym ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionProcess.smallestCallPosition.tsym)}` : '';
@@ -495,6 +484,9 @@ postOrderPosTracking = async (data) => {
     // console.log('order placed: ', data)
     str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc;
     send_notification(str, true)
+
+    pnl = await calcPnL(api);
+    send_notification('PnL : ' + pnl, true)
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -1423,9 +1415,9 @@ const ema9and21ValuesIndicators = async (params) => {
 const emaMonitorATMs = async () => {
   try{
     if (getAtmStrike()!= biasProcess.atmStrike){
+      await triggerATMChangeActions()
       send_notification('ATM changed',true)
       resetBiasProcess();
-      await triggerATMChangeActions()
       await updateITMSymbolfromOC()
     }
     // atmCallSubStr = biasProcess.atmCallSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmCallSymbol)}` : '';
