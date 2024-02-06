@@ -202,7 +202,7 @@ async function checkAlert(api) {
     timeToMakeAMoveVal = timeToMakeAMove()
 
     if(pValue1Var == undefined || cValue1Var== undefined ) {
-      send_notification('SL Hit', true)
+      send_notification('SL HIT', true)
     }
     
     if (timeToMakeAMoveVal || parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {

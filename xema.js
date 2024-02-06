@@ -17,7 +17,6 @@ const unzipper = require('unzipper');
 const https = require('https');
 const AdmZip = require('adm-zip');
 
-
 const { parse } = require('papaparse');
 const moment = require('moment');
 const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
@@ -55,6 +54,8 @@ let globalInput = {
   LotSize: undefined,
   emaLotMultiplier: undefined,
   emaLotMultiplierQty: getEMAQtyFor2L(),
+  takeEMAReEntryLong: true,
+  takeEMAReEntryShort: true,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -509,6 +510,9 @@ function receiveOrders(data) {
         latestOrders[data.Instrument] = data;
         // update the smallest positions after each order
         postOrderPosTracking(data)
+    }
+    if(data.status === 'REJECTED') {
+        send_notification('ORDER REJECTED', true)
     }
 }
 
@@ -1318,7 +1322,7 @@ const short = async (symbol, qty) => {
 }
 
 
-const ema9and21ValuesIndicators = async (params) => {
+const ema9_21_3ValuesIndicators = async (params) => {
   try{
     const reply = await api.get_time_price_series(params);
 
@@ -1355,11 +1359,12 @@ const ema9and21ValuesIndicators = async (params) => {
 
     // Calculate 9-period EMA
     let ta = new Indicators();
+    let ema3Values = await ta.ema(last80Items, 3);
     let ema9Values = await ta.ema(last80Items, 8);
     // Calculate 21-period EMA
     let ema21Values = await ta.ema(last80Items, 21);
     //send last item from the array
-    return [ema9Values[ema9Values.length-1], ema21Values[ema21Values.length-1]];
+    return [ema9Values[ema9Values.length-1], ema21Values[ema21Values.length-1], ema3Values[ema21Values.length-1]];
   }
   catch (error) {
     console.error('Error:', error);
@@ -1447,12 +1452,10 @@ const emaMonitorATMs = async () => {
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
-    const [callema9, callema21] = await ema9and21ValuesIndicators(paramsCall);
-    const [putema9, putema21] = await ema9and21ValuesIndicators(paramsPut);
-    send_notification("EmaMonitorCallPutFastSlow: " + parseFloat(callema9).toFixed(2) + ' ' + parseFloat(callema21).toFixed(2) + ' ' + parseFloat(putema9).toFixed(2) + ' ' + parseFloat(putema21).toFixed(2))
-    // , ema12 '+ parseFloat(callema9).toFixed(2) + ', ema26 ' + parseFloat(callema21).toFixed(2)
-    emaUpCall = callema9 > callema21 
-    emaUpPut = putema9 > putema21
+    const [callemaMedium, callemaSlow, callemaFastest] = await ema9_21_3ValuesIndicators(paramsCall);
+    const [putemaMedium, putemaSlow, putemaFastest] = await ema9_21_3ValuesIndicators(paramsPut);
+    emaUpCall = callemaMedium > callemaSlow || callemaFastest > callemaMedium 
+    emaUpPut = putemaMedium > putemaSlow || putemaFastest > putemaMedium
     return [emaUpCall, emaUpPut];
   } catch (error) {
     // handle the exception locally
@@ -1493,7 +1496,7 @@ const takeLong = async (full=false, shortOnly=false) => {
       buy_or_sell: 'S',
       product_type: 'M',
       exchange: globalInput.pickedExchange,
-      tradingsymbol: biasProcess.otmPutSymbol,
+      tradingsymbol: biasProcess.atmPutSymbol,
       quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
       discloseqty: 0,
       price_type: 'MKT',
@@ -1528,7 +1531,7 @@ const takeShort = async (full=false, shortOnly=false) => {
       buy_or_sell: 'S',
       product_type: 'M',
       exchange: globalInput.pickedExchange,
-      tradingsymbol: biasProcess.otmCallSymbol,
+      tradingsymbol: biasProcess.atmCallSymbol,
       quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
       discloseqty: 0,
       price_type: 'MKT',
@@ -1568,13 +1571,14 @@ const exitXemaLong = async () => {
     remarks: 'API'
   }
   positionProcess.smallestPutPosition?.tsym && await api.place_order(order);
+  globalInput.takeEMAReEntryLong = false;
 }
 const enterXemaLong = async () => {
   order = {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otmPutSymbol,
+    tradingsymbol: biasProcess.atmPutSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
@@ -1599,6 +1603,7 @@ const exitXemaShort = async () => {
     remarks: 'API'
   }
   positionProcess.smallestCallPosition?.tsym && await api.place_order(order);
+  globalInput.takeEMAReEntryShort = false;
 }
 const enterXemaShort = async () => {
   order = {
@@ -1615,11 +1620,22 @@ const enterXemaShort = async () => {
   await api.place_order(order);
 }
 
+
 async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {    
-    if (!emaMonitorPutUp && !longPositionTaken){await enterXemaLong();longPositionTaken = true;send_notification('entering long positions',true)}
-    if (emaMonitorPutUp && longPositionTaken){await exitXemaLong();longPositionTaken = false;send_notification('exiting long positions',true)}
-    if(!emaMonitorCallUp && !shortPositionTaken) {await enterXemaShort();shortPositionTaken = true;send_notification('entering short positions',true)}
-    if(emaMonitorCallUp && shortPositionTaken) {await exitXemaShort();shortPositionTaken = false;send_notification('exiting short positions',true)}
+    if (!emaMonitorPutUp && !longPositionTaken){globalInput.takeEMAReEntryLong && await enterXemaLong();longPositionTaken = true;}
+    if (emaMonitorPutUp && longPositionTaken){
+      await exitXemaLong();longPositionTaken = false;
+      setTimeout(() => {
+        globalInput.takeEMAReEntryLong = true;
+      }, 300000);
+    }
+    if(!emaMonitorCallUp && !shortPositionTaken) {globalInput.takeEMAReEntryShort && await enterXemaShort();shortPositionTaken = true;}
+    if(emaMonitorCallUp && shortPositionTaken) {
+      await exitXemaShort();shortPositionTaken = false;
+      setTimeout(() => {
+        globalInput.takeEMAReEntryShort = true;
+      }, 300000);
+    }
     
     send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken)
 }
