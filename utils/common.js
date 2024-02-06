@@ -200,6 +200,10 @@ async function checkAlert(api) {
     debug && console.log(pExtra0Var,pValue1Var,pValue2Var,pExtra3Var,' P'); //0.65 1.10 2.60 9.05
     debug && console.log(cExtra0Var,cValue1Var,cValue2Var,cExtra3Var,' C'); //1.35 3.70 14.10 57.50
     timeToMakeAMoveVal = timeToMakeAMove()
+
+    if(pValue1Var == undefined || cValue1Var== undefined ) {
+      send_notification('SL Hit', true)
+    }
     
     if (timeToMakeAMoveVal || parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {
         if(!timeToMakeAMoveVal){
