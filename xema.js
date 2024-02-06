@@ -1452,11 +1452,13 @@ const emaMonitorATMs = async () => {
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
-    const [callemaMedium, callemaSlow, callemaFastest] = await ema9_21_3ValuesIndicators(paramsCall);
-    const [putemaMedium, putemaSlow, putemaFastest] = await ema9_21_3ValuesIndicators(paramsPut);
-    emaUpCall = callemaMedium > callemaSlow || callemaFastest > callemaMedium 
-    emaUpPut = putemaMedium > putemaSlow || putemaFastest > putemaMedium
-    return [emaUpCall, emaUpPut];
+    const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
+    const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
+    emaUpMediumCall = callemaMedium > callemaSlow
+    emaUpFastCall = callemaFast > callemaMedium 
+    emaUpMediumPut = putemaMedium > putemaSlow
+    emaUpFastPut = putemaFast > putemaMedium
+    return [emaUpMediumCall, emaUpFastCall, emaUpMediumPut, emaUpFastPut];
   } catch (error) {
     // handle the exception locally
     console.error("Child method encountered an exception:", error.message);
@@ -1621,16 +1623,16 @@ const enterXemaShort = async () => {
 }
 
 
-async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {    
-    if (!emaMonitorPutUp && !longPositionTaken){globalInput.takeEMAReEntryLong && await enterXemaLong();longPositionTaken = true;}
-    if (emaMonitorPutUp && longPositionTaken){
+async function takeEMADecision(emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp) {    
+    if (!emaMediumMonitorPutUp && !longPositionTaken){globalInput.takeEMAReEntryLong && await enterXemaLong();longPositionTaken = true;}
+    if ((emaMediumMonitorPutUp || emaFastMonitorPutUp) && longPositionTaken){
       await exitXemaLong();longPositionTaken = false;
       setTimeout(() => {
         globalInput.takeEMAReEntryLong = true;
       }, 300000);
     }
-    if(!emaMonitorCallUp && !shortPositionTaken) {globalInput.takeEMAReEntryShort && await enterXemaShort();shortPositionTaken = true;}
-    if(emaMonitorCallUp && shortPositionTaken) {
+    if(!emaMonitorMediumCallUp && !shortPositionTaken) {globalInput.takeEMAReEntryShort && await enterXemaShort();shortPositionTaken = true;}
+    if((emaMonitorMediumCallUp || emaMonitorFastCallUp) && shortPositionTaken) {
       await exitXemaShort();shortPositionTaken = false;
       setTimeout(() => {
         globalInput.takeEMAReEntryShort = true;
@@ -1641,8 +1643,8 @@ async function takeEMADecision(emaMonitorCallUp, emaMonitorPutUp) {
 }
 
 const optionBasedEmaRecurringFunction = async () => {
-  let [emaMonitorCallUp, emaMonitorPutUp] = await emaMonitorATMs();
-  await takeEMADecision(emaMonitorCallUp, emaMonitorPutUp)
+  let [emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp] = await emaMonitorATMs();
+  await takeEMADecision(emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp)
 }
     
 
