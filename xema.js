@@ -1624,21 +1624,14 @@ const enterXemaShort = async () => {
 
 
 async function takeEMADecision(emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp) {    
-    if (!emaMediumMonitorPutUp && !longPositionTaken){globalInput.takeEMAReEntryLong && await enterXemaLong();longPositionTaken = true;}
+    if (!emaMediumMonitorPutUp && !longPositionTaken){await enterXemaLong();longPositionTaken = true;}
     if ((emaMediumMonitorPutUp || emaFastMonitorPutUp) && longPositionTaken){
       await exitXemaLong();longPositionTaken = false;
-      setTimeout(() => {
-        globalInput.takeEMAReEntryLong = true;
-      }, 300000);
     }
-    if(!emaMonitorMediumCallUp && !shortPositionTaken) {globalInput.takeEMAReEntryShort && await enterXemaShort();shortPositionTaken = true;}
+    if(!emaMonitorMediumCallUp && !shortPositionTaken) {await enterXemaShort();shortPositionTaken = true;}
     if((emaMonitorMediumCallUp || emaMonitorFastCallUp) && shortPositionTaken) {
       await exitXemaShort();shortPositionTaken = false;
-      setTimeout(() => {
-        globalInput.takeEMAReEntryShort = true;
-      }, 300000);
     }
-    
     send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken)
 }
 
