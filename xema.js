@@ -54,6 +54,8 @@ let globalInput = {
   LotSize: undefined,
   emaLotMultiplier: undefined,
   emaLotMultiplierQty: getEMAQtyFor2L(),
+  longEntryCounter: 0,
+  shortEntryCounter: 0,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -1540,6 +1542,8 @@ const triggerATMChangeActions = async () => {
   //exit positions
   await exitXemaLong();
   await exitXemaShort();
+  globalInput.longEntryCounter =  3;
+  globalInput.shortEntryCounter =  3;
 }
 
 //buy Put
@@ -1612,30 +1616,28 @@ const enterXemaShort = async () => {
   shortPositionTaken = true;
 }
 
-let longEntryCounter = 0;
-let shortEntryCounter = 0;
 async function takeEMADecision(emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp) {    
     if(!emaMediumMonitorPutUp && !longPositionTaken) {
-      if(longEntryCounter == 3){
+      if(globalInput.longEntryCounter == 3){
         await enterXemaLong()
       }
-      longEntryCounter = longEntryCounter+1;
-      send_notification(`taking long trade in ${3-longEntryCounter} mins`)
+      globalInput.longEntryCounter = globalInput.longEntryCounter+1;
+      send_notification(`taking long trade in ${3-globalInput.longEntryCounter} mins`)
     }
     if(!emaMonitorMediumCallUp && !shortPositionTaken) {
-      if(shortEntryCounter == 3){
+      if(globalInput.shortEntryCounter == 3){
         await enterXemaShort()
       }
-      shortEntryCounter = shortEntryCounter+1;
-      send_notification(`taking short trade in ${3-shortEntryCounter} mins`)
+      globalInput.shortEntryCounter = globalInput.shortEntryCounter+1;
+      send_notification(`taking short trade in ${3-globalInput.shortEntryCounter} mins`)
     }
     if((emaMediumMonitorPutUp || emaFastMonitorPutUp) && longPositionTaken) {
       await exitXemaLong();
-      longEntryCounter = 0;
+      globalInput.longEntryCounter = 0;
     }
     if((emaMonitorMediumCallUp || emaMonitorFastCallUp) && shortPositionTaken) {
       await exitXemaShort();
-      shortEntryCounter = 0;
+      globalInput.shortEntryCounter = 0;
     }
     send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken + "\ncem, cef, pem, pef: " + emaMonitorMediumCallUp + ' ' + emaMonitorFastCallUp + ' ' + emaMediumMonitorPutUp + ' ' + emaFastMonitorPutUp)
 }
