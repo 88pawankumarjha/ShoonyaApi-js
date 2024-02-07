@@ -1612,12 +1612,31 @@ const enterXemaShort = async () => {
   shortPositionTaken = true;
 }
 
-
+let longEntryCounter = 0;
+let shortEntryCounter = 0;
 async function takeEMADecision(emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp) {    
-    if(!emaMediumMonitorPutUp && !longPositionTaken) {await enterXemaLong()}
-    if(!emaMonitorMediumCallUp && !shortPositionTaken) {await enterXemaShort()}
-    if((emaMediumMonitorPutUp || emaFastMonitorPutUp) && longPositionTaken) {await exitXemaLong()}
-    if((emaMonitorMediumCallUp || emaMonitorFastCallUp) && shortPositionTaken) {await exitXemaShort()}
+    if(!emaMediumMonitorPutUp && !longPositionTaken) {
+      if(longEntryCounter == 3){
+        await enterXemaLong()
+      }
+      longEntryCounter = longEntryCounter+1;
+      send_notification(`taking long trade in ${3-longEntryCounter} mins`)
+    }
+    if(!emaMonitorMediumCallUp && !shortPositionTaken) {
+      if(shortEntryCounter == 3){
+        await enterXemaShort()
+      }
+      shortEntryCounter = shortEntryCounter+1;
+      send_notification(`taking short trade in ${3-shortEntryCounter} mins`)
+    }
+    if((emaMediumMonitorPutUp || emaFastMonitorPutUp) && longPositionTaken) {
+      await exitXemaLong();
+      longEntryCounter = 0;
+    }
+    if((emaMonitorMediumCallUp || emaMonitorFastCallUp) && shortPositionTaken) {
+      await exitXemaShort();
+      shortEntryCounter = 0;
+    }
     send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken + "\ncem, cef, pem, pef: " + emaMonitorMediumCallUp + ' ' + emaMonitorFastCallUp + ' ' + emaMediumMonitorPutUp + ' ' + emaFastMonitorPutUp)
 }
 
