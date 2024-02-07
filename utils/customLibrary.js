@@ -23,11 +23,12 @@ module.exports.calcVix = async (api) => {
   return parseFloat((((vixQuote?.lp - vixQuote?.c)/vixQuote?.c)*100) || 1).toFixed(2) || 1;
 }
 
-module.exports.calcPnL = async (api) => {
-const positions = await api.get_positions();
-const total_pnl = positions.reduce((acc, pos) => {
-  const ur_mtm = parseFloat(pos.urmtom);
-  const r_pnl = parseFloat(pos.rpnl);
+module.exports.calcPnL = async (api, mcxOnly = false) => {
+let positions = await api.get_positions();
+if(mcxOnly) {positions = positions.filter(option => option.exch == 'MCX')}
+const total_pnl = positions?.reduce((acc, pos) => {
+  const ur_mtm = parseFloat(pos?.urmtom);
+  const r_pnl = parseFloat(pos?.rpnl);
   return acc + ur_mtm + r_pnl;
 }, 0);
 return total_pnl;

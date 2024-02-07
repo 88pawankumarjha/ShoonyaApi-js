@@ -1129,7 +1129,7 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
             else {console.log('No action needed', mtmValue)}
         }
         iterationCounter = iterationCounter + 1;
-        if (iterationCounter % 12 === 0) send_notification(`MTM: ${mtmValue} Rs`);
+        if (iterationCounter % 12 === 0) send_notification(`MCX PnL:  ${await calcPnL(api, true)} Rs`);
     }
     return;
 }

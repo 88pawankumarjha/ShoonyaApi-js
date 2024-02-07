@@ -54,8 +54,6 @@ let globalInput = {
   LotSize: undefined,
   emaLotMultiplier: undefined,
   emaLotMultiplierQty: getEMAQtyFor2L(),
-  takeEMAReEntryLong: true,
-  takeEMAReEntryShort: true,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -485,7 +483,6 @@ postOrderPosTracking = async (data) => {
     // console.log('order placed: ', data)
     str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc;
     send_notification(str, true)
-
     pnl = await calcPnL(api);
     send_notification('PnL : ' + pnl, true)
 }
@@ -1425,10 +1422,6 @@ const emaMonitorATMs = async () => {
       resetBiasProcess();
       await updateITMSymbolfromOC()
     }
-    // atmCallSubStr = biasProcess.atmCallSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmCallSymbol)}` : '';
-    // atmPutSubStr = biasProcess.atmPutSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmPutSymbol)}` : '';
-    // dynamicallyAddSubscription(atmCallSubStr);
-    // dynamicallyAddSubscription(atmPutSubStr);
 
     // Get current date and time in IST
     const currentDateIST = new Date();
@@ -1454,6 +1447,7 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
+    send_notification('ces : ' + parseFloat(callemaSlow).toFixed(2) + ' cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\n' + 'pes : ' +parseFloat(putemaSlow ).toFixed(2)+ ' pem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pef : ' +parseFloat(putemaFast).toFixed(2))
     emaUpMediumCall = callemaMedium > callemaSlow
     emaUpFastCall = callemaFast > callemaMedium 
     emaUpMediumPut = putemaMedium > putemaSlow
@@ -1466,14 +1460,6 @@ const emaMonitorATMs = async () => {
     throw error;
   }
 }
-
-// setTimeout(() => {
-//   shortPositionTaken = false;
-// }, 28000);
-
-// setTimeout(() => {
-//   longPositionTaken = false;
-// }, 35000);
 
 const takeLong = async (full=false, shortOnly=false) => {
   // full ? exit short position if any and take long : exit short if any
@@ -1553,9 +1539,7 @@ let shortPositionTaken = false; // Variable to track short position status
 const triggerATMChangeActions = async () => {
   //exit positions
   await exitXemaLong();
-  longPositionTaken = false;
   await exitXemaShort();
-  shortPositionTaken = false;
 }
 
 //buy Put
@@ -1573,7 +1557,8 @@ const exitXemaLong = async () => {
     remarks: 'API'
   }
   positionProcess.smallestPutPosition?.tsym && await api.place_order(order);
-  globalInput.takeEMAReEntryLong = false;
+  send_notification('exiting Long', true)
+  longPositionTaken = false;
 }
 const enterXemaLong = async () => {
   order = {
@@ -1588,6 +1573,8 @@ const enterXemaLong = async () => {
     remarks: 'API'
   }
   await api.place_order(order);
+  send_notification('entering Long', true)
+  longPositionTaken = true;
 }
 
 //Exit short Call
@@ -1605,7 +1592,8 @@ const exitXemaShort = async () => {
     remarks: 'API'
   }
   positionProcess.smallestCallPosition?.tsym && await api.place_order(order);
-  globalInput.takeEMAReEntryShort = false;
+  send_notification('exiting Short', true)
+  shortPositionTaken = false;
 }
 const enterXemaShort = async () => {
   order = {
@@ -1620,19 +1608,17 @@ const enterXemaShort = async () => {
     remarks: 'API'
   }
   await api.place_order(order);
+  send_notification('entering Short', true)
+  shortPositionTaken = true;
 }
 
 
 async function takeEMADecision(emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp) {    
-    if (!emaMediumMonitorPutUp && !longPositionTaken){await enterXemaLong();longPositionTaken = true;}
-    if ((emaMediumMonitorPutUp || emaFastMonitorPutUp) && longPositionTaken){
-      await exitXemaLong();longPositionTaken = false;
-    }
-    if(!emaMonitorMediumCallUp && !shortPositionTaken) {await enterXemaShort();shortPositionTaken = true;}
-    if((emaMonitorMediumCallUp || emaMonitorFastCallUp) && shortPositionTaken) {
-      await exitXemaShort();shortPositionTaken = false;
-    }
-    send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken)
+    if(!emaMediumMonitorPutUp && !longPositionTaken) {await enterXemaLong()}
+    if(!emaMonitorMediumCallUp && !shortPositionTaken) {await enterXemaShort()}
+    if((emaMediumMonitorPutUp || emaFastMonitorPutUp) && longPositionTaken) {await exitXemaLong()}
+    if((emaMonitorMediumCallUp || emaMonitorFastCallUp) && shortPositionTaken) {await exitXemaShort()}
+    send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken + "\ncem, cef, pem, pef: " + emaMonitorMediumCallUp + ' ' + emaMonitorFastCallUp + ' ' + emaMediumMonitorPutUp + ' ' + emaFastMonitorPutUp)
 }
 
 const optionBasedEmaRecurringFunction = async () => {
@@ -1647,6 +1633,8 @@ getEma = async () => {
   var seconds = currentDate.getSeconds();
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
+    //TODO
+  // if (seconds % 5 == 0) {
     try {
       await optionBasedEmaRecurringFunction();
     } catch (error) {
