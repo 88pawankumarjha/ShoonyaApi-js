@@ -1698,6 +1698,11 @@ const runEma = async () => {
     if (telegramSignals.isPlaying) {
       intervalIdForEMA = setInterval(getEma, delayForEMA);
     }
+    if(isTimeEqualsNotAfterProps(15,28,false)) {
+      await exitXemaLong();
+      await exitXemaShort();
+      process.exit(0)
+    }
 
   } catch (error) {
     console.log(error);
