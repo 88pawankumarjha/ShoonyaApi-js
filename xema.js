@@ -30,6 +30,7 @@ const send_notification = async (message, me = false) => (message && console.log
 let globalBigInput = {
   filteredIndexCSV: undefined
 }
+//TODO change index
 getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
 getEMAQtyFor2L = () => debug ? 100 : [100, 60, 80, 60, 100, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
 let telegramSignals = {
@@ -509,7 +510,8 @@ function receiveOrders(data) {
         postOrderPosTracking(data)
     }
     if(data.status === 'REJECTED') {
-        send_notification('ORDER REJECTED', true)
+      send_notification('ORDER REJECTED', true)
+      exitSellsAndOrStop(true);
     }
 }
 
@@ -1261,6 +1263,7 @@ biasProcess.callSubStr = biasProcess.itmCallSymbol ? `${globalInput.pickedExchan
 biasProcess.putSubStr = biasProcess.itmPutSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.itmPutSymbol)}` : '';
 dynamicallyAddSubscription(biasProcess.callSubStr);
 dynamicallyAddSubscription(biasProcess.putSubStr);
+await delay(2000)
 return;
 }
 
@@ -1421,6 +1424,7 @@ const emaMonitorATMs = async () => {
       send_notification('ATM changed',true)
       resetBiasProcess();
       await updateITMSymbolfromOC()
+      await dynSubs();
     }
 
     // Get current date and time in IST
@@ -1533,11 +1537,16 @@ const takeShort = async (full=false, shortOnly=false) => {
 let longPositionTaken = false; // Variable to track long position status
 let shortPositionTaken = false; // Variable to track short position status
 
-
-const triggerATMChangeActions = async () => {
+const exitSellsAndOrStop = async (stop = false) => {
   //exit positions
+  stop ? send_notification('exiting all and stopping', true): send_notification('exiting all');
   await exitXemaLong();
   await exitXemaShort();
+  stop && process.exit(0)
+}
+
+const triggerATMChangeActions = async () => {
+  await exitSellsAndOrStop();
 }
 
 //buy Put
@@ -1645,23 +1654,35 @@ const enterXemaBuyPut = async () => {
   await api.place_order(order);
   send_notification('bought hedge put', true)
 }
-async function takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp) {    
+async function takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp) {
+  if(biasOutput.bias > 0){
+    //positive bias
     if(!emaMediumMonitorPutUp && !longPositionTaken) {
       await enterXemaLong()
     }
+    if((emaMonitorMediumCallUp) && shortPositionTaken) {
+      await exitXemaShort();
+    }
+  }else{
+    //negative bias
     if(!emaMonitorMediumCallUp && !shortPositionTaken) {
       await enterXemaShort()
     }
     if((emaMediumMonitorPutUp) && longPositionTaken) {
       await exitXemaLong();
     }
-    if((emaMonitorMediumCallUp) && shortPositionTaken) {
-      await exitXemaShort();
-    }
-    send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken)
+  }
+    send_notification(biasOutput.bias + ' ' + longPositionTaken + ' ' + shortPositionTaken + " : bias long short")
+}
+
+const setBiasValue = async () => {
+  ltpSuggestedPut = +biasProcess.itmPutStrikePrice - (+latestQuotes[biasProcess.putSubStr]?.lp);
+  ltpSuggestedCall = (+latestQuotes[biasProcess.callSubStr]?.lp + +biasProcess.itmCallStrikePrice);
+  biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`].lp));
 }
 
 const optionBasedEmaRecurringFunction = async () => {
+  await setBiasValue();
   let [emaMonitorMediumCallUp, emaMediumMonitorPutUp] = await emaMonitorATMs();
   await takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp)
 }
@@ -1691,8 +1712,10 @@ const runEma = async () => {
     await startWebsocket();
     await send_callback_notification();
     await updateITMSymbolfromOC();
-    // await enterXemaBuyCall();
-    // await enterXemaBuyPut();
+    await dynSubs();
+    //TODO uncomment
+    await enterXemaBuyCall();
+    await enterXemaBuyPut();
     
     // limits = await api.get_limits()
     // console.log(limits, ' limits')
@@ -1735,12 +1758,10 @@ const runEma = async () => {
     if (telegramSignals.isPlaying) {
       intervalIdForEMA = setInterval(getEma, delayForEMA);
     }
+    //TODO uncomment
     if(isTimeEqualsNotAfterProps(15,28,false)) {
-      await exitXemaLong();
-      await exitXemaShort();
-      process.exit(0)
+      await exitSellsAndOrStop(true);
     }
-
   } catch (error) {
     console.log(error);
   }
