@@ -20,7 +20,7 @@ const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
 const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
-  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, calcPnL } = require('./utils/customLibrary');
+  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, calcPnL, isTimeEqualsNotAfterProps } = require('./utils/customLibrary');
 // let { authparams } = require("./creds");
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
@@ -1435,21 +1435,19 @@ const emaMonitorATMs = async () => {
 
     paramsCall = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.atmCallSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.otmCallSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
     paramsPut = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.atmPutSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.otmPutSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
     send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' ces : ' + parseFloat(callemaSlow).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pes : ' +parseFloat(putemaSlow).toFixed(2))
-    emaUpFastCall = callemaFast > callemaMedium 
-    emaUpFastPut = putemaFast > putemaMedium
     emaUpMediumCall = callemaMedium > callemaSlow 
     emaUpMediumPut = putemaMedium > putemaSlow
     return [emaUpMediumCall, emaUpMediumPut];
@@ -1612,6 +1610,41 @@ const enterXemaShort = async () => {
   shortPositionTaken = true;
 }
 
+
+
+const enterXemaBuyCall = async () => {
+  nearestCETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, 3)
+  order = {
+    buy_or_sell: 'B',
+    product_type: 'M',
+    exchange: globalInput.pickedExchange,
+    tradingsymbol: nearestCETsym,
+    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'API'
+  }
+  await api.place_order(order);
+  send_notification('bought hedge call', true)
+}
+
+const enterXemaBuyPut = async () => {
+  nearestPETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, 3)
+  order = {
+    buy_or_sell: 'B',
+    product_type: 'M',
+    exchange: globalInput.pickedExchange,
+    tradingsymbol: nearestPETsym,
+    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    discloseqty: 0,
+    price_type: 'MKT',
+    price: 0,
+    remarks: 'API'
+  }
+  await api.place_order(order);
+  send_notification('bought hedge put', true)
+}
 async function takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp) {    
     if(!emaMediumMonitorPutUp && !longPositionTaken) {
       await enterXemaLong()
@@ -1658,6 +1691,8 @@ const runEma = async () => {
     await startWebsocket();
     await send_callback_notification();
     await updateITMSymbolfromOC();
+    // await enterXemaBuyCall();
+    // await enterXemaBuyPut();
     
     // limits = await api.get_limits()
     // console.log(limits, ' limits')
