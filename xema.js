@@ -54,8 +54,6 @@ let globalInput = {
   LotSize: undefined,
   emaLotMultiplier: undefined,
   emaLotMultiplierQty: getEMAQtyFor2L(),
-  longEntryCounter: 0,
-  shortEntryCounter: 0,
   multiplier: 1,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
@@ -1449,12 +1447,10 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    send_notification('ces : ' + parseFloat(callemaSlow).toFixed(2) + ' cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\n' + 'pes : ' +parseFloat(putemaSlow ).toFixed(2)+ ' pem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pef : ' +parseFloat(putemaFast).toFixed(2))
-    emaUpMediumCall = callemaMedium > callemaSlow
+    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pef : ' +parseFloat(putemaFast).toFixed(2))
     emaUpFastCall = callemaFast > callemaMedium 
-    emaUpMediumPut = putemaMedium > putemaSlow
     emaUpFastPut = putemaFast > putemaMedium
-    return [emaUpMediumCall, emaUpFastCall, emaUpMediumPut, emaUpFastPut];
+    return [emaUpFastCall, emaUpFastPut];
   } catch (error) {
     // handle the exception locally
     console.error("Child method encountered an exception:", error.message);
@@ -1542,8 +1538,6 @@ const triggerATMChangeActions = async () => {
   //exit positions
   await exitXemaLong();
   await exitXemaShort();
-  globalInput.longEntryCounter =  3;
-  globalInput.shortEntryCounter =  3;
 }
 
 //buy Put
@@ -1616,35 +1610,25 @@ const enterXemaShort = async () => {
   shortPositionTaken = true;
 }
 
-async function takeEMADecision(emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp) {    
-    if(!emaMediumMonitorPutUp && !longPositionTaken) {
-      if(globalInput.longEntryCounter == 3){
-        await enterXemaLong()
-      }
-      globalInput.longEntryCounter = globalInput.longEntryCounter+1;
-      send_notification(`taking long trade in ${3-globalInput.longEntryCounter} mins`)
+async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {    
+    if(!emaFastMonitorPutUp && !longPositionTaken) {
+      await enterXemaLong()
     }
-    if(!emaMonitorMediumCallUp && !shortPositionTaken) {
-      if(globalInput.shortEntryCounter == 3){
-        await enterXemaShort()
-      }
-      globalInput.shortEntryCounter = globalInput.shortEntryCounter+1;
-      send_notification(`taking short trade in ${3-globalInput.shortEntryCounter} mins`)
+    if(!shortPositionTaken) {
+      await enterXemaShort()
     }
-    if((emaMediumMonitorPutUp || emaFastMonitorPutUp) && longPositionTaken) {
+    if((emaFastMonitorPutUp) && longPositionTaken) {
       await exitXemaLong();
-      globalInput.longEntryCounter = 0;
     }
-    if((emaMonitorMediumCallUp || emaMonitorFastCallUp) && shortPositionTaken) {
+    if((emaMonitorFastCallUp) && shortPositionTaken) {
       await exitXemaShort();
-      globalInput.shortEntryCounter = 0;
     }
-    send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken + "\ncem, cef, pem, pef: " + emaMonitorMediumCallUp + ' ' + emaMonitorFastCallUp + ' ' + emaMediumMonitorPutUp + ' ' + emaFastMonitorPutUp)
+    send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken + "\cef, pef: " + emaMonitorFastCallUp + ' ' + emaFastMonitorPutUp)
 }
 
 const optionBasedEmaRecurringFunction = async () => {
-  let [emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp] = await emaMonitorATMs();
-  await takeEMADecision(emaMonitorMediumCallUp, emaMonitorFastCallUp, emaMediumMonitorPutUp, emaFastMonitorPutUp)
+  let [emaMonitorFastCallUp, emaFastMonitorPutUp] = await emaMonitorATMs();
+  await takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp)
 }
     
 
