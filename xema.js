@@ -1452,9 +1452,9 @@ const emaMonitorATMs = async () => {
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
     send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pes : ' +parseFloat(putemaFast).toFixed(2))
-    emaUpFastall = callemaFast > callemaMedium
+    emaUpFastCall = callemaFast > callemaMedium
     emaUpFastPut = putemaFast  > putemaMedium
-    return [emaUpFastall, emaUpFastPut];
+    return [emaUpFastCall, emaUpFastPut];
   } catch (error) {
     // handle the exception locally
     console.error("Child method encountered an exception:", error.message);
