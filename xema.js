@@ -1447,10 +1447,12 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pef : ' +parseFloat(putemaFast).toFixed(2))
+    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' ces : ' + parseFloat(callemaSlow).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pes : ' +parseFloat(putemaSlow).toFixed(2))
     emaUpFastCall = callemaFast > callemaMedium 
     emaUpFastPut = putemaFast > putemaMedium
-    return [emaUpFastCall, emaUpFastPut];
+    emaUpMediumCall = callemaMedium > callemaSlow 
+    emaUpMediumPut = putemaMedium > putemaSlow
+    return [emaUpMediumCall, emaUpMediumPut];
   } catch (error) {
     // handle the exception locally
     console.error("Child method encountered an exception:", error.message);
@@ -1610,25 +1612,25 @@ const enterXemaShort = async () => {
   shortPositionTaken = true;
 }
 
-async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {    
-    if(!emaFastMonitorPutUp && !longPositionTaken) {
+async function takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp) {    
+    if(!emaMediumMonitorPutUp && !longPositionTaken) {
       await enterXemaLong()
     }
-    if(!emaMonitorFastCallUp && !shortPositionTaken) {
+    if(!emaMonitorMediumCallUp && !shortPositionTaken) {
       await enterXemaShort()
     }
-    if((emaFastMonitorPutUp) && longPositionTaken) {
+    if((emaMediumMonitorPutUp) && longPositionTaken) {
       await exitXemaLong();
     }
-    if((emaMonitorFastCallUp) && shortPositionTaken) {
+    if((emaMonitorMediumCallUp) && shortPositionTaken) {
       await exitXemaShort();
     }
     send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken)
 }
 
 const optionBasedEmaRecurringFunction = async () => {
-  let [emaMonitorFastCallUp, emaFastMonitorPutUp] = await emaMonitorATMs();
-  await takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp)
+  let [emaMonitorMediumCallUp, emaMediumMonitorPutUp] = await emaMonitorATMs();
+  await takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp)
 }
     
 
