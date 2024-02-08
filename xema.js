@@ -1614,7 +1614,7 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     if(!emaFastMonitorPutUp && !longPositionTaken) {
       await enterXemaLong()
     }
-    if(!shortPositionTaken) {
+    if(!emaMonitorFastCallUp && !shortPositionTaken) {
       await enterXemaShort()
     }
     if((emaFastMonitorPutUp) && longPositionTaken) {
@@ -1623,7 +1623,7 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     if((emaMonitorFastCallUp) && shortPositionTaken) {
       await exitXemaShort();
     }
-    send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken + "\cef, pef: " + emaMonitorFastCallUp + ' ' + emaFastMonitorPutUp)
+    send_notification("long short: " + longPositionTaken + ' ' + shortPositionTaken)
 }
 
 const optionBasedEmaRecurringFunction = async () => {
