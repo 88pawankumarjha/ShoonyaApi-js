@@ -1451,10 +1451,10 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' ces : ' + parseFloat(callemaSlow).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pes : ' +parseFloat(putemaSlow).toFixed(2))
-    emaUpMediumCall = callemaMedium > callemaSlow 
-    emaUpMediumPut = putemaMedium > putemaSlow
-    return [emaUpMediumCall, emaUpMediumPut];
+    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pes : ' +parseFloat(putemaFast).toFixed(2))
+    emaUpFastall = callemaFast > callemaMedium
+    emaUpFastPut = putemaFast  > putemaMedium
+    return [emaUpFastall, emaUpFastPut];
   } catch (error) {
     // handle the exception locally
     console.error("Child method encountered an exception:", error.message);
@@ -1654,21 +1654,21 @@ const enterXemaBuyPut = async () => {
   await api.place_order(order);
   send_notification('bought hedge put', true)
 }
-async function takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp) {
+async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
   if(biasOutput.bias > 0){
     //positive bias
-    if(!emaMediumMonitorPutUp && !longPositionTaken) {
+    if(!emaFastMonitorPutUp && !longPositionTaken) {
       await enterXemaLong()
     }
-    if((emaMonitorMediumCallUp) && shortPositionTaken) {
+    if((emaMonitorFastCallUp) && shortPositionTaken) {
       await exitXemaShort();
     }
   }else{
     //negative bias
-    if(!emaMonitorMediumCallUp && !shortPositionTaken) {
+    if(!emaMonitorFastCallUp && !shortPositionTaken) {
       await enterXemaShort()
     }
-    if((emaMediumMonitorPutUp) && longPositionTaken) {
+    if((emaFastMonitorPutUp) && longPositionTaken) {
       await exitXemaLong();
     }
   }
@@ -1683,8 +1683,8 @@ const setBiasValue = async () => {
 
 const optionBasedEmaRecurringFunction = async () => {
   await setBiasValue();
-  let [emaMonitorMediumCallUp, emaMediumMonitorPutUp] = await emaMonitorATMs();
-  await takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp)
+  let [emaMonitorFastCallUp, emaFastMonitorPutUp] = await emaMonitorATMs();
+  await takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp)
 }
     
 
