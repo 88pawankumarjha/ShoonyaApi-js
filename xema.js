@@ -1563,9 +1563,8 @@ const exitXemaLong = async () => {
     price: 0,
     remarks: 'API'
   }
-  positionProcess.smallestPutPosition?.tsym && await api.place_order(order);
-  send_notification('exiting Long', true)
-  longPositionTaken = false;
+  positionProcess.smallestPutPosition?.tsym && await api.place_order(order) && send_notification('exiting Long', true)
+  longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
 }
 const enterXemaLong = async () => {
   order = {
@@ -1598,9 +1597,8 @@ const exitXemaShort = async () => {
     price: 0,
     remarks: 'API'
   }
-  positionProcess.smallestCallPosition?.tsym && await api.place_order(order);
-  send_notification('exiting Short', true)
-  shortPositionTaken = false;
+  positionProcess.smallestCallPosition?.tsym && await api.place_order(order) && send_notification('exiting Short', true)
+  shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
 }
 const enterXemaShort = async () => {
   order = {
