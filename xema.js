@@ -32,7 +32,7 @@ let globalBigInput = {
 }
 //TODO change index
 getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
-getEMAQtyFor2L = () => debug ? 100 : [100, 60, 80, 60, 100, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
+getEMAQtyFor2L = () => debug ? 150 : [150, 90, 120, 90, 150, 80, 150][new Date().getDay()] || 150; // qty for margin to sell both sides
 let telegramSignals = {
   stopSignal: false,
   exitSignal: false,
@@ -1655,7 +1655,7 @@ const enterXemaBuyPut = async () => {
 async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
   if(biasOutput.bias > 0){
     //positive bias
-    if((emaMonitorFastCallUp) && shortPositionTaken) {
+    if(shortPositionTaken) {
       await exitXemaShort();
     }
     if((emaFastMonitorPutUp) && longPositionTaken) {
@@ -1666,7 +1666,7 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     }
   }else{
     //negative bias
-    if((emaFastMonitorPutUp) && longPositionTaken) {
+    if(longPositionTaken) {
       await exitXemaLong();
     }
     if((emaMonitorFastCallUp) && shortPositionTaken) {
