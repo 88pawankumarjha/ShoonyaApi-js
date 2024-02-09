@@ -1658,6 +1658,9 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     if((emaMonitorFastCallUp) && shortPositionTaken) {
       await exitXemaShort();
     }
+    if((emaFastMonitorPutUp) && longPositionTaken) {
+      await exitXemaLong();
+    }
     if(!emaFastMonitorPutUp && !longPositionTaken) {
       await enterXemaLong()
     }
@@ -1665,6 +1668,9 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     //negative bias
     if((emaFastMonitorPutUp) && longPositionTaken) {
       await exitXemaLong();
+    }
+    if((emaMonitorFastCallUp) && shortPositionTaken) {
+      await exitXemaShort();
     }
     if(!emaMonitorFastCallUp && !shortPositionTaken) {
       await enterXemaShort()
