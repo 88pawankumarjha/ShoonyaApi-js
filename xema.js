@@ -1657,19 +1657,19 @@ const enterXemaBuyPut = async () => {
 async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
   if(biasOutput.bias > 0){
     //positive bias
-    if(!emaFastMonitorPutUp && !longPositionTaken) {
-      await enterXemaLong()
-    }
     if((emaMonitorFastCallUp) && shortPositionTaken) {
       await exitXemaShort();
     }
+    if(!emaFastMonitorPutUp && !longPositionTaken) {
+      await enterXemaLong()
+    }
   }else{
     //negative bias
-    if(!emaMonitorFastCallUp && !shortPositionTaken) {
-      await enterXemaShort()
-    }
     if((emaFastMonitorPutUp) && longPositionTaken) {
       await exitXemaLong();
+    }
+    if(!emaMonitorFastCallUp && !shortPositionTaken) {
+      await enterXemaShort()
     }
   }
     send_notification(biasOutput.bias + ' ' + longPositionTaken + ' ' + shortPositionTaken + " : bias long short")
