@@ -99,6 +99,11 @@ const resetBiasProcess = () => {
   biasProcess.otmPutSymbol = undefined,
   biasProcess.otmPutStrikePrice = undefined,
   biasProcess.atmStrike = undefined,
+  biasProcess.otm2CallSymbol = undefined,
+  biasProcess.otm2CallStrikePrice = undefined,
+  biasProcess.otm2PutSymbol = undefined,
+  biasProcess.otm2PutStrikePrice = undefined,
+  biasProcess.atmStrike = undefined,
   biasProcess.spotObject = undefined,
   biasProcess.callSubStr = undefined,
   biasProcess.putSubStr = undefined
@@ -603,6 +608,10 @@ function updateITMSymbolAndStrike(optionType) {
     biasProcess.otmCallStrikePrice = biasProcess.ocCallOptions[16].strprc;
     biasProcess.otmPutSymbol = biasProcess.ocPutOptions[14].tsym;
     biasProcess.otmPutStrikePrice = biasProcess.ocPutOptions[14].strprc;
+    biasProcess.otm2CallSymbol = biasProcess.ocCallOptions[17].tsym;
+    biasProcess.otm2CallStrikePrice = biasProcess.ocCallOptions[17].strprc;
+    biasProcess.otm2PutSymbol = biasProcess.ocPutOptions[13].tsym;
+    biasProcess.otm2PutStrikePrice = biasProcess.ocPutOptions[13].strprc;
     return;
 }
 
@@ -1444,13 +1453,13 @@ const emaMonitorATMs = async () => {
 
     paramsCall = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.otmCallSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.otm2CallSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
     paramsPut = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.otmPutSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.otm2PutSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
@@ -1576,7 +1585,7 @@ const enterXemaLong = async () => {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otmPutSymbol,
+    tradingsymbol: biasProcess.otm2PutSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
@@ -1610,7 +1619,7 @@ const enterXemaShort = async () => {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otmCallSymbol,
+    tradingsymbol: biasProcess.otm2CallSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
