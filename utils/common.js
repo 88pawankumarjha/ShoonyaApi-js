@@ -824,6 +824,10 @@ async function processOrders(api, exchange = 'NFO') {
       await send_notification(slOrders);
       slOrders = '';
       slOrdersExtra = '';
+      await updatePositions(api);
+      if (Object.keys(smallestCallPosition).length === 0 || Object.keys(smallestPutPosition).length === 0){
+        send_notification('################## ORDER REJECTED PLS CHECK ##################', true);
+      }
     } else {
       console.log('no SL orders available')
     }
