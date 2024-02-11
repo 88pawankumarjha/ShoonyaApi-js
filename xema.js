@@ -1454,7 +1454,7 @@ const emaMonitorATMs = async () => {
 
     paramsCall = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.otm2CallSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.otmCallSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
@@ -1620,7 +1620,7 @@ const enterXemaShort = async () => {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otm2CallSymbol,
+    tradingsymbol: biasProcess.otmCallSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
