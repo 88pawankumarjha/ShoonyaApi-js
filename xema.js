@@ -1454,13 +1454,13 @@ const emaMonitorATMs = async () => {
 
     paramsCall = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.otmCallSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.atmCallSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
     paramsPut = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.otm2PutSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.atmPutSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
