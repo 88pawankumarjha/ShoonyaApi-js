@@ -367,7 +367,7 @@ const takeDecision = async (api, up, vixQuoteCalc, actionTypeInput) => {
 
     
     pnl = await calcPnL(api);
-    send_notification('PnL : ' + pnl, true)
+    send_notification('Common PnL : ' + pnl, true)
     send_notification('Common PnL : ' + pnl)
     
     //send distance and MtoM
