@@ -32,7 +32,7 @@ let globalBigInput = {
 }
 //TODO change index
 getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
-getEMAQtyFor2L = () => debug ? 150 : [150, 90, 120, 90, 150, 80, 150][new Date().getDay()] || 150; // qty for margin to sell both sides
+getEMAQtyFor2L = () => debug ? 100 : [100, 60, 80, 60, 100, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
 let telegramSignals = {
   stopSignal: false,
   exitSignal: false,
@@ -69,6 +69,8 @@ let biasProcess = {
   atmCallStrikePrice: undefined,
   otmCallSymbol: undefined,
   otmCallStrikePrice: undefined,
+  otm2CallSymbol: undefined,
+  otm2CallStrikePrice: undefined,
   callSubStr: undefined,
   itmPutSymbol: undefined,
   itmPutStrikePrice: undefined,
@@ -76,6 +78,8 @@ let biasProcess = {
   atmPutStrikePrice: undefined,
   otmPutSymbol: undefined,
   otmPutStrikePrice: undefined,
+  otm2PutSymbol: undefined,
+  otm2PutStrikePrice: undefined,
   putSubStr: undefined,
   vix: undefined,
   spotObject: undefined
@@ -98,6 +102,11 @@ const resetBiasProcess = () => {
   biasProcess.otmCallStrikePrice = undefined,
   biasProcess.otmPutSymbol = undefined,
   biasProcess.otmPutStrikePrice = undefined,
+  biasProcess.atmStrike = undefined,
+  biasProcess.otm2CallSymbol = undefined,
+  biasProcess.otm2CallStrikePrice = undefined,
+  biasProcess.otm2PutSymbol = undefined,
+  biasProcess.otm2PutStrikePrice = undefined,
   biasProcess.atmStrike = undefined,
   biasProcess.spotObject = undefined,
   biasProcess.callSubStr = undefined,
@@ -127,6 +136,8 @@ let latestOrders = {};
 let positionProcess = {
   smallestCallPosition: undefined, // [{tsym: 'NIFTY07DEC23P20850', lp: '1.55', netqty: '-800', s_prdt_ali: 'MIS'}]
   smallestPutPosition: undefined,
+  hedgeCall: undefined,
+  hedgePut: undefined,
   posCallSubStr: undefined,
   posPutSubStr: undefined,
   callsNearbyNeighbours: undefined,
@@ -414,6 +425,9 @@ updatePositions = async () => {
                 // Separate calls and puts for NFO - these are sold options with smallest LTP
                 const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
                 const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
+                // Separate calls and puts for NFO - these are sold options with smallest LTP
+                positionProcess.hedgeCall = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
+                positionProcess.hedgePut = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
                 positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
                 positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
                 // send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
@@ -485,7 +499,8 @@ postOrderPosTracking = async (data) => {
     str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc;
     send_notification(str, true)
     pnl = await calcPnL(api);
-    send_notification('PnL : ' + pnl, true)
+    send_notification('Xema PnL : ' + pnl, true)
+    send_notification('Xema PnL : ' + pnl)
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -510,7 +525,7 @@ function receiveOrders(data) {
         postOrderPosTracking(data)
     }
     if(data.status === 'REJECTED') {
-      send_notification('ORDER REJECTED', true)
+      send_notification('################## ORDER REJECTED PLS CHECK ##################', true);
       exitSellsAndOrStop(true);
     }
 }
@@ -598,6 +613,10 @@ function updateITMSymbolAndStrike(optionType) {
     biasProcess.otmCallStrikePrice = biasProcess.ocCallOptions[16].strprc;
     biasProcess.otmPutSymbol = biasProcess.ocPutOptions[14].tsym;
     biasProcess.otmPutStrikePrice = biasProcess.ocPutOptions[14].strprc;
+    biasProcess.otm2CallSymbol = biasProcess.ocCallOptions[17].tsym;
+    biasProcess.otm2CallStrikePrice = biasProcess.ocCallOptions[17].strprc;
+    biasProcess.otm2PutSymbol = biasProcess.ocPutOptions[13].tsym;
+    biasProcess.otm2PutStrikePrice = biasProcess.ocPutOptions[13].strprc;
     return;
 }
 
@@ -1421,7 +1440,7 @@ const emaMonitorATMs = async () => {
   try{
     if (getAtmStrike()!= biasProcess.atmStrike){
       await triggerATMChangeActions()
-      send_notification('ATM changed',true)
+      (longPositionTaken || shortPositionTaken) && send_notification('ATM changed',true)
       resetBiasProcess();
       await updateITMSymbolfromOC()
       await dynSubs();
@@ -1451,7 +1470,7 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pes : ' +parseFloat(putemaFast).toFixed(2))
+    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pef : ' +parseFloat(putemaFast).toFixed(2))
     emaUpFastCall = callemaFast > callemaMedium
     emaUpFastPut = putemaFast  > putemaMedium
     return [emaUpFastCall, emaUpFastPut];
@@ -1539,7 +1558,7 @@ let shortPositionTaken = false; // Variable to track short position status
 
 const exitSellsAndOrStop = async (stop = false) => {
   //exit positions
-  stop ? send_notification('exiting all and stopping', true): send_notification('exiting all');
+  stop ? send_notification('exiting all and stopping', true): (longPositionTaken || shortPositionTaken) && send_notification('exiting all');
   await exitXemaLong();
   await exitXemaShort();
   stop && process.exit(0)
@@ -1571,7 +1590,7 @@ const enterXemaLong = async () => {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otmPutSymbol,
+    tradingsymbol: biasProcess.otm2PutSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
@@ -1620,7 +1639,7 @@ const enterXemaShort = async () => {
 
 
 const enterXemaBuyCall = async () => {
-  nearestCETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, 3)
+  nearestCETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, 1)
   order = {
     buy_or_sell: 'B',
     product_type: 'M',
@@ -1637,7 +1656,7 @@ const enterXemaBuyCall = async () => {
 }
 
 const enterXemaBuyPut = async () => {
-  nearestPETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, 3)
+  nearestPETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, 1)
   order = {
     buy_or_sell: 'B',
     product_type: 'M',
@@ -1717,10 +1736,10 @@ const runEma = async () => {
     await send_callback_notification();
     await updateITMSymbolfromOC();
     await dynSubs();
+    await updateTwoSmallestPositionsAndNeighboursSubs(false);
     //TODO uncomment
-    await enterXemaBuyCall();
-    await enterXemaBuyPut();
-    
+    if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) await enterXemaBuyCall();
+    if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) await enterXemaBuyPut();
     // limits = await api.get_limits()
     // console.log(limits, ' limits')
 
