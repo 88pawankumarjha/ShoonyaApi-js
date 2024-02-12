@@ -1887,7 +1887,8 @@ const setNearestCrudeFutureToken = async () => {
 
   let query = `CRUDEOIL`;
   let futureObj = await api.searchscrip(exchange='MCX', searchtext=query)
-  let futureToken = futureObj.values[3].token; //258003 //3 as it skips crudeoil, crudeoilm and its future
+  // let futureToken = futureObj.values[3].token; //258003 //3 as it skips crudeoil, crudeoilm and its future
+  let futureToken = futureObj.values[5].token; //258003 //next month
   globalInput.token = futureToken;
 
   // console.log(globalInput.token, 'token')
