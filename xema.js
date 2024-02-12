@@ -1439,7 +1439,7 @@ const ema9_21_3ValuesIndicators = async (params) => {
 const emaMonitorATMs = async () => {
   try{
     if (getAtmStrike()!= biasProcess.atmStrike){
-      await triggerATMChangeActions()
+      (longPositionTaken || shortPositionTaken) && await triggerATMChangeActions()
       (longPositionTaken || shortPositionTaken) && send_notification('ATM changed',true)
       resetBiasProcess();
       await updateITMSymbolfromOC()
