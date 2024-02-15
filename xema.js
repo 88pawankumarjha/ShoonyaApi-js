@@ -1624,7 +1624,7 @@ const enterXemaShort = async () => {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otmCallSymbol,
+    tradingsymbol: biasProcess.otm2CallSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
