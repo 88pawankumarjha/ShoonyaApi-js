@@ -1565,7 +1565,7 @@ const exitSellsAndOrStop = async (stop = false) => {
 }
 
 const triggerATMChangeActions = async () => {
-  await exitSellsAndOrStop();
+  await exitSellsAndOrStop(false);
 }
 
 //buy Put
