@@ -278,6 +278,17 @@ findNearestExpiry();
 
 const Api = require("./lib/RestApi");
 let api = new Api({});
+// get_limits_custom = async () => {
+// return await api.get_limits();
+// }
+// let limits = get_limits_custom();
+// getEMAQtyForGeneric = () => {
+//   return debug ? 100 : 
+//   limits?.cash < 400000 ? 
+//     [100, 60, 120, 60, 150, 50, 100][new Date().getDay()] : 
+//     [300, 180, 360, 180, 450, 150, 300][new Date().getDay()]
+//   }
+// globalInput.emaLotMultiplierQty = getEMAQtyForGeneric();
 
 const getAtmStrike = () => {
   // TODO
