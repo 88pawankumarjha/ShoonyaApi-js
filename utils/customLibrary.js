@@ -33,7 +33,7 @@ const total_pnl = positions?.reduce((acc, pos) => {
   const r_pnl = parseFloat(pos?.rpnl);
   return acc + ur_mtm + r_pnl;
 }, 0);
-return (total_pnl/limits?.cash)*100 + '%';
+return parseFloat((total_pnl/limits?.cash)*100).toFixed(2) + '%';
 };
 
 
