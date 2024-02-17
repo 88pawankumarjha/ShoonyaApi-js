@@ -514,11 +514,10 @@ postOrderPosTracking = async (data) => {
     
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
     // console.log('order placed: ', data)
-    str = data?.trantype + ' order ' + data?.status + ' for ' + data?.tsym + ' at ' + data?.flprc;
-    send_notification(str, true)
+    str = data?.trantype + ' ' + data?.tsym + ' at ' + data?.flprc + ' is ' + data?.status;
     pnl = await calcPnL(api);
-    send_notification('Xema PnL : ' + pnl, true)
-    send_notification('Xema PnL : ' + pnl)
+    // send_notification(pnl + ' ' + str, true)
+    send_notification('PNL ' + pnl + ' ' + str)
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -1504,77 +1503,6 @@ const emaMonitorATMs = async () => {
   }
 }
 
-const takeLong = async (full=false, shortOnly=false) => {
-  // full ? exit short position if any and take long : exit short if any
-  await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  if(!shortOnly && positionProcess.smallestCallPosition?.tsym) {
-    order = {
-      buy_or_sell: 'B',
-      product_type: 'M',
-      exchange: globalInput.pickedExchange,
-      tradingsymbol: positionProcess.smallestCallPosition?.tsym,
-      quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
-      discloseqty: 0,
-      price_type: 'MKT',
-      price: 0,
-      remarks: 'API'
-    }
-    await api.place_order(order);
-    // console.log(order)
-  }
-  if(full){
-    order = {
-      buy_or_sell: 'S',
-      product_type: 'M',
-      exchange: globalInput.pickedExchange,
-      tradingsymbol: biasProcess.atmPutSymbol,
-      quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
-      discloseqty: 0,
-      price_type: 'MKT',
-      price: 0,
-      remarks: 'API'
-    }
-    await api.place_order(order);
-    // console.log(order)
-  }
-}
-
-const takeShort = async (full=false, shortOnly=false) => {
-  // full ? exit long position if any and take short : exit long if any
-  await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  if(!shortOnly && positionProcess.smallestPutPosition?.tsym) {
-    order = {
-      buy_or_sell: 'B',
-      product_type: 'M',
-      exchange: globalInput.pickedExchange,
-      tradingsymbol: positionProcess.smallestPutPosition?.tsym,
-      quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
-      discloseqty: 0,
-      price_type: 'MKT',
-      price: 0,
-      remarks: 'API'
-    }
-    await api.place_order(order);
-    // console.log(order)
-  }
-  if(full){
-    order = {
-      buy_or_sell: 'S',
-      product_type: 'M',
-      exchange: globalInput.pickedExchange,
-      tradingsymbol: biasProcess.atmCallSymbol,
-      quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
-      discloseqty: 0,
-      price_type: 'MKT',
-      price: 0,
-      remarks: 'API'
-    }
-    await api.place_order(order);
-    // console.log(order)
-  }  
-}
-
-
 let longPositionTaken = false; // Variable to track long position status
 let shortPositionTaken = false; // Variable to track short position status
 
@@ -1600,18 +1528,22 @@ const exitXemaLong = async () => {
     tradingsymbol: positionProcess.smallestPutPosition?.tsym,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
-    price_type: 'MKT',
-    price: 0,
+    price_type: 'LMT',
+    price: +positionProcess.smallestPutPosition?.lp + 2,
     remarks: 'API'
   }
-  positionProcess.smallestPutPosition?.tsym && await api.place_order(order) && send_notification('exiting Long', true)
+  if(positionProcess.smallestPutPosition?.tsym) {await api.place_order(order)}
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
+  await delay(1000);
 }
 const enterXemaLong = async () => {
   tempTradingPutSymbol = biasProcess.otm3PutSymbol;
   if(isTimeEqualsNotAfterProps(15,10,false)) {tempTradingPutSymbol = biasProcess.atmPutSymbol;}
   else if(isTimeEqualsNotAfterProps(14,10,false)) {tempTradingPutSymbol = biasProcess.otm1PutSymbol;}
   else if(isTimeEqualsNotAfterProps(13,10,false)) {tempTradingPutSymbol = biasProcess.otm2PutSymbol;}
+
+  const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingPutSymbol));
+
   order = {
     buy_or_sell: 'S',
     product_type: 'M',
@@ -1619,13 +1551,14 @@ const enterXemaLong = async () => {
     tradingsymbol: tempTradingPutSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
-    price_type: 'MKT',
-    price: 0,
+    price_type: 'LMT',
+    price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 2) > 0.1 ? +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 2) : 0.1,
     remarks: 'API'
   }
   await api.place_order(order);
-  send_notification('entering Long', true)
+  // send_notification('entering Long', true)
   longPositionTaken = true;
+  await delay(1000);
 }
 
 //Exit short Call
@@ -1638,18 +1571,22 @@ const exitXemaShort = async () => {
     tradingsymbol: positionProcess.smallestCallPosition?.tsym,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
-    price_type: 'MKT',
-    price: 0,
+    price_type: 'LMT',
+    price: +positionProcess.smallestCallPosition?.lp + 2,
     remarks: 'API'
   }
-  positionProcess.smallestCallPosition?.tsym && await api.place_order(order) && send_notification('exiting Short', true)
+  if(positionProcess.smallestCallPosition?.tsym) {await api.place_order(order)}
   shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
+  await delay(1000);
 }
 const enterXemaShort = async () => {
   tempTradingCallSymbol = biasProcess.otm3CallSymbol;
   if(isTimeEqualsNotAfterProps(15,10,false)) {tempTradingCallSymbol = biasProcess.atmCallSymbol;}
   else if(isTimeEqualsNotAfterProps(14,10,false)) {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
   else if(isTimeEqualsNotAfterProps(13,10,false)) {tempTradingCallSymbol = biasProcess.otm2CallSymbol;}
+
+  const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingCallSymbol));
+
   order = {
     buy_or_sell: 'S',
     product_type: 'M',
@@ -1657,13 +1594,14 @@ const enterXemaShort = async () => {
     tradingsymbol: tempTradingCallSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
-    price_type: 'MKT',
-    price: 0,
+    price_type: 'LMT',
+    price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 2) > 0.1 ? +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 2) : 0.1,
     remarks: 'API'
   }
   await api.place_order(order);
-  send_notification('entering Short', true)
+  // send_notification('entering Short', true)
   shortPositionTaken = true;
+  await delay(1000);
 }
 
 
@@ -1753,7 +1691,7 @@ getEma = async () => {
       await optionBasedEmaRecurringFunction();
     } catch (error) {
         console.error("Error occured: " + error);
-        send_notification("Error occured: " + error)
+        send_notification("Error occured")
         // getBias();
     }
   }
