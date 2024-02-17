@@ -1750,8 +1750,8 @@ const runEma = async () => {
     await dynSubs();
     await updateTwoSmallestPositionsAndNeighboursSubs(false);
     //TODO uncomment
-    if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) await enterXemaBuyCall();
-    if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) await enterXemaBuyPut();
+    if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) {await enterXemaBuyCall()};
+    if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) {await enterXemaBuyPut()};
     // limits = await api.get_limits()
     // console.log(limits, ' limits')
 
