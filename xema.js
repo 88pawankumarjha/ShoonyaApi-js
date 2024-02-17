@@ -71,6 +71,8 @@ let biasProcess = {
   otmCallStrikePrice: undefined,
   otm2CallSymbol: undefined,
   otm2CallStrikePrice: undefined,
+  otm3CallSymbol: undefined,
+  otm3CallStrikePrice: undefined,
   callSubStr: undefined,
   itmPutSymbol: undefined,
   itmPutStrikePrice: undefined,
@@ -80,6 +82,8 @@ let biasProcess = {
   otmPutStrikePrice: undefined,
   otm2PutSymbol: undefined,
   otm2PutStrikePrice: undefined,
+  otm3PutSymbol: undefined,
+  otm3PutStrikePrice: undefined,
   putSubStr: undefined,
   vix: undefined,
   spotObject: undefined
@@ -107,6 +111,10 @@ const resetBiasProcess = () => {
   biasProcess.otm2CallStrikePrice = undefined,
   biasProcess.otm2PutSymbol = undefined,
   biasProcess.otm2PutStrikePrice = undefined,
+  biasProcess.otm3CallSymbol = undefined,
+  biasProcess.otm3CallStrikePrice = undefined,
+  biasProcess.otm3PutSymbol = undefined,
+  biasProcess.otm3PutStrikePrice = undefined,
   biasProcess.atmStrike = undefined,
   biasProcess.spotObject = undefined,
   biasProcess.callSubStr = undefined,
@@ -617,6 +625,10 @@ function updateITMSymbolAndStrike(optionType) {
     biasProcess.otm2CallStrikePrice = biasProcess.ocCallOptions[17].strprc;
     biasProcess.otm2PutSymbol = biasProcess.ocPutOptions[13].tsym;
     biasProcess.otm2PutStrikePrice = biasProcess.ocPutOptions[13].strprc;
+    biasProcess.otm3CallSymbol = biasProcess.ocCallOptions[18].tsym;
+    biasProcess.otm3CallStrikePrice = biasProcess.ocCallOptions[18].strprc;
+    biasProcess.otm3PutSymbol = biasProcess.ocPutOptions[12].tsym;
+    biasProcess.otm3PutStrikePrice = biasProcess.ocPutOptions[12].strprc;
     return;
 }
 
@@ -1458,13 +1470,13 @@ const emaMonitorATMs = async () => {
 
     paramsCall = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.otmCallSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.otm2CallSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
     paramsPut = {
       'exchange'   : globalInput.pickedExchange,
-      'token' : getTokenByTradingSymbol(biasProcess.otmPutSymbol),
+      'token' : getTokenByTradingSymbol(biasProcess.otm2PutSymbol),
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
@@ -1590,7 +1602,7 @@ const enterXemaLong = async () => {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otm2PutSymbol,
+    tradingsymbol: biasProcess.otm3PutSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
@@ -1624,7 +1636,7 @@ const enterXemaShort = async () => {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otm2CallSymbol,
+    tradingsymbol: biasProcess.otm3CallSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',

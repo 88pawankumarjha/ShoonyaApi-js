@@ -25,13 +25,15 @@ module.exports.calcVix = async (api) => {
 
 module.exports.calcPnL = async (api, mcxOnly = false) => {
 let positions = await api.get_positions();
+let limits = await api.get_limits()
+
 if(mcxOnly) {positions = positions.filter(option => option.exch == 'MCX')}
 const total_pnl = positions?.reduce((acc, pos) => {
   const ur_mtm = parseFloat(pos?.urmtom);
   const r_pnl = parseFloat(pos?.rpnl);
   return acc + ur_mtm + r_pnl;
 }, 0);
-return total_pnl;
+return (total_pnl/limits?.cash)*100 + '%';
 };
 
 
