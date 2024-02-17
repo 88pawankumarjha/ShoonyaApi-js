@@ -536,14 +536,14 @@ function receiveQuote(data) {
 function receiveOrders(data) {
     // console.log("Order ::", data);
     // Update the latest order value for the corresponding instrument
-    if(data.status === 'COMPLETE' || data.status === 'REJECTED') {
-        latestOrders[data.Instrument] = data;
-        // update the smallest positions after each order
-        postOrderPosTracking(data)
-    }
     if(data.status === 'REJECTED') {
       send_notification('################## ORDER REJECTED PLS CHECK ##################', true);
       exitSellsAndOrStop(true);
+    }
+    if(data.status === 'COMPLETE') {
+        latestOrders[data.Instrument] = data;
+        // update the smallest positions after each order
+        postOrderPosTracking(data)
     }
 }
 
@@ -790,417 +790,6 @@ async function updateITMSymbolfromOC() {
     }
 }
 
-async function takeAction(goingUp) {
-    // let orders = await api.get_orderbook() 
-    // console.log(orders)
-
-    //BUY
-    // {
-    //     stat: 'Ok',
-    //     norenordno: '23121900039453',
-    //     kidid: '1',
-    //     uid: 'FA63911',
-    //     actid: 'FA63911',
-    //     exch: 'NFO',
-    //     tsym: 'FINNIFTY19DEC23C21750',
-    //     qty: '400',
-    //     ordenttm: '1702957680',
-    //     trantype: 'B',
-    //     prctyp: 'MKT',
-    //     ret: 'DAY',
-    //     token: '35040',
-    //     mult: '1',
-    //     prcftr: '1.000000',
-    //     instname: 'OPTIDX',
-    //     ordersource: 'API',
-    //     dname: 'FINNIFTY DEC 21750 CE ',
-    //     pp: '2',
-    //     ls: '40',
-    //     ti: '0.05',
-    //     prc: '0.00',
-    //     rprc: '1.05',
-    //     avgprc: '1.05',
-    //     dscqty: '0',
-    //     brnchid: 'HO',
-    //     C: 'C',
-    //     s_prdt_ali: 'MIS',
-    //     prd: 'I',
-    //     status: 'COMPLETE',
-    //     st_intrn: 'COMPLETE',
-    //     fillshares: '400',
-    //     norentm: '09:18:00 19-12-2023',
-    //     exch_tm: '19-12-2023 09:18:00',
-    //     remarks: 'Tue IC fin helper_Entry_0_fintarget',
-    //     exchordid: '1200000004793558',
-    //     rqty: '400'
-    //   }
-
-      
-    // SELL
-    // {
-    //     stat: 'Ok',
-    //     norenordno: '23121900040101',
-    //     kidid: '1',
-    //     uid: 'FA63911',
-    //     actid: 'FA63911',
-    //     exch: 'NFO',
-    //     tsym: 'FINNIFTY19DEC23P21150',
-    //     qty: '400',
-    //     ordenttm: '1702957682',
-    //     trantype: 'S',
-    //     prctyp: 'MKT',
-    //     ret: 'DAY',
-    //     token: '51814',
-    //     mult: '1',
-    //     prcftr: '1.000000',
-    //     instname: 'OPTIDX',
-    //     ordersource: 'API',
-    //     dname: 'FINNIFTY DEC 21150 PE ',
-    //     pp: '2',
-    //     ls: '40',
-    //     ti: '0.05',
-    //     prc: '0.00',
-    //     rprc: '1.25',
-    //     avgprc: '1.25',
-    //     dscqty: '0',
-    //     brnchid: 'HO',
-    //     C: 'C',
-    //     s_prdt_ali: 'MIS',
-    //     prd: 'I',
-    //     status: 'COMPLETE',
-    //     st_intrn: 'COMPLETE',
-    //     fillshares: '400',
-    //     norentm: '09:18:02 19-12-2023',
-    //     exch_tm: '19-12-2023 09:18:02',
-    //     remarks: 'Tue IC fin helper_Entry_3_fintarget',
-    //     exchordid: '1900000004305097',
-    //     rqty: '400'
-    //   },
-
-    //SL-LMT
-    // {
-    //   stat: 'Ok',
-    //   norenordno: '23121900048453',
-    //   kidid: '3',
-    //   uid: 'FA63911',
-    //   actid: 'FA63911',
-    //   exch: 'NFO',
-    //   tsym: 'FINNIFTY19DEC23P21200',
-    //   qty: '1000',
-    //   rorgqty: '800',
-    //   ordenttm: '1702960020',
-    //   trantype: 'B',
-    //   prctyp: 'SL-LMT',
-    //   ret: 'DAY',
-    //   token: '51816',
-    //   mult: '1',
-    //   prcftr: '1.000000',
-    //   instname: 'OPTIDX',
-    //   ordersource: 'MOB',
-    //   dname: 'FINNIFTY DEC 21200 PE ',
-    //   pp: '2',
-    //   ls: '40',
-    //   ti: '0.05',
-    //   prc: '25.00',
-    //   trgprc: '24.00',
-    //   rorgprc: '25.00',
-    //   rprc: '25.00',
-    //   dscqty: '0',
-    //   brnchid: 'HO',
-    //   C: 'C',
-    //   s_prdt_ali: 'MIS',
-    //   prd: 'I',
-    //   status: 'TRIGGER_PENDING',
-    //   st_intrn: 'TRIGGER_PENDING',
-    //   norentm: '09:57:00 19-12-2023',
-    //   exch_tm: '19-12-2023 09:57:00',
-    //   exchordid: '1900000006486411',
-    //   rqty: '1000'
-    // },
-    console.log('take action')
-    // let positions = await api.get_positions() 
-    // console.log(positions)
-    // {
-    //     stat: 'Ok',
-    //     uid: 'FA63911',
-    //     actid: 'FA63911',
-    //     exch: 'NFO',
-    //     tsym: 'FINNIFTY19DEC23C21500',
-    //     s_prdt_ali: 'MIS',
-    //     prd: 'I',
-    //     token: '51843',
-    //     instname: 'OPTIDX',
-    //     dname: 'FINNIFTY DEC 21500 CE ',
-    //     frzqty: '1801',
-    //     pp: '2',
-    //     ls: '40',
-    //     ti: '0.05',
-    //     mult: '1',
-    //     prcftr: '1.000000',
-    //     daybuyqty: '0',
-    //     daysellqty: '1000',
-    //     daybuyamt: '0.00',
-    //     daybuyavgprc: '0.00',
-    //     daysellamt: '5450.00',
-    //     daysellavgprc: '5.45',
-    //     cfbuyqty: '0',
-    //     cfsellqty: '0',
-    //     openbuyqty: '1000',
-    //     opensellqty: '0',
-    //     openbuyamt: '25000.00',
-    //     openbuyavgprc: '25.00',
-    //     opensellamt: '0.00',
-    //     opensellavgprc: '0.00',
-    //     dayavgprc: '5.45',
-    //     netqty: '-1000',
-    //     netavgprc: '5.45',
-    //     upldprc: '0.00',
-    //     netupldprc: '5.45',
-    //     lp: '4.95',
-    //     urmtom: '500.00',
-    //     bep: '5.45',
-    //     totbuyamt: '0.00',
-    //     totsellamt: '5450.00',
-    //     totsellavgprc: '5.45',
-    //     rpnl: '0.00'
-    //   },
-    //   {
-    //     stat: 'Ok',
-    //     uid: 'FA63911',
-    //     actid: 'FA63911',
-    //     exch: 'NFO',
-    //     tsym: 'FINNIFTY19DEC23P21200',
-    //     s_prdt_ali: 'MIS',
-    //     prd: 'I',
-    //     token: '51816',
-    //     instname: 'OPTIDX',
-    //     dname: 'FINNIFTY DEC 21200 PE ',
-    //     frzqty: '1801',
-    //     pp: '2',
-    //     ls: '40',
-    //     ti: '0.05',
-    //     mult: '1',
-    //     prcftr: '1.000000',
-    //     daybuyqty: '0',
-    //     daysellqty: '1000',
-    //     daybuyamt: '0.00',
-    //     daybuyavgprc: '0.00',
-    //     daysellamt: '3080.00',
-    //     daysellavgprc: '3.08',
-    //     cfbuyqty: '0',
-    //     cfsellqty: '0',
-    //     openbuyqty: '1000',
-    //     opensellqty: '0',
-    //     openbuyamt: '25000.00',
-    //     openbuyavgprc: '25.00',
-    //     opensellamt: '0.00',
-    //     opensellavgprc: '0.00',
-    //     dayavgprc: '3.08',
-    //     netqty: '-1000',
-    //     netavgprc: '3.08',
-    //     upldprc: '0.00',
-    //     netupldprc: '3.08',
-    //     lp: '2.95',
-    //     urmtom: '130.00',
-    //     bep: '3.08',
-    //     totbuyamt: '0.00',
-    //     totsellamt: '3080.00',
-    //     totsellavgprc: '3.08',
-    //     rpnl: '0.00'
-    //   },
-
-    console.log('positions')
-    // console.log(positionProcess.smallestCallPosition, 'positionProcess.smallestCallPosition')
-    // console.log(positionProcess.smallestPutPosition, 'positionProcess.smallestPutPosition')
-
-
-
-    //BUY
-    // {
-    //     stat: 'Ok',
-    //     norenordno: '23121900039453',
-    //     kidid: '1',
-    //     uid: 'FA63911',
-    //     actid: 'FA63911',
-    //     exch: 'NFO',
-    //     tsym: 'FINNIFTY19DEC23C21750',
-    //     qty: '400',
-    //     ordenttm: '1702957680',
-    //     trantype: 'B',
-    //     prctyp: 'MKT',
-    //     ret: 'DAY',
-    //     token: '35040',
-    //     mult: '1',
-    //     prcftr: '1.000000',
-    //     instname: 'OPTIDX',
-    //     ordersource: 'API',
-    //     dname: 'FINNIFTY DEC 21750 CE ',
-    //     pp: '2',
-    //     ls: '40',
-    //     ti: '0.05',
-    //     prc: '0.00',
-    //     rprc: '1.05',
-    //     avgprc: '1.05',
-    //     dscqty: '0',
-    //     brnchid: 'HO',
-    //     C: 'C',
-    //     s_prdt_ali: 'MIS',
-    //     prd: 'I',
-    //     status: 'COMPLETE',
-    //     st_intrn: 'COMPLETE',
-    //     fillshares: '400',
-    //     norentm: '09:18:00 19-12-2023',
-    //     exch_tm: '19-12-2023 09:18:00',
-    //     remarks: 'Tue IC fin helper_Entry_0_fintarget',
-    //     exchordid: '1200000004793558',
-    //     rqty: '400'
-    //   }
-        
-    let newPositionSymbol= (posObj, status) => {
-        return status == 'aggressive' ? getCallTokenSymbol(posObj, 'closer') : getCallTokenSymbol(posObj, 'farther')
-    }
-
-    const getCallTokenSymbol = (item, distance, level=1) => {
-        if (globalInput.pickedExchange === globalInput.pickedExchange){//BANKNIFTY22NOV23C43800, FINNIFTY28NOV23C19300, NIFTY23NOV23C19750
-
-
-        // Original string
-        var originalString = item.tsym //"FINNIFTY19DEC23C21600";
-        
-
-        // Using slice(0, -5) to remove the last five characters
-        var baseString = originalString.slice(0, -5);
-        var lastFiveDigits = originalString.slice(-5);
-
-        // New strike price
-        var newStrikePrice = +lastFiveDigits + +globalInput.ocGap;
-        var newStrikePrice2 = +lastFiveDigits - +globalInput.ocGap;
-        // Creating the new string by appending the new strike price
-        var newString = baseString + newStrikePrice;
-        var newString2 = baseString + newStrikePrice2;
-
-        // console.log("Original String:", originalString);
-        // console.log("New String:", newString);
-        // console.log("New String2:", newString2);
-
-
-        return distance === 'closer' ? newString2: newString;
-
-        }
-        // else if (getPickedExchange() === 'BFO') {//SENSEX23N1765500PE, BANKEX23N2049300CE
-        //     return `${item.tsym.slice(0, -7)}${getStrike(item.tsym, getPickedExchange()) + (parseInt(ocGapCalc, 10)*level)}${item.tsym.slice(-2)}`;
-        // }
-        // else if (getPickedExchange() === 'MCX') {// NATURALGAS23NOV23P230
-        //     const pattern = /(\d+)$/;
-        //     const match = item.tsym.match(pattern);
-        //     if (match) {
-        //         const [, originalStrike] = match;
-        //         const newNumericValue = Number(originalStrike) - parseInt(ocGapCalc, 10);
-        //         return item.tsym.replace(originalStrike, newNumericValue); // NATURALGAS23NOV23P235
-        //     }
-        // }
-        // else {
-        //     console.log("Strike price not found in the symbol.");
-        //     return null;
-        // }
-    }
-
-    let orderCE = {
-        buy_or_sell: 'B',
-        product_type: 'M',
-        exchange: globalInput.pickedExchange,
-        tradingsymbol: positionProcess.smallestCallPosition?.tsym,
-        quantity: Math.abs(positionProcess.smallestCallPosition?.netqty).toString(),
-        discloseqty: 0,
-        price_type: 'MKT',
-        price: 0,
-        remarks: 'WSOrderCEExitAPI'
-    }
-    
-
-    let orderPE = {
-        buy_or_sell: 'B',
-        product_type: 'M',
-        exchange: globalInput.pickedExchange,
-        tradingsymbol: positionProcess.smallestPutPosition?.tsym,
-        quantity: Math.abs(positionProcess.smallestPutPosition?.netqty).toString(),
-        discloseqty: 0,
-        price_type: 'MKT',
-        price: 0,
-        remarks: 'WSOrderPEExitAPI'
-    }
-    
-    let orderAggressiveCallPosition = newPositionSymbol(positionProcess.smallestCallPosition, 'aggressive')
-    let orderSubmissiveCallPosition = newPositionSymbol(positionProcess.smallestCallPosition, 'submissive')
-
-
-    let orderAggressivePutPosition = newPositionSymbol(positionProcess.smallestPutPosition, 'submissive')
-    let orderSubmissivePutPosition = newPositionSymbol(positionProcess.smallestPutPosition, 'aggressive')
-    // console.log(orderAggressivePosition, 'orderAggressivePosition')
-    // console.log(orderSubmissivePosition, 'orderSubmissivePosition')
-
-    let orderAggressiveCE = {
-        buy_or_sell: 'S',
-        product_type: 'M',
-        exchange: globalInput.pickedExchange,
-        tradingsymbol: orderAggressiveCallPosition,
-        quantity: Math.abs(+positionProcess.smallestCallPosition?.netqty + +positionProcess.smallestCallPosition?.ls).toString(),
-        discloseqty: 0,
-        price_type: 'MKT',
-        price: 0,
-        remarks: 'WSNewOrderAggressiveCEEntryAPI'
-    }
-
-    let orderSubmissiveCE = {
-        buy_or_sell: 'S',
-        product_type: 'M',
-        exchange: globalInput.pickedExchange,
-        tradingsymbol: orderSubmissiveCallPosition,
-        quantity: Math.abs(+positionProcess.smallestCallPosition?.netqty + +positionProcess.smallestCallPosition?.ls).toString(),
-        discloseqty: 0,
-        price_type: 'MKT',
-        price: 0,
-        remarks: 'WSNewOrderSubmissiveCEEntryAPI'
-    }
-
-    let orderAggressivePE = {
-        buy_or_sell: 'S',
-        product_type: 'M',
-        exchange: globalInput.pickedExchange,
-        tradingsymbol: orderAggressivePutPosition,
-        quantity: Math.abs(+positionProcess.smallestPutPosition?.netqty + +positionProcess.smallestPutPosition?.ls).toString(),
-        discloseqty: 0,
-        price_type: 'MKT',
-        price: 0,
-        remarks: 'WSNewOrderAggressivePEEntryAPI'
-    }
-
-    let orderSubmissivePE = {
-        buy_or_sell: 'S',
-        product_type: 'M',
-        exchange: globalInput.pickedExchange,
-        tradingsymbol: orderSubmissivePutPosition,
-        quantity: Math.abs(+positionProcess.smallestPutPosition?.netqty + +positionProcess.smallestPutPosition?.ls).toString(),
-        discloseqty: 0,
-        price_type: 'MKT',
-        price: 0,
-        remarks: 'WSNewOrderSubmissivePEEntryAPI'
-    }
-
-    if(goingUp && !telegramSignals.stopSignal && !debug) {
-        // await api.place_order(orderCE);
-        // biasProcess.vix > 0 ? await api.place_order(orderSubmissiveCE) : await api.place_order(orderAggressiveCE);
-    }else if (!goingUp && !telegramSignals.stopSignal && !debug){
-        // await api.place_order(orderPE);
-        // biasProcess.vix > 0 ? await api.place_order(orderSubmissivePE) : await api.place_order(orderAggressivePE);
-    }
-    // console.log(orderCE, 'orderCE')
-    // console.log(orderPE, 'orderPE')
-    // console.log(orderAggressiveCE, 'orderAggressiveCE')
-    // console.log(orderSubmissiveCE, 'orderSubmissiveCE')
-    // console.log(orderAggressivePE, 'orderAggressivePE')
-    // console.log(orderSubmissivePE, 'orderSubmissivePE')
-}
 // takeAction(true)
 
 async function checkAlert() {
@@ -1315,52 +904,6 @@ function getTokenByTradingSymbol(tradingSymbol) {
     return null; // TradingSymbol not found
   }
 }
-
-
-const long = async (symbol, qty) => {
-let orderCE = {
-    buy_or_sell: 'B',
-    product_type: 'M',
-    exchange: globalInput.pickedExchange,
-    tradingsymbol: symbol,
-    quantity: Math.abs(qty).toString(),
-    discloseqty: 0,
-    price_type: 'MKT',
-    price: 0,
-    remarks: 'BuyAPI'
-  }
-  try{
-    // orderCERespObj = await api.place_order(orderCE);
-    console.log(orderCE, ' :orderLong')
-    // console.log(latestQuotes[`${globalInput.pickedExchange}|${symbol}`]?.lp, ' :LTP')
-  }
-  catch(error){
-    console.log(error)
-  }
-    
-}
-const short = async (symbol, qty) => {
-    let orderCE = {
-        buy_or_sell: 'S',
-        product_type: 'M',
-        exchange: globalInput.pickedExchange,
-        tradingsymbol: symbol,
-        quantity: Math.abs(qty).toString(),
-        discloseqty: 0,
-        price_type: 'MKT',
-        price: 0,
-        remarks: 'SellAPI'
-      }
-      try{
-    // orderPERespObj = await api.place_order(orderCE);
-    console.log(orderCE, ' :orderShort')
-  }
-  catch(error){
-    console.log(error)
-  }
-    
-}
-
 
 const ema9_21_3ValuesIndicators = async (params) => {
   try{
@@ -1608,6 +1151,7 @@ const enterXemaShort = async () => {
 
 const enterXemaBuyCall = async () => {
   nearestCETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, 1)
+  const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(nearestCETsym));
   order = {
     buy_or_sell: 'B',
     product_type: 'M',
@@ -1615,8 +1159,8 @@ const enterXemaBuyCall = async () => {
     tradingsymbol: nearestCETsym,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
-    price_type: 'MKT',
-    price: 0,
+    price_type: 'LMT',
+    price: +quotesResponse.sp5 +2,
     remarks: 'API'
   }
   await api.place_order(order);
@@ -1625,6 +1169,7 @@ const enterXemaBuyCall = async () => {
 
 const enterXemaBuyPut = async () => {
   nearestPETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, 1)
+  const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(nearestPETsym));
   order = {
     buy_or_sell: 'B',
     product_type: 'M',
@@ -1632,8 +1177,8 @@ const enterXemaBuyPut = async () => {
     tradingsymbol: nearestPETsym,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
-    price_type: 'MKT',
-    price: 0,
+    price_type: 'LMT',
+    price: +quotesResponse.sp5 +2,
     remarks: 'API'
   }
   await api.place_order(order);
@@ -1710,9 +1255,9 @@ const runEma = async () => {
     globalInput.emaLotMultiplierQty = getEMAQtyForGeneric();
     globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty/globalInput.LotSize);
     
-    console.log(limits?.cash, ' limits')
-    console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
-    console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
+    // console.log(limits?.cash, ' limits')
+    // console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
+    // console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
     //TODO uncomment
     if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) {await enterXemaBuyCall()};
     if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) {await enterXemaBuyPut()};
