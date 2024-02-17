@@ -1608,11 +1608,15 @@ const exitXemaLong = async () => {
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
 }
 const enterXemaLong = async () => {
+  tempTradingPutSymbol = biasProcess.otm3PutSymbol;
+  if(isTimeEqualsNotAfterProps(15,10,false)) {tempTradingPutSymbol = biasProcess.atmPutSymbol;}
+  else if(isTimeEqualsNotAfterProps(14,10,false)) {tempTradingPutSymbol = biasProcess.otm1PutSymbol;}
+  else if(isTimeEqualsNotAfterProps(13,10,false)) {tempTradingPutSymbol = biasProcess.otm2PutSymbol;}
   order = {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otm3PutSymbol,
+    tradingsymbol: tempTradingPutSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
@@ -1642,11 +1646,15 @@ const exitXemaShort = async () => {
   shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
 }
 const enterXemaShort = async () => {
+  tempTradingCallSymbol = biasProcess.otm3CallSymbol;
+  if(isTimeEqualsNotAfterProps(15,10,false)) {tempTradingCallSymbol = biasProcess.atmCallSymbol;}
+  else if(isTimeEqualsNotAfterProps(14,10,false)) {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
+  else if(isTimeEqualsNotAfterProps(13,10,false)) {tempTradingCallSymbol = biasProcess.otm2CallSymbol;}
   order = {
     buy_or_sell: 'S',
     product_type: 'M',
     exchange: globalInput.pickedExchange,
-    tradingsymbol: biasProcess.otm3CallSymbol,
+    tradingsymbol: tempTradingCallSymbol,
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'MKT',
