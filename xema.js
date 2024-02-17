@@ -273,22 +273,21 @@ async function findNearestExpiry() {
     // }
   // }
 };
-// Execute the findNearestExpiry function
-findNearestExpiry();
+
 
 const Api = require("./lib/RestApi");
 let api = new Api({});
-// get_limits_custom = async () => {
-// return await api.get_limits();
-// }
-// let limits = get_limits_custom();
-// getEMAQtyForGeneric = () => {
-//   return debug ? 100 : 
-//   limits?.cash < 400000 ? 
-//     [100, 60, 120, 60, 150, 50, 100][new Date().getDay()] : 
-//     [300, 180, 360, 180, 450, 150, 300][new Date().getDay()]
-//   }
-// globalInput.emaLotMultiplierQty = getEMAQtyForGeneric();
+
+let limits;
+getEMAQtyForGeneric = () => {
+  return debug ? 100 : 
+  limits?.cash < 800000 ? 
+    [100, 60, 120, 60, 150, 50, 60][new Date().getDay()] : 
+    [300, 180, 360, 180, 450, 150, 150][new Date().getDay()]
+  }
+
+// Execute the findNearestExpiry function
+findNearestExpiry();
 
 const getAtmStrike = () => {
   // TODO
@@ -1760,11 +1759,18 @@ const runEma = async () => {
     await updateITMSymbolfromOC();
     await dynSubs();
     await updateTwoSmallestPositionsAndNeighboursSubs(false);
+    limits = await api.get_limits()
+
+    globalInput.emaLotMultiplierQty = getEMAQtyForGeneric();
+    globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty/globalInput.LotSize);
+    
+    console.log(limits?.cash, ' limits')
+    console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
+    console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
     //TODO uncomment
     if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) {await enterXemaBuyCall()};
     if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) {await enterXemaBuyPut()};
-    // limits = await api.get_limits()
-    // console.log(limits, ' limits')
+    
 
 
   //   request_time: '23:28:00 31-01-2024',
