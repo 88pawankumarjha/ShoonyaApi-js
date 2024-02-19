@@ -1052,8 +1052,9 @@ let shortPositionTaken = false; // Variable to track short position status
 const exitSellsAndOrStop = async (stop = false) => {
   //exit positions
   stop ? send_notification('exiting all and stopping', true): (longPositionTaken || shortPositionTaken) && send_notification('exiting all');
-  await exitXemaLong();
-  await exitXemaShort();
+  await updateTwoSmallestPositionsAndNeighboursSubs(false);
+  if (positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
+  if(positionProcess.smallestCallPosition?.tsym) {await exitXemaShort();}
   stop && process.exit(0)
 }
 
@@ -1072,7 +1073,7 @@ const exitXemaLong = async () => {
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'LMT',
-    price: +positionProcess.smallestPutPosition?.lp + 2,
+    price: +positionProcess.smallestPutPosition?.lp + 5,
     remarks: 'API'
   }
   if(positionProcess.smallestPutPosition?.tsym) {await api.place_order(order)}
@@ -1096,7 +1097,7 @@ const enterXemaLong = async () => {
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'LMT',
-    price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 2) > 0.1 ? +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 2) : 0.1,
+    price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) > 0.1 ? +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) : 0.1,
     remarks: 'API'
   }
   await api.place_order(order);
@@ -1116,7 +1117,7 @@ const exitXemaShort = async () => {
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'LMT',
-    price: +positionProcess.smallestCallPosition?.lp + 2,
+    price: +positionProcess.smallestCallPosition?.lp + 5,
     remarks: 'API'
   }
   if(positionProcess.smallestCallPosition?.tsym) {await api.place_order(order)}
@@ -1140,7 +1141,7 @@ const enterXemaShort = async () => {
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'LMT',
-    price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 2) > 0.1 ? +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 2) : 0.1,
+    price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) > 0.1 ? +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) : 0.1,
     remarks: 'API'
   }
   await api.place_order(order);
@@ -1162,7 +1163,7 @@ const enterXemaBuyCall = async () => {
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'LMT',
-    price: +quotesResponse.sp5 +2,
+    price: +quotesResponse.sp5 +3,
     remarks: 'API'
   }
   await api.place_order(order);
@@ -1180,7 +1181,7 @@ const enterXemaBuyPut = async () => {
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'LMT',
-    price: +quotesResponse.sp5 +2,
+    price: +quotesResponse.sp5 +3,
     remarks: 'API'
   }
   await api.place_order(order);
