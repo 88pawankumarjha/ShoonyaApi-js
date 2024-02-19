@@ -1073,7 +1073,7 @@ const exitXemaLong = async () => {
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'LMT',
-    price: +positionProcess.smallestPutPosition?.lp + (+positionProcess.smallestPutPosition?.lp/10),
+    price: Math.round(+positionProcess.smallestPutPosition?.lp + (+positionProcess.smallestPutPosition?.lp/10)),
     remarks: 'API'
   }
   if(positionProcess.smallestPutPosition?.tsym) {await api.place_order(order)}
@@ -1117,7 +1117,7 @@ const exitXemaShort = async () => {
     quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
     discloseqty: 0,
     price_type: 'LMT',
-    price: +positionProcess.smallestCallPosition?.lp + (+positionProcess.smallestCallPosition?.lp/10),
+    price: Math.round(+positionProcess.smallestCallPosition?.lp + (+positionProcess.smallestCallPosition?.lp/10)),
     remarks: 'API'
   }
   if(positionProcess.smallestCallPosition?.tsym) {await api.place_order(order)}
