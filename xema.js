@@ -517,7 +517,7 @@ postOrderPosTracking = async (data) => {
     str = data?.trantype + ' ' + data?.tsym + ' at ' + data?.flprc + ' is ' + data?.status;
     pnl = await calcPnL(api);
     // send_notification(pnl + ' ' + str, true)
-    send_notification((limits?.cash)?.substring(0,2) + ' : PNL : ' + pnl + ' ' + str)
+    send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
 }
 
 // websocket with update smallest 2 positions on every new order
