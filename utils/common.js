@@ -30,8 +30,8 @@ let calcBias = 0;
 let multiplier = 2;
 let exitMTM = -1500;
 let gainExitMTM = 350;
-let magicNumber = 250;
-let aggressiveMagicNumber = 300;
+let magicNumber = 200;
+let aggressiveMagicNumber = 250;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
@@ -676,8 +676,8 @@ const takeActionCallCloser = async (api) => {
             quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), (Number(localSLPrice[1]))),
-            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1])-0.5)),
+            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)+2), (Number(localSLPrice[1]))),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)), (Number(localSLPrice[1])-0.5)),
             remarks: 'CommonOrderCEEntryAPISL'
           }
 
@@ -734,8 +734,8 @@ const takeActionPutCloser = async (api) => {
             quantity: (Math.abs(smallestPutPosition?.netqty)  - Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
-            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)+2), (Number(localSLPrice[1]))),
-            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 3)), (Number(localSLPrice[1])-0.5)),
+            price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)+2), (Number(localSLPrice[1]))),
+            trigger_price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)), (Number(localSLPrice[1])-0.5)),
             remarks: 'CommonOrderPEEntryAPISL'
           }
           
