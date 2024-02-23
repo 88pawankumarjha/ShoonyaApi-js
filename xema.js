@@ -1233,6 +1233,12 @@ const optionBasedEmaRecurringFunction = async () => {
 getEma = async () => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
+
+//TODO uncomment
+if(isTimeEqualsNotAfterProps(15,28,false)) {
+  await exitSellsAndOrStop(true);
+}
+
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     //TODO
@@ -1306,10 +1312,7 @@ const runEma = async () => {
     if (telegramSignals.isPlaying) {
       intervalIdForEMA = setInterval(getEma, delayForEMA);
     }
-    //TODO uncomment
-    if(isTimeEqualsNotAfterProps(15,28,false)) {
-      await exitSellsAndOrStop(true);
-    }
+    
   } catch (error) {
     console.log(error);
   }
