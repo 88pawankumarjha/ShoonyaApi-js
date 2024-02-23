@@ -1051,11 +1051,17 @@ let shortPositionTaken = false; // Variable to track short position status
 
 const exitSellsAndOrStop = async (stop = false) => {
   //exit positions
-  stop ? send_notification('exiting all and stopping', true): (longPositionTaken || shortPositionTaken) && send_notification('exiting all');
+  if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
   if (positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
   if(positionProcess.smallestCallPosition?.tsym) {await exitXemaShort();}
-  stop && process.exit(0)
+  if(stop) { 
+    send_notification('exiting all and stopping', true)
+    const orders = await api.get_orderbook();
+    const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
+    await api.cancel_order(filtered_data_API[0]?.norenordno);
+    process.exit(0);
+  }
 }
 
 const triggerATMChangeActions = async () => {
