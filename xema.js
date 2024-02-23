@@ -283,7 +283,7 @@ getEMAQtyForGeneric = () => {
   return debug ? 100 : 
   limits?.cash < 800000 ? 
     [100, 60, 120, 60, 150, 50, 60][new Date().getDay()] : 
-    [300, 180, 360, 180, 450, 150, 150][new Date().getDay()]
+    [400, 240, 480, 240, 600, 200, 240][new Date().getDay()]
   }
 
 // Execute the findNearestExpiry function
