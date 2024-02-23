@@ -429,6 +429,38 @@ const resetPuts = () => {
 // }
 // !debug && await api.place_order(orderCE);
 
+exitHedgeOrder = async (positionsData) => {
+  let order = {
+        buy_or_sell: 'S',
+        product_type: 'M',
+        exchange: globalInput.pickedExchange,
+        tradingsymbol: positionsData.tsym.toString(),
+        quantity: positionsData.netqty.toString(),
+        discloseqty: 0,
+        price_type: 'MKT',
+        price: 0,
+        remarks: 'ExitHedgeAPI'
+    }
+    await api.place_order(order);
+}
+
+exitHedges = async () => {
+  api.get_positions()
+        .then((data) => { 
+          if (Array.isArray(data)) {
+            // Separate calls and puts for NFO - these are sold options with smallest LTP
+            const calls = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
+            const puts = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
+
+            calls.forEach(position => {
+                await exitHedgeOrder(position)
+            });
+            puts.forEach(position => {
+                await exitHedgeOrder(position)
+            });
+          }
+        });
+}
 
 updatePositions = async () => {
     api.get_positions()
@@ -1051,16 +1083,20 @@ let shortPositionTaken = false; // Variable to track short position status
 
 const exitSellsAndOrStop = async (stop = false) => {
   //exit positions
-  if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
   if (positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
   if(positionProcess.smallestCallPosition?.tsym) {await exitXemaShort();}
-  if(stop) { 
+  if(stop) {
     send_notification('exiting all and stopping', true)
     const orders = await api.get_orderbook();
     const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
     if (filtered_data_API[0]?.norenordno) {await api.cancel_order(filtered_data_API[0]?.norenordno);}
+
+    await exitHedges();
+
     process.exit(0);
+  } else {
+    if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   }
 }
 
