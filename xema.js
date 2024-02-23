@@ -1059,7 +1059,7 @@ const exitSellsAndOrStop = async (stop = false) => {
     send_notification('exiting all and stopping', true)
     const orders = await api.get_orderbook();
     const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
-    await api.cancel_order(filtered_data_API[0]?.norenordno);
+    if (filtered_data_API[0]?.norenordno) {await api.cancel_order(filtered_data_API[0]?.norenordno);}
     process.exit(0);
   }
 }
