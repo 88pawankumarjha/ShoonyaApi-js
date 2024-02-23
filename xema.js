@@ -1035,8 +1035,8 @@ const emaMonitorATMs = async () => {
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
     send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' cef : ' + parseFloat(callemaFast).toFixed(2)  + '\npem : ' +parseFloat(putemaMedium ).toFixed(2)+ ' pef : ' +parseFloat(putemaFast).toFixed(2))
-    emaUpFastCall = callemaFast > callemaMedium
-    emaUpFastPut = putemaFast > putemaMedium
+    emaUpFastCall = callemaFast - callemaMedium > 0.5;
+    emaUpFastPut = putemaFast - putemaMedium > 0.5;
     return [emaUpFastCall, emaUpFastPut];
   } catch (error) {
     // handle the exception locally
