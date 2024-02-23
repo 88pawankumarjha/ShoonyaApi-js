@@ -453,10 +453,10 @@ exitHedges = async () => {
             const puts = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
 
             calls.forEach(position => {
-                await exitHedgeOrder(position)
+                exitHedgeOrder(position)
             });
             puts.forEach(position => {
-                await exitHedgeOrder(position)
+                exitHedgeOrder(position)
             });
           }
         });
@@ -1093,8 +1093,10 @@ const exitSellsAndOrStop = async (stop = false) => {
     if (filtered_data_API[0]?.norenordno) {await api.cancel_order(filtered_data_API[0]?.norenordno);}
 
     await exitHedges();
-
-    process.exit(0);
+    setTimeout(function() {
+      process.exit(0);
+    }, 2000);
+    
   } else {
     if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   }
