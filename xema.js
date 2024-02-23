@@ -1034,7 +1034,7 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ 'pem : ' +parseFloat(putemaMedium ).toFixed(2)+ '\n cef : ' + parseFloat(callemaFast).toFixed(2) + ' pef : ' +parseFloat(putemaFast).toFixed(2))
+    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' pem : ' +parseFloat(putemaMedium ).toFixed(2)+ '\ncef : ' + parseFloat(callemaFast).toFixed(2) + ' pef : ' +parseFloat(putemaFast).toFixed(2))
     emaUpFastCall = callemaFast > callemaMedium;
     emaUpFastPut = putemaFast > putemaMedium;
     return [emaUpFastCall, emaUpFastPut];
@@ -1219,7 +1219,8 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
       await enterXemaShort()
     }
   }
-    send_notification(biasOutput.bias + ' ' + longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position')
+  currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
+  send_notification(biasOutput.bias + ' ' + currentPositionStatus)
 }
 
 const setBiasValue = async () => {
