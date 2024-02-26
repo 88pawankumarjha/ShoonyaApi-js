@@ -1081,21 +1081,29 @@ const emaMonitorATMs = async () => {
 let longPositionTaken = false; // Variable to track long position status
 let shortPositionTaken = false; // Variable to track short position status
 
+const cancelOpenOrders = async () => {
+  const orders = await api.get_orderbook();
+  const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
+  if (filtered_data_API[0]?.norenordno) {await api.cancel_order(filtered_data_API[0]?.norenordno);}
+}
+
 const exitSellsAndOrStop = async (stop = false) => {
   //exit positions
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
   if (positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
   if(positionProcess.smallestCallPosition?.tsym) {await exitXemaShort();}
+  setTimeout
   if(stop) {
     send_notification('exiting all and stopping', true)
-    const orders = await api.get_orderbook();
-    const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
-    if (filtered_data_API[0]?.norenordno) {await api.cancel_order(filtered_data_API[0]?.norenordno);}
-
-    await exitHedges();
+    setTimeout(function() {
+      cancelOpenOrders();
+    }, 2000);
+    setTimeout(function() {
+      exitHedges();
+    }, 4000);
     setTimeout(function() {
       process.exit(0);
-    }, 2000);
+    }, 8000);
     
   } else {
     if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
