@@ -1087,12 +1087,16 @@ const cancelOpenOrders = async () => {
   if (filtered_data_API[0]?.norenordno) {await api.cancel_order(filtered_data_API[0]?.norenordno);}
 }
 
+function cleanupAndExit() {
+  console.log('Cleanup actions completed.');
+  process.exit(0);
+}
+
 const exitSellsAndOrStop = async (stop = false) => {
   //exit positions
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
   if (positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
   if(positionProcess.smallestCallPosition?.tsym) {await exitXemaShort();}
-  setTimeout
   if(stop) {
     send_notification('exiting all and stopping', true)
     setTimeout(function() {
@@ -1102,9 +1106,8 @@ const exitSellsAndOrStop = async (stop = false) => {
       exitHedges();
     }, 4000);
     setTimeout(function() {
-      process.exit(0);
+      cleanupAndExit();
     }, 8000);
-    
   } else {
     if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   }
