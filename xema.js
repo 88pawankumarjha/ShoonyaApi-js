@@ -1290,13 +1290,12 @@ getEma = async () => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
 
-//TODO uncomment
-if(isTimeEqualsNotAfterProps(15,28,false)) {
-  await exitSellsAndOrStop(true);
-}
-
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
+    //TODO uncomment
+    if(isTimeEqualsNotAfterProps(15,28,false)) {
+      await exitSellsAndOrStop(true);
+    }
     //TODO
   // if (seconds % 5 == 0) {
     try {
