@@ -27,7 +27,7 @@ getPickedIndex = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNI
 const setPickedExchange = value => pickedExchange = value, getPickedExchange = () => pickedExchange;
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
-let multiplier = 2;
+let multiplier = 3;
 let exitMTM = -1500;
 let gainExitMTM = 350;
 let magicNumber = 200;
