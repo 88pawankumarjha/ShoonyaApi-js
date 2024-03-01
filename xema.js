@@ -128,6 +128,8 @@ let biasOutput = { // N[46] 20155 (-20)
   deltaMove: 0,
   spotLP: 0
 }
+let prevEmaUpFastCall = true;
+let prevEmaUpFastPut = true;
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -1069,12 +1071,14 @@ const emaMonitorATMs = async () => {
     send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' pem : ' +parseFloat(putemaMedium ).toFixed(2)+ '\ncef : ' + parseFloat(callemaFast).toFixed(2) + ' pef : ' +parseFloat(putemaFast).toFixed(2))
     emaUpFastCall = callemaFast > callemaMedium;
     emaUpFastPut = putemaFast > putemaMedium;
-    return [emaUpFastCall, emaUpFastPut];
+    prevEmaUpFastCall = emaUpFastCall;
+    prevEmaUpFastPut = emaUpFastPut;
+    return [prevEmaUpFastCall, prevEmaUpFastPut];
   } catch (error) {
     // handle the exception locally
     console.error("Child method encountered an exception:", error.message);
     // optionally, rethrow the exception if needed
-    throw error;
+    return [prevEmaUpFastCall, prevEmaUpFastPut];
   }
 }
 
