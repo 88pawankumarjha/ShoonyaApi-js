@@ -548,7 +548,7 @@ postOrderPosTracking = async (data) => {
     
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
     // console.log('order placed: ', data)
-    str = data?.trantype + ' ' + data?.tsym + ' at ' + data?.flprc + ' is ' + data?.status;
+    str = '\n' + data?.trantype + ' ' + data?.flprc + ' ' + data?.tsym + ' ';
     pnl = await calcPnL(api);
     // send_notification(pnl + ' ' + str, true)
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
