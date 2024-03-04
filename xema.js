@@ -285,7 +285,7 @@ getEMAQtyForGeneric = () => {
   return debug ? 100 : 
   limits?.cash < 800000 ? 
     [100, 75, 160, 75, 150, 70, 75][new Date().getDay()] : 
-    [400, 375, 800, 370, 750, 350, 375][new Date().getDay()]
+    [400, 525, 1120, 525, 1050, 490, 525][new Date().getDay()]
   }
 
 // Execute the findNearestExpiry function
@@ -1141,8 +1141,8 @@ const exitXemaLong = async () => {
   await delay(1000);
 }
 const enterXemaLong = async () => {
-  let tempTradingPutSymbol = biasProcess.otm2PutSymbol;
-  if(globalInput.pickedExchange === 'BFO' || isTimeEqualsNotAfterProps(14,20,false)) {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
+  let tempTradingPutSymbol = biasProcess.otmPutSymbol;
+  // if(globalInput.pickedExchange === 'BFO' || isTimeEqualsNotAfterProps(14,20,false)) {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
   // else if(isTimeEqualsNotAfterProps(13,40,false)) {tempTradingPutSymbol = biasProcess.otm2PutSymbol;}
 
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingPutSymbol));
@@ -1185,8 +1185,8 @@ const exitXemaShort = async () => {
   await delay(1000);
 }
 const enterXemaShort = async () => {
-  let tempTradingCallSymbol = biasProcess.otm2CallSymbol;
-  if(globalInput.pickedExchange === 'BFO' || isTimeEqualsNotAfterProps(14,20,false)) {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
+  let tempTradingCallSymbol = biasProcess.otmCallSymbol;
+  // if(globalInput.pickedExchange === 'BFO' || isTimeEqualsNotAfterProps(14,20,false)) {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
   // else if(isTimeEqualsNotAfterProps(13,40,false)) {tempTradingCallSymbol = biasProcess.otm2CallSymbol;}
 
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingCallSymbol));
