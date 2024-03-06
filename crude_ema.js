@@ -493,9 +493,19 @@ function receiveQuote(data) {
     // }
 }
 
+const exitAll = async () => {
+  await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+  process.exit(0)
+}
+
 function receiveOrders(data) {
     // console.log("Order ::", data);
     // Update the latest order value for the corresponding instrument
+    if(data.status === 'REJECTED') {
+      send_notification('################## ORDER REJECTED PLS CHECK ##################', true);
+      exitAll();
+      // exitSellsAndOrStop(true);
+    }
     if(data.status === 'COMPLETE') {
         latestOrders[data.Instrument] = data;
         // update the smallest positions after each order
@@ -1866,8 +1876,7 @@ getEma = async () => {
   //exit in the night and stop process.
   if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,47,false))
   {
-    await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    process.exit(0)
+    exitAll();
   }
 
 
