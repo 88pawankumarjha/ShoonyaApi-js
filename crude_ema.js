@@ -1874,7 +1874,7 @@ getEma = async () => {
   var seconds = currentDate.getSeconds();
 
   //exit in the night and stop process.
-  if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,47,false))
+  if (isTimeEqualsNotAfterProps(15,30,false) && isTimeEqualsNotAfterProps(23,17,false))
   {
     exitAll();
   }

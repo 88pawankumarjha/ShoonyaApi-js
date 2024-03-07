@@ -19,7 +19,7 @@ const isTimeAfter328PM = () => {
   return isTimeEqualsNotAfterProps(15,28,false);
 };
 const isTimeBefore1147PM = () => {
-  return !isTimeEqualsNotAfterProps(23,47,false);
+  return !isTimeEqualsNotAfterProps(23,17,false);
 };
 const isTimeAfter1147PM = () => !(isTimeAfter330PM && isTimeBefore1147PM());
 let pickedExchange = debug ? 'BFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
