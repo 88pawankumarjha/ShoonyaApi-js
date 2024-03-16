@@ -1146,9 +1146,9 @@ const exitXemaLong = async () => {
   await delay(1000);
 }
 const enterXemaLong = async () => {
-  let tempTradingPutSymbol = biasProcess.otmPutSymbol;
+  let tempTradingPutSymbol = biasProcess.otm2PutSymbol;
   // if(globalInput.pickedExchange === 'BFO' || isTimeEqualsNotAfterProps(14,20,false)) {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
-  // else if(isTimeEqualsNotAfterProps(13,40,false)) {tempTradingPutSymbol = biasProcess.otm2PutSymbol;}
+  if(isTimeEqualsNotAfterProps(13,40,false)) {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
 
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingPutSymbol));
 
@@ -1190,9 +1190,9 @@ const exitXemaShort = async () => {
   await delay(1000);
 }
 const enterXemaShort = async () => {
-  let tempTradingCallSymbol = biasProcess.otmCallSymbol;
+  let tempTradingCallSymbol = biasProcess.otm2CallSymbol;
   // if(globalInput.pickedExchange === 'BFO' || isTimeEqualsNotAfterProps(14,20,false)) {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
-  // else if(isTimeEqualsNotAfterProps(13,40,false)) {tempTradingCallSymbol = biasProcess.otm2CallSymbol;}
+  if(isTimeEqualsNotAfterProps(13,40,false)) {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
 
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingCallSymbol));
 
