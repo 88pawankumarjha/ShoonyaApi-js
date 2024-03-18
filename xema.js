@@ -1125,7 +1125,22 @@ const exitSellsAndOrStop = async (stop = false) => {
 const triggerATMChangeActions = async () => {
   await exitSellsAndOrStop(false);
 }
-
+// const my_default_place_order = async (order) => {
+//   const orderno = await api.place_order(order)
+//   await delay(2000);
+//   return orderno;
+// }
+// const checkIfOrderNoIsCompletedOrNot = async (orderno) => {
+//   //check order status
+//   api.singleorderhistory(orderno)
+//   await delay(2000);
+// }
+// const customPlaceOrder = async (order) => {
+//   const ordernoToCheck = await my_default_place_order(order)
+//   setTimeout(function() {
+//   const isCompleted = checkIfOrderNoIsCompletedOrNot(orderno);
+//   }, 2000);
+// } 
 //buy Put
 const exitXemaLong = async () => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
@@ -1141,7 +1156,7 @@ const exitXemaLong = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestPutPosition?.tsym) {await api.place_order(order)}
+  if(positionProcess.smallestPutPosition?.tsym) {await customPlaceOrder(order)}
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
   await delay(1000);
 }
