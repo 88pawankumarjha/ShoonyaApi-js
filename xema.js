@@ -1125,22 +1125,25 @@ const exitSellsAndOrStop = async (stop = false) => {
 const triggerATMChangeActions = async () => {
   await exitSellsAndOrStop(false);
 }
-// const my_default_place_order = async (order) => {
-//   const orderno = await api.place_order(order)
-//   await delay(2000);
-//   return orderno;
-// }
-// const checkIfOrderNoIsCompletedOrNot = async (orderno) => {
-//   //check order status
-//   api.singleorderhistory(orderno)
-//   await delay(2000);
-// }
-// const customPlaceOrder = async (order) => {
-//   const ordernoToCheck = await my_default_place_order(order)
-//   setTimeout(function() {
-//   const isCompleted = checkIfOrderNoIsCompletedOrNot(orderno);
-//   }, 2000);
-// } 
+
+const checkIfOrderNoIsCompleted = async (orderno) => { // 24032100385796 sample order no
+  //check order status
+  ob = await api.get_orderbook();
+  await delay(3000);
+  return ob.filter((o) => o.norenordno == orderno)[0].status == 'COMPLETE';
+}
+
+const customPlaceExitOrder = async (order) => {
+  const orderno = await api.place_order(order)
+  const isCompleted = await checkIfOrderNoIsCompleted(orderno);
+  if(!isCompleted){
+    await cancelOpenOrders();
+    await updateTwoSmallestPositionsAndNeighboursSubs(false);
+    if(positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
+    if(positionProcess.smallestCallPosition?.tsym) { await exitXemaShort();}  
+  }
+  //exit positions
+} 
 //buy Put
 const exitXemaLong = async () => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
@@ -1156,13 +1159,13 @@ const exitXemaLong = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestPutPosition?.tsym) {await api.place_order(order)}
+  if(positionProcess.smallestPutPosition?.tsym) {await customPlaceExitOrder(order)}
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
   await delay(1000);
 }
 const enterXemaLong = async () => {
   let tempTradingPutSymbol = biasProcess.otmPutSymbol;
-  //if(isTimeEqualsNotAfterProps(11,40,false)) {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
+  // if(isTimeEqualsNotAfterProps(14,40,false)) {tempTradingPutSymbol = biasProcess.atmPutSymbol;}
   //if(globalInput.pickedExchange === 'BFO') {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingPutSymbol));
 
@@ -1199,13 +1202,13 @@ const exitXemaShort = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestCallPosition?.tsym) {await api.place_order(order)}
+  if(positionProcess.smallestCallPosition?.tsym) {await customPlaceExitOrder(order)}
   shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
   await delay(1000);
 }
 const enterXemaShort = async () => {
   let tempTradingCallSymbol = biasProcess.otmCallSymbol;
-  //if(isTimeEqualsNotAfterProps(12,40,false)) {tempTradingCallSymbol = biasProcess.atmCallSymbol;}
+  // if(isTimeEqualsNotAfterProps(14,40,false)) {tempTradingCallSymbol = biasProcess.atmCallSymbol;}
   //if(globalInput.pickedExchange === 'BFO') {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
 
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingCallSymbol));
@@ -1347,12 +1350,9 @@ const runEma = async () => {
     // console.log(limits?.cash, ' limits')
     // console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
     // console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
-    //TODO uncomment
     if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) {await enterXemaBuyCall()};
     if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) {await enterXemaBuyPut()};
     
-
-
   //   request_time: '23:28:00 31-01-2024',
   //   stat: 'Ok',
   //   prfname: 'SHOONYA1',
