@@ -494,7 +494,7 @@ function receiveQuote(data) {
 }
 
 const exitAll = async () => {
-  await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+  await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
   process.exit(0)
 }
 
