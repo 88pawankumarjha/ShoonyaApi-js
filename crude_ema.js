@@ -1828,14 +1828,12 @@ emaRecurringFunction = async () => {
         send_notification('crudeoil: ltp '+ +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + ', ema9 '+ parseFloat(callema9).toFixed(2) + ', ema21 ' + parseFloat(callema21).toFixed(2))
         // console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
         
-        //send notification
-
-        // //buyer
-        await sellercrudecheckCrossOverExit(callema9, callema21)
-        // await crudecheckCrossOverExit(callema9, callema21)
+        //buyer
+        await crudecheckCrossOverExit(callema9, callema21)
+        // buyer atm options
         // await crudecheckCrossOverExit(putema9, putema21)
 
-        // //seller
+        // //seller atm options
         // sellercheckCrossOverExit(callema9, callema21)
         // sellerputcheckCrossOverExit(putema9, putema21)
         
