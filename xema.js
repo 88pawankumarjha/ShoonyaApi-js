@@ -1137,10 +1137,13 @@ const checkIfOrderNoIsCompleted = async (orderno) => { // 24032100385796 sample 
 const customPlaceExitOrder = async (order) => {
   const retOrderObj = await api.place_order(order)
   const isCompleted = await checkIfOrderNoIsCompleted(retOrderObj?.norenordno);
-  send_notification('order complete status: '+ isCompleted, true);
+  send_notification('order complete status: '+ isCompleted);
   if(!isCompleted){
     await triggerATMChangeActions() 
   }
+  await updateTwoSmallestPositionsAndNeighboursSubs(false);
+  longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
+  shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
   //exit positions
 } 
 //buy Put
