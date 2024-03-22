@@ -1318,7 +1318,6 @@ const checkForOpenOrders = async () => {
     await dynSubs();
     openOrderTimeCounter = 0;
   }
-  send_notification('checking open order: '+openOrderTimeCounter)
   const orders = await api.get_orderbook();
   const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
   if (filtered_data_API[0]?.norenordno) {openOrderTimeCounter = openOrderTimeCounter + 1}
