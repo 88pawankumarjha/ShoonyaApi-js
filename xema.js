@@ -1135,12 +1135,16 @@ const checkIfOrderNoIsCompleted = async (orderno) => { // 24032100385796 sample 
 
 const customPlaceExitOrder = async (order) => {
   const orderno = await api.place_order(order)
+  await updateTwoSmallestPositionsAndNeighboursSubs(false);
+
   const isCompleted = await checkIfOrderNoIsCompleted(orderno);
+  
   if(!isCompleted){
     await cancelOpenOrders();
     await updateTwoSmallestPositionsAndNeighboursSubs(false);
     if(positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
     if(positionProcess.smallestCallPosition?.tsym) { await exitXemaShort();}  
+    await updateTwoSmallestPositionsAndNeighboursSubs(false);
   }
   //exit positions
 } 
