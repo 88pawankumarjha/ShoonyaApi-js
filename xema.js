@@ -483,10 +483,8 @@ updatePositions = async () => {
                 const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
                 const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
                 // Separate calls and puts for NFO - these are sold options with smallest LTP
-                positionProcess.hedgePut = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
                 positionProcess.hedgeCall = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
                 positionProcess.hedgePut = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
-                positionProcess.hedgeCall = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
                 positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
                 positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
                 // send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
@@ -1127,27 +1125,22 @@ const exitSellsAndOrStop = async (stop = false) => {
 const triggerATMChangeActions = async () => {
   await exitSellsAndOrStop(false);
 }
-
-const checkIfOrderNoIsCompleted = async (orderno) => { // 24032100385796 sample order no
-  //check order status
-  ob = await api.get_orderbook();
-  await delay(3000);
-  console.log(ob , ' :ob')
-  return ob.filter((o) => o.norenordno == orderno)[0]?.status == 'COMPLETE';
-}
-
-const customPlaceExitOrder = async (order) => {
-  const retOrderObj = await api.place_order(order)
-  const isCompleted = await checkIfOrderNoIsCompleted(retOrderObj?.norenordno);
-  send_notification('order complete status: '+ isCompleted);
-  if(!isCompleted){
-    await triggerATMChangeActions() 
-  }
-  await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
-  shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
-  //exit positions
-} 
+// const my_default_place_order = async (order) => {
+//   const orderno = await api.place_order(order)
+//   await delay(2000);
+//   return orderno;
+// }
+// const checkIfOrderNoIsCompletedOrNot = async (orderno) => {
+//   //check order status
+//   api.singleorderhistory(orderno)
+//   await delay(2000);
+// }
+// const customPlaceOrder = async (order) => {
+//   const ordernoToCheck = await my_default_place_order(order)
+//   setTimeout(function() {
+//   const isCompleted = checkIfOrderNoIsCompletedOrNot(orderno);
+//   }, 2000);
+// } 
 //buy Put
 const exitXemaLong = async () => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
@@ -1164,13 +1157,12 @@ const exitXemaLong = async () => {
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   if(positionProcess.smallestPutPosition?.tsym) {await api.place_order(order)}
-  await updateTwoSmallestPositionsAndNeighboursSubs(false);
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
   await delay(1000);
 }
 const enterXemaLong = async () => {
   let tempTradingPutSymbol = biasProcess.atmPutSymbol;
-  // if(isTimeEqualsNotAfterProps(14,40,false)) {tempTradingPutSymbol = biasProcess.atmPutSymbol;}
+  //if(isTimeEqualsNotAfterProps(11,40,false)) {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
   //if(globalInput.pickedExchange === 'BFO') {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingPutSymbol));
 
@@ -1213,7 +1205,7 @@ const exitXemaShort = async () => {
 }
 const enterXemaShort = async () => {
   let tempTradingCallSymbol = biasProcess.atmCallSymbol;
-  // if(isTimeEqualsNotAfterProps(14,40,false)) {tempTradingCallSymbol = biasProcess.atmCallSymbol;}
+  //if(isTimeEqualsNotAfterProps(12,40,false)) {tempTradingCallSymbol = biasProcess.atmCallSymbol;}
   //if(globalInput.pickedExchange === 'BFO') {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
 
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingCallSymbol));
@@ -1299,10 +1291,6 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
       await enterXemaShort()
     }
   }
-  
-  await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
-  shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
   currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
   send_notification(biasOutput.bias + ' ' + currentPositionStatus)
 }
@@ -1359,10 +1347,12 @@ const runEma = async () => {
     // console.log(limits?.cash, ' limits')
     // console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
     // console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
-
-    if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) {await enterXemaBuyPut()};
+    //TODO uncomment
     if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) {await enterXemaBuyCall()};
+    if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) {await enterXemaBuyPut()};
     
+
+
   //   request_time: '23:28:00 31-01-2024',
   //   stat: 'Ok',
   //   prfname: 'SHOONYA1',
