@@ -1130,21 +1130,16 @@ const checkIfOrderNoIsCompleted = async (orderno) => { // 24032100385796 sample 
   //check order status
   ob = await api.get_orderbook();
   await delay(3000);
+  console.log(ob , ' :ob')
   return ob.filter((o) => o.norenordno == orderno)[0]?.status == 'COMPLETE';
 }
 
 const customPlaceExitOrder = async (order) => {
   const orderno = await api.place_order(order)
-  await updateTwoSmallestPositionsAndNeighboursSubs(false);
   console.log(orderno, ' :orderno');
   const isCompleted = await checkIfOrderNoIsCompleted(orderno);
-  
   if(!isCompleted){
-    await cancelOpenOrders();
-    await updateTwoSmallestPositionsAndNeighboursSubs(false);
-    if(positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
-    if(positionProcess.smallestCallPosition?.tsym) { await exitXemaShort();}  
-    await updateTwoSmallestPositionsAndNeighboursSubs(false);
+    await triggerATMChangeActions() 
   }
   //exit positions
 } 
