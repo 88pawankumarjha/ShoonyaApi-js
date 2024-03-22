@@ -1313,9 +1313,6 @@ const checkForOpenOrders = async () => {
     await cancelOpenOrders();
     await triggerATMChangeActions()
     send_notification('open order handled')
-    resetBiasProcess();
-    await updateITMSymbolfromOC()
-    await dynSubs();
     openOrderTimeCounter = 0;
   }
   const orders = await api.get_orderbook();
