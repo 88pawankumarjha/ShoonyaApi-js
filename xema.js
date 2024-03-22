@@ -1137,6 +1137,7 @@ const checkIfOrderNoIsCompleted = async (orderno) => { // 24032100385796 sample 
 const customPlaceExitOrder = async (order) => {
   const retOrderObj = await api.place_order(order)
   const isCompleted = await checkIfOrderNoIsCompleted(retOrderObj?.norenordno);
+  send_notification('order complete status: '+ isCompleted, true);
   if(!isCompleted){
     await triggerATMChangeActions() 
   }
@@ -1158,6 +1159,7 @@ const exitXemaLong = async () => {
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   if(positionProcess.smallestPutPosition?.tsym) {await customPlaceExitOrder(order)}
+  await updateTwoSmallestPositionsAndNeighboursSubs(false);
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
   await delay(1000);
 }
