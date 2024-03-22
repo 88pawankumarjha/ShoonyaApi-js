@@ -1135,9 +1135,8 @@ const checkIfOrderNoIsCompleted = async (orderno) => { // 24032100385796 sample 
 }
 
 const customPlaceExitOrder = async (order) => {
-  const orderno = await api.place_order(order)
-  console.log(orderno, ' :orderno');
-  const isCompleted = await checkIfOrderNoIsCompleted(orderno);
+  const retOrderObj = await api.place_order(order)
+  const isCompleted = await checkIfOrderNoIsCompleted(retOrderObj?.norenordno);
   if(!isCompleted){
     await triggerATMChangeActions() 
   }
