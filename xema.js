@@ -1297,6 +1297,10 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
       await enterXemaShort()
     }
   }
+  
+  await updateTwoSmallestPositionsAndNeighboursSubs(false);
+  longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
+  shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
   currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
   send_notification(biasOutput.bias + ' ' + currentPositionStatus)
 }
