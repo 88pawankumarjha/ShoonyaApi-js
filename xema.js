@@ -483,8 +483,10 @@ updatePositions = async () => {
                 const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
                 const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
                 // Separate calls and puts for NFO - these are sold options with smallest LTP
+                positionProcess.hedgePut = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
                 positionProcess.hedgeCall = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
                 positionProcess.hedgePut = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
+                positionProcess.hedgeCall = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
                 positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
                 positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
                 // send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
@@ -1357,8 +1359,9 @@ const runEma = async () => {
     // console.log(limits?.cash, ' limits')
     // console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
     // console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
-    if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) {await enterXemaBuyCall()};
+
     if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) {await enterXemaBuyPut()};
+    if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) {await enterXemaBuyCall()};
     
   //   request_time: '23:28:00 31-01-2024',
   //   stat: 'Ok',
