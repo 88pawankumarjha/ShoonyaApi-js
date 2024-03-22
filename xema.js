@@ -1163,7 +1163,7 @@ const exitXemaLong = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestPutPosition?.tsym) {await customPlaceExitOrder(order)}
+  if(positionProcess.smallestPutPosition?.tsym) {await api.place_order(order)}
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
   await delay(1000);
@@ -1207,7 +1207,7 @@ const exitXemaShort = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestCallPosition?.tsym) {await customPlaceExitOrder(order)}
+  if(positionProcess.smallestCallPosition?.tsym) {await api.place_order(order)}
   shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
   await delay(1000);
 }
