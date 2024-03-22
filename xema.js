@@ -1306,13 +1306,32 @@ const optionBasedEmaRecurringFunction = async () => {
   let [emaMonitorFastCallUp, emaFastMonitorPutUp] = await emaMonitorATMs();
   await takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp)
 }
-    
+
+let openOrderTimeCounter = 0;  
+const checkForOpenOrders = async () => {
+  if(openOrderTimeCounter == 2){
+    await cancelOpenOrders();
+    await triggerATMChangeActions()
+    send_notification('open order handled')
+    resetBiasProcess();
+    await updateITMSymbolfromOC()
+    await dynSubs();
+    openOrderTimeCounter = 0;
+  }
+  send_notification('checking open order: '+openOrderTimeCounter)
+  const orders = await api.get_orderbook();
+  const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
+  if (filtered_data_API[0]?.norenordno) {openOrderTimeCounter = openOrderTimeCounter + 1}
+  else {openOrderTimeCounter = 0;}
+}
 
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
 getEma = async () => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
-
+  if(seconds % 3 == 0){
+    await checkForOpenOrders()
+  }
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     //TODO uncomment
