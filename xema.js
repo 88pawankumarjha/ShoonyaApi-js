@@ -1325,9 +1325,6 @@ const checkForOpenOrders = async () => {
 getEma = async () => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
-  if(seconds % 3 == 0){
-    await checkForOpenOrders()
-  }
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     //TODO uncomment
@@ -1343,6 +1340,9 @@ getEma = async () => {
         send_notification("Error occured")
         // getBias();
     }
+  }
+  if(seconds % 3 == 0){
+    await checkForOpenOrders()
   }
 }
 
