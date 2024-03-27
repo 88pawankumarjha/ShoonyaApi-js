@@ -494,7 +494,8 @@ function receiveQuote(data) {
 }
 
 const exitAll = async () => {
-  await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+  //changes for seller or buyer
+  await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
   process.exit(0)
 }
 
@@ -1829,12 +1830,12 @@ emaRecurringFunction = async () => {
         // console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
         
         //buyer
-        await crudecheckCrossOverExit(callema9, callema21)
+        // await crudecheckCrossOverExit(callema9, callema21)
         // buyer atm options
         // await crudecheckCrossOverExit(putema9, putema21)
 
         // //seller atm options
-        // sellercheckCrossOverExit(callema9, callema21)
+        sellercheckCrossOverExit(callema9, callema21)
         // sellerputcheckCrossOverExit(putema9, putema21)
         
       } catch (error) {
