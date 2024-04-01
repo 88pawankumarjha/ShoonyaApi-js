@@ -31,8 +31,8 @@ let globalBigInput = {
   filteredIndexCSV: undefined
 }
 //TODO change index
-getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'MIDCPNIFTY', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCPNIFTY'][new Date().getDay()] || 'NIFTY';
-getEMAQtyFor2L = () => debug ? 100 : [100, 75, 120, 60, 150, 50, 75][new Date().getDay()] || 100; // qty for margin to sell both sides
+getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
+getEMAQtyFor2L = () => debug ? 100 : [100, 60, 120, 60, 150, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
 let telegramSignals = {
   stopSignal: false,
   exitSignal: false,
@@ -1331,7 +1331,7 @@ getEma = async () => {
     if(isTimeEqualsNotAfterProps(15,28,false)) {
       await exitSellsAndOrStop(true);
     }
-    //TODO 
+    //TODO
   // if (seconds % 5 == 0) {
     try {
       await optionBasedEmaRecurringFunction();
