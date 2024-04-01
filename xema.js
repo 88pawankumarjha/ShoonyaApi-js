@@ -32,7 +32,7 @@ let globalBigInput = {
 }
 //TODO change index
 getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'MIDCPNIFTY', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'MIDCPNIFTY'][new Date().getDay()] || 'NIFTY';
-getEMAQtyFor2L = () => debug ? 100 : [100, 60, 120, 60, 150, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
+getEMAQtyFor2L = () => debug ? 100 : [100, 75, 120, 60, 150, 50, 75][new Date().getDay()] || 100; // qty for margin to sell both sides
 let telegramSignals = {
   stopSignal: false,
   exitSignal: false,

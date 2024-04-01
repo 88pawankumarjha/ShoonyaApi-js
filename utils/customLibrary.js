@@ -67,6 +67,7 @@ module.exports.nearByTsymPutAgg = (item, ocGapCalc, pickedExchange) => {
 //nearest expiry start
 module.exports.idxNameOcGap = new Map([
   ['BANKEX', '100'],
+  ['MIDCPNIFTY', '25'],
   ['FINNIFTY', '50'],
   ['BANKNIFTY', '100'],
   ['NIFTY', '50'],
@@ -76,6 +77,7 @@ module.exports.idxNameOcGap = new Map([
 //nearest ocGap
 module.exports.idxNameTokenMap = new Map([
   ['BANKEX', '12'],
+  ['MIDCPNIFTY', '26014'],
   ['FINNIFTY', '26037'],
   ['BANKNIFTY', '26009'],
   ['NIFTY', '26000'],
