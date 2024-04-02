@@ -1111,9 +1111,9 @@ const exitSellsAndOrStop = async (stop = false) => {
     setTimeout(function() {
       cancelOpenOrders();
     }, 2000);
-    setTimeout(function() {
-      exitHedges();
-    }, 4000);
+    // setTimeout(function() {
+    //   exitHedges();
+    // }, 4000);
     setTimeout(function() {
       cleanupAndExit();
     }, 8000);
