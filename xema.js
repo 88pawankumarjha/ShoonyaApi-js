@@ -1341,7 +1341,7 @@ getEma = async () => {
         // getBias();
     }
   }
-  if(seconds % 5 === 0){
+  if(seconds % 3 == 0){
     await checkForOpenOrders()
   }
 }
