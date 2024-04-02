@@ -288,7 +288,7 @@ getEMAQtyForGeneric = () => {
   //   [400, 525, 1600, 525, 1050, 490, 525][new Date().getDay()]
 
   return debug ? 100 : 
-  limits?.cash < 800000 ? 
+  limits?.cash < 1500000 ? 
   [100, 300, 1000, 300, 800, 300, 75][new Date().getDay()] : 
   [100, 540, 1600, 540, 1700, 550, 75][new Date().getDay()]
   }
