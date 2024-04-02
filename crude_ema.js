@@ -230,8 +230,9 @@ async function findNearestExpiry() {
       // MCX,260602,100,1,CRUDEOIL,CRUDEOIL16FEB24,16-FEB-2024,FUTCOM,XX,0,1,
     expiryList.sort();
     expiryFutList.sort((a, b) => moment(a.Expiry).diff(moment(b.Expiry)));
-    
-    globalInput.inputOptTsym = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => (row.Instrument === 'OPTFUT' && row.Expiry === expiryList[0])).map((row) => row.TradingSymbol))][0];
+    tempListOfOptions = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => (row.Instrument === 'OPTFUT' && row.Expiry === expiryList[0])).map((row) => row.TradingSymbol))];
+    globalInput.inputOptTsym = tempListOfOptions[tempListOfOptions.length - 1];
+
     // MCX,425852,100,1,CRUDEOIL,CRUDEOIL14FEB24C6250,14-FEB-2024,OPTFUT,CE,6250,0.1,
     // console.log(globalInput.inputOptTsym, 'globalInput.inputOptTsym')
     globalInput.WEEKLY_EXPIRY = expiryList[0];
@@ -266,10 +267,10 @@ const Api = require("./lib/RestApi");
 let api = new Api({});
 
 const getAtmStrike = () => {
-  // console.log(`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}`)
-  // console.log(globalInput.token)
-  // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
-  // process.exit(0)
+  console.log(`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}`)
+  console.log(globalInput.token)
+  console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
+  process.exit(0)
   biasProcess.spotObject = latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`];
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
   return Math.round(biasProcess.spotObject?.lp / globalInput.ocGap) * globalInput.ocGap
@@ -1897,8 +1898,8 @@ const setNearestCrudeFutureToken = async () => {
 
   let query = `CRUDEOIL`;
   let futureObj = await api.searchscrip(exchange='MCX', searchtext=query)
-  // let futureToken = futureObj.values[3].token; //258003 //3 as it skips crudeoil, crudeoilm and its future
-  let futureToken = futureObj.values[5].token; //258003 //next month
+  let futureToken = futureObj.values[3].token; //258003 //3 as it skips crudeoil, crudeoilm and its future
+  // let futureToken = futureObj.values[5].token; //258003 //next month
   globalInput.token = futureToken;
 
   // console.log(globalInput.token, 'token')
