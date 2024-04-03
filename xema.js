@@ -1321,18 +1321,25 @@ const optionBasedEmaRecurringFunction = async () => {
   await takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp)
 }
 
-let openOrderTimeCounter = 0;  
+// let openOrderTimeCounter = 0;  
 const checkForOpenOrders = async () => {
-  if(openOrderTimeCounter == 2){
+  const orders = await api.get_orderbook();
+  const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
+  if (filtered_data_API[0]?.norenordno) {
     await cancelOpenOrders();
     await triggerATMChangeActions()
     send_notification('open order handled')
-    openOrderTimeCounter = 0;
   }
-  const orders = await api.get_orderbook();
-  const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
-  if (filtered_data_API[0]?.norenordno) {openOrderTimeCounter = openOrderTimeCounter + 1}
-  else {openOrderTimeCounter = 0;}
+  // if(openOrderTimeCounter == 2){
+  //   await cancelOpenOrders();
+  //   await triggerATMChangeActions()
+  //   send_notification('open order handled')
+  //   openOrderTimeCounter = 0;
+  // }
+  // const orders = await api.get_orderbook();
+  // const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
+  // if (filtered_data_API[0]?.norenordno) {openOrderTimeCounter = openOrderTimeCounter + 1}
+  // else {openOrderTimeCounter = 0;}
 }
 
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
@@ -1355,7 +1362,7 @@ getEma = async () => {
         // getBias();
     }
   }
-  if(seconds % 3 == 0){
+  if(seconds === 13){
     await checkForOpenOrders()
   }
 }
