@@ -289,14 +289,14 @@ getEMAQtyForGeneric = () => {
 
   return debug ? 100 : 
   limits?.cash < 1500000 ? 
-  [100, 300, 1000, 300, 800, 300, 75][new Date().getDay()] : 
-  [100, 600, 1600, 690, 1600, 550, 75][new Date().getDay()]
+  [100, 300, 800, 300, 800, 300, 75][new Date().getDay()] : 
+  [100, 600, 1400, 600, 1500, 500, 75][new Date().getDay()]
   }
 
 // Execute the findNearestExpiry function
 findNearestExpiry();
 
-const getAtmStrike = () => {
+const getAtmStrike = async () => {
   // TODO
   // return 50700;
   // console.log(`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}`)
@@ -304,7 +304,20 @@ const getAtmStrike = () => {
   // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
   biasProcess.spotObject = latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`];
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
-  return Math.round(biasProcess.spotObject?.lp / globalInput.ocGap) * globalInput.ocGap
+  atm = Math.round(biasProcess.spotObject?.lp / globalInput.ocGap) * globalInput.ocGap;
+  if (atm != NaN) {return atm;}
+  else { 
+    const Spot = await fetchSpotPrice(api, globalInput.token, globalInput.pickedExchange);
+    if (!Spot) { console.log('Not able to find the spot'); return null; }
+    // debug && console.log(Spot)
+    const ltp_rounded = Math.round(parseFloat(Spot.lp));
+    // const open = Math.round(parseFloat(Spot.o || Spot.c || Spot.lp)); // c for days when market is closed
+    // debug && console.log(open, 'open, ', ltp_rounded, ' ltp_rounded, = ', ltp_rounded-open, " ltp_rounded-open")
+    const mod = ltp_rounded % globalInput.ocGap;
+    const atmStrike = mod < globalInput.ocGap / 2 ? Math.floor(ltp_rounded / globalInput.ocGap) * globalInput.ocGap : Math.ceil(ltp_rounded / globalInput.ocGap) * globalInput.ocGap;
+    return atmStrike;
+  }
+
 }
 
 // telegram callbackQuery
@@ -630,7 +643,7 @@ async function startWebsocket() {
 
 async function getOptionChain() {
     try {
-        biasProcess.atmStrike = getAtmStrike();
+        biasProcess.atmStrike = await getAtmStrike();
         const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
         // console.log(optionChainResponse, 'optionChainResponse')
         if (optionChainResponse.stat === 'Ok') {
@@ -1041,7 +1054,8 @@ const ema9_21_3ValuesIndicators = async (params) => {
 
 const emaMonitorATMs = async () => {
   try{
-    if (getAtmStrike()!= biasProcess.atmStrike){
+    let tempAtmStrike = await getAtmStrike()
+    if (tempAtmStrike!= biasProcess.atmStrike){
       if (longPositionTaken || shortPositionTaken) { await triggerATMChangeActions() }
       send_notification('ATM changed')
       resetBiasProcess();

@@ -266,7 +266,7 @@ runFindNearestExpiry();
 const Api = require("./lib/RestApi");
 let api = new Api({});
 
-const getAtmStrike = () => {
+const getAtmStrike = async () => {
   // console.log(`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}`)
   // console.log(globalInput.token)
   // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
@@ -559,7 +559,7 @@ async function startWebsocket() {
 
 async function getOptionChain() {
     try {
-        biasProcess.atmStrike = getAtmStrike();
+        biasProcess.atmStrike = await getAtmStrike();
         
         const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
         // console.log(optionChainResponse, 'optionChainResponse')
@@ -1070,8 +1070,8 @@ async function checkAlert() {
 // updateBias and updateITMSymbolfromOC when atmStrike changes
 myRecurringFunction = async () => {
   try{
-
-    getAtmStrike()!= biasProcess.atmStrike && resetBiasProcess() && await updateITMSymbolfromOC() && await dynSubs();
+    tempAtmStrike = await getAtmStrike();
+    (tempAtmStrike!= biasProcess.atmStrike) && resetBiasProcess() && await updateITMSymbolfromOC() && await dynSubs();
     biasProcess.vix = latestQuotes['NSE|26017']?.pc;
     // console.log(latestQuotes['NSE|26017'], "latestQuotes['NSE|26017']")
     debug && console.log(`${biasProcess.itmCallSymbol}:`, latestQuotes[biasProcess.callSubStr] ? latestQuotes[biasProcess.callSubStr]?.lp : "N/A", "Order:", latestOrders[biasProcess.callSubStr]);
@@ -1708,8 +1708,8 @@ const ema9and21Values = async (params) => {
   // updateEMA when atmStrike changes
 emaRecurringFunction = async () => {
     try{
-  
-      if (getAtmStrike()!= biasProcess.atmStrike){
+      tempAtmStrike = await getAtmStrike()
+      if (tempAtmStrike!= biasProcess.atmStrike){
         resetBiasProcess();
         await updateITMSymbolfromOC()
       }
