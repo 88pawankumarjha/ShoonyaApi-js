@@ -305,7 +305,7 @@ const getAtmStrike = async () => {
   biasProcess.spotObject = latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`];
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
   atm = Math.round(biasProcess.spotObject?.lp / globalInput.ocGap) * globalInput.ocGap;
-  if (atm != NaN) {return atm;}
+  if (!isNaN(atm)) {return atm;}  
   else { 
     const Spot = await fetchSpotPrice(api, globalInput.token, globalInput.pickedExchange);
     if (!Spot) { console.log('Not able to find the spot'); return null; }
