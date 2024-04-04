@@ -1304,28 +1304,31 @@ let positionTakenInSymbol = '';
 
 let prevEma9LessThanEma21 = ''
 let crossedUp = ''
-
+let firsttime = false;
 async function sellercrudecheckCrossOverExit(ema9, ema21) {
   if (prevEma9LessThanEma21 === '') {
+    firsttime = true;
     prevEma9LessThanEma21 = ema9 < ema21;
     crossedUp = ema9 > ema21;
     send_notification('first prevEma9LessThanEma21 stored for reference as '+ prevEma9LessThanEma21);
   }
-  if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
+  if ((!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) || (firsttime && crossedUp)) {
       send_notification("Cross over detected. Take call position." + new Date());
       await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       positionTakenInSymbol = biasProcess.atmPutSymbol;
       positionTaken = true;
       prevEma9LessThanEma21 = ema9 < ema21;
       crossedUp = ema9 > ema21;
+      firsttime = false;
       // Place your position-taking logic here
-  } else if (!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) {
+  } else if ((!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) || (firsttime && !crossedUp)) {
       send_notification("Cross over detected. Take put position." + new Date());
       await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       positionTakenInSymbol = biasProcess.atmCallSymbol;
       positionTaken = true;
       prevEma9LessThanEma21 = ema9 < ema21;
       crossedUp = ema9 > ema21;
+      firsttime = false;
   }
   else if (positionTaken) {
       if(crossedUp && ema9 < ema21){
