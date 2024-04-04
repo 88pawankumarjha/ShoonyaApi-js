@@ -1311,7 +1311,7 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
     crossedUp = ema9 > ema21;
     send_notification('first prevEma9LessThanEma21 stored for reference as '+ prevEma9LessThanEma21);
   }
-  else if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
+  if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
       send_notification("Cross over detected. Take call position." + new Date());
       await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       positionTakenInSymbol = biasProcess.atmPutSymbol;
