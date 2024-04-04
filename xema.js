@@ -1362,8 +1362,13 @@ getEma = async () => {
         // getBias();
     }
   }
-  if(seconds === 13){
-    await checkForOpenOrders()
+  if(seconds === 15){
+    try {
+      await checkForOpenOrders()
+    } catch (error) {
+        console.error("Error occured: " + error);
+        send_notification("Error occured")
+    }
   }
 }
 
