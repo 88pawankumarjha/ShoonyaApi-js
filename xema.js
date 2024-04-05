@@ -1349,7 +1349,7 @@ getEma = async () => {
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     //TODO uncomment
-    if(isTimeEqualsNotAfterProps(15,28,false)) {
+    if(isTimeEqualsNotAfterProps(15,26,false)) {
       await exitSellsAndOrStop(true);
     }
     //TODO 
