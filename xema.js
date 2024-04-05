@@ -1122,9 +1122,9 @@ const exitSellsAndOrStop = async (stop = false) => {
   if(positionProcess.smallestCallPosition?.tsym) {await exitXemaShort();}
   if(stop) {
     send_notification('exiting all and stopping', true)
-    // setTimeout(function() {
-    //   cancelOpenOrders();
-    // }, 2000);
+    setTimeout(function() {
+      cancelOpenOrders();
+    }, 2000);
     // setTimeout(function() {
     //   exitHedges();
     // }, 4000);
