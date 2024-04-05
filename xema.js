@@ -1125,12 +1125,12 @@ const exitSellsAndOrStop = async (stop = false) => {
     setTimeout(function() {
       cancelOpenOrders();
     }, 2000);
-    // setTimeout(function() {
-    //   exitHedges();
-    // }, 4000);
+    setTimeout(function() {
+      exitHedges();
+    }, 4000);
     setTimeout(function() {
       cleanupAndExit();
-    }, 2000);
+    }, 6000);
   } else {
     if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   }
