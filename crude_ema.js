@@ -1323,47 +1323,53 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
     crossedUp = ema9 > ema21;
     send_notification('first prevEma9LessThanEma21 stored for reference as '+ prevEma9LessThanEma21);
   }
-  if ((!sleepPeriod) && ((!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) || (firsttime && crossedUp))) {
-      send_notification("Cross over detected. Take call position." + new Date());
-      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmPutSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-      firsttime = false;
-      // Place your position-taking logic here
-  } else if ((!sleepPeriod) && ((!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) || (firsttime && !crossedUp))) {
-      send_notification("Cross over detected. Take put position." + new Date());
-      await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmCallSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-      firsttime = false;
-  }
-  else if (positionTaken) {
-      // if((crossedUp && ema9 < ema21)){
-      if((crossedUp && ema9 < ema21) || (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < ema9)){
-        // exitLong addshort
-        await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-        positionTakenInSymbol = biasProcess.atmCallSymbol;
-        positionTaken = true;
-        prevEma9LessThanEma21 = ema9 < ema21;
-        crossedUp = ema9 > ema21;
-        activateSleepPeriod();
-      
-      } else if ((!crossedUp && ema9 > ema21) || (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > ema9)){
-        // exitShort addLong
-        await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+  if (!sleepPeriod) {
+    if ((!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) || (firsttime && crossedUp)) {
+        send_notification("Cross over detected. Take call position." + new Date());
         await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         positionTakenInSymbol = biasProcess.atmPutSymbol;
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
-        activateSleepPeriod();
-      }
-  } else {
+        firsttime = false;
+        // Place your position-taking logic here
+    } else if ((!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) || (firsttime && !crossedUp)) {
+        send_notification("Cross over detected. Take put position." + new Date());
+        await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+        positionTakenInSymbol = biasProcess.atmCallSymbol;
+        positionTaken = true;
+        prevEma9LessThanEma21 = ema9 < ema21;
+        crossedUp = ema9 > ema21;
+        firsttime = false;
+    }
+    else if (positionTaken) {
+        // if((crossedUp && ema9 < ema21)){
+        if((crossedUp && ema9 < ema21) || (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < ema9)){
+          // exitLong addshort
+          await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.atmCallSymbol;
+          positionTaken = true;
+          prevEma9LessThanEma21 = ema9 < ema21;
+          crossedUp = ema9 > ema21;
+          activateSleepPeriod();
+        
+        } else if ((!crossedUp && ema9 > ema21) || (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > ema9)){
+          // exitShort addLong
+          await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+          positionTakenInSymbol = biasProcess.atmPutSymbol;
+          positionTaken = true;
+          prevEma9LessThanEma21 = ema9 < ema21;
+          crossedUp = ema9 > ema21;
+          activateSleepPeriod();
+        }
+    } 
+    else {
+      console.log("Sleep period active. No action taken.");
+    }
+  } 
+  else {
       console.log("No signal detected."+ new Date());
       // Additional logic if needed
   }
