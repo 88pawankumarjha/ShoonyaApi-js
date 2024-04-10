@@ -1305,6 +1305,17 @@ let positionTakenInSymbol = '';
 let prevEma9LessThanEma21 = ''
 let crossedUp = ''
 let firsttime = false;
+let sleepPeriod = false;
+function activateSleepPeriod() {
+  sleepPeriod = true;
+  send_notification("Sleep period activated for 5 minutes.");
+  // Set a timeout to reset sleepPeriod back to false after 5 minutes
+  setTimeout(() => {
+    sleepPeriod = false;
+    send_notification("Sleep period deactivated.");
+  }, 5 * 60 * 1000); // 5 minutes in milliseconds
+}
+
 async function sellercrudecheckCrossOverExit(ema9, ema21) {
   if (prevEma9LessThanEma21 === '') {
     firsttime = true;
@@ -1312,7 +1323,7 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
     crossedUp = ema9 > ema21;
     send_notification('first prevEma9LessThanEma21 stored for reference as '+ prevEma9LessThanEma21);
   }
-  if ((!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) || (firsttime && crossedUp)) {
+  if ((!sleepPeriod) && ((!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) || (firsttime && crossedUp))) {
       send_notification("Cross over detected. Take call position." + new Date());
       await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       positionTakenInSymbol = biasProcess.atmPutSymbol;
@@ -1321,7 +1332,7 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
       crossedUp = ema9 > ema21;
       firsttime = false;
       // Place your position-taking logic here
-  } else if ((!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) || (firsttime && !crossedUp)) {
+  } else if ((!sleepPeriod) && ((!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) || (firsttime && !crossedUp))) {
       send_notification("Cross over detected. Take put position." + new Date());
       await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       positionTakenInSymbol = biasProcess.atmCallSymbol;
@@ -1340,6 +1351,7 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
+        activateSleepPeriod();
       
       } else if ((!crossedUp && ema9 > ema21) || (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > ema9)){
         // exitShort addLong
@@ -1349,6 +1361,7 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
         positionTaken = true;
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
+        activateSleepPeriod();
       }
   } else {
       console.log("No signal detected."+ new Date());
