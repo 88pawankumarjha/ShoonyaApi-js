@@ -1353,7 +1353,8 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
       console.log("No signal detected."+ new Date());
       // Additional logic if needed
   }
-  positionTakenInSymbol && send_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
+  // positionTakenInSymbol && send_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
+  positionTakenInSymbol && send_notification(`MCX PnL: ${await calcPnL(api, true)} Rs - ${positionTakenInSymbol}: ltp: ${latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp}`);
   //send notification
   prevEma9LessThanEma21 = ema9 < ema21;
   crossedUp = ema9 > ema21;
