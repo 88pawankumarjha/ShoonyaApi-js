@@ -1331,7 +1331,8 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
       firsttime = false;
   }
   else if (positionTaken) {
-      if(crossedUp && ema9 < ema21){
+      // if((crossedUp && ema9 < ema21)){
+      if((crossedUp && ema9 < ema21) || (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < ema9)){
         // exitLong addshort
         await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
@@ -1340,7 +1341,7 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
         prevEma9LessThanEma21 = ema9 < ema21;
         crossedUp = ema9 > ema21;
       
-      } else if (!crossedUp && ema9 > ema21){
+      } else if ((!crossedUp && ema9 > ema21) || (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > ema9)){
         // exitShort addLong
         await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
         await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
