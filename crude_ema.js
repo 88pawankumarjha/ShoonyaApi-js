@@ -1,7 +1,7 @@
 // Initialization / nearest expiry / getAtmStrike
 // jupyter nbconvert --to script gpt.ipynb
 const debug = false;
-
+let limits;
 function isWeekend() {
   //todo
   return false; // used to set the positions to ITM
@@ -21,7 +21,7 @@ const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
 const { isTimeEqualsNotAfterProps, idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
-  identify_option_type, fetchSpotPrice, getStrike } = require('./utils/customLibrary');
+  identify_option_type, fetchSpotPrice, getStrike, calcPnL } = require('./utils/customLibrary');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
 const bot = new TelegramBot(telegramBotToken, { polling: true });
@@ -1404,7 +1404,7 @@ async function crudecheckCrossOverExit(ema9, ema21) {
       console.log("No signal detected."+ new Date());
       // Additional logic if needed
   }
-  positionTakenInSymbol && send_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
+  positionTakenInSymbol && send_notification(`MCX PnL:  ${await calcPnL(api, true)} Rs - ` + positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
   //send notification
   prevEma9LessThanEma21 = ema9 < ema21;
   crossedUp = ema9 > ema21;
@@ -1908,6 +1908,7 @@ const setNearestCrudeFutureToken = async () => {
   // console.log(globalInput.token, 'token')
   
 }
+
 runEma = async () => {
   try{
     await executeLogin();
@@ -1915,6 +1916,8 @@ runEma = async () => {
     await send_callback_notification();
     await startWebsocket();
     await updateITMSymbolfromOC();
+    limits = await api.get_limits()
+    globalInput.emaLotMultiplier = limits?.cash < 1500000 ?  3: 6;
     intervalId = setInterval(getEma, 1000);
   }catch (error) {
     console.log( error)

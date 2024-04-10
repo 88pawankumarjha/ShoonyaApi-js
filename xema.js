@@ -115,7 +115,6 @@ const resetBiasProcess = () => {
   biasProcess.otm3CallStrikePrice = undefined,
   biasProcess.otm3PutSymbol = undefined,
   biasProcess.otm3PutStrikePrice = undefined,
-  biasProcess.atmStrike = undefined,
   biasProcess.spotObject = undefined,
   biasProcess.callSubStr = undefined,
   biasProcess.putSubStr = undefined
@@ -289,8 +288,8 @@ getEMAQtyForGeneric = () => {
 
   return debug ? 100 : 
   limits?.cash < 1500000 ? 
-  [100, 300, 800, 300, 800, 300, 75][new Date().getDay()] : 
-  [100, 600, 1400, 600, 1500, 500, 75][new Date().getDay()]
+  [100, 300, 800, 300, 800, 250, 75][new Date().getDay()] : 
+  [100, 600, 1600, 600, 1500, 500, 75][new Date().getDay()]
   }
 
 // Execute the findNearestExpiry function
@@ -304,7 +303,7 @@ const getAtmStrike = async () => {
   // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
   biasProcess.spotObject = latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`];
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
-  atm = Math.round(biasProcess.spotObject?.lp / globalInput.ocGap) * globalInput.ocGap;
+  atm = Math.round(biasProcess.spotObject?.lp + (biasOutput.bias != 0 ? +biasOutput.bias : 0) / globalInput.ocGap) * globalInput.ocGap;
   if (!isNaN(atm)) {return atm;}  
   else { 
     const Spot = await fetchSpotPrice(api, globalInput.token, globalInput.pickedExchange);
@@ -1348,17 +1347,13 @@ getEma = async () => {
   var seconds = currentDate.getSeconds();
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
-    //TODO uncomment
-    if(isTimeEqualsNotAfterProps(15,26,false)) {
-      await exitSellsAndOrStop(true);
-    }
-    //TODO 
+  //TODO 
   // if (seconds % 5 == 0) {
     try {
       await optionBasedEmaRecurringFunction();
     } catch (error) {
-        console.error("Error occured: " + error);
-        send_notification("Error occured")
+        console.error("Error occured in optionBasedEmaRecurringFunction: " + error);
+        send_notification("Error occured in optionBasedEmaRecurringFunction")
         // getBias();
     }
   }
@@ -1366,8 +1361,19 @@ getEma = async () => {
     try {
       await checkForOpenOrders()
     } catch (error) {
-        console.error("Error occured: " + error);
-        send_notification("Error occured")
+        console.error("Error occured in checkForOpenOrders: " + error);
+        send_notification("Error occured in checkForOpenOrders")
+    }
+  }
+  if(seconds === 25){
+    try {
+      //TODO uncomment
+      if(isTimeEqualsNotAfterProps(15,26,false)) {
+        await exitSellsAndOrStop(true);
+      }
+    } catch (error) {
+        console.error("Error occured in checkForOpenOrders: " + error);
+        send_notification("Error occured in checkForOpenOrders")
     }
   }
 }
