@@ -267,6 +267,7 @@ const Api = require("./lib/RestApi");
 let api = new Api({});
 
 const getAtmStrike = async () => {
+  await delay(3000);
   // console.log(`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}`)
   // console.log(globalInput.token)
   // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
@@ -553,6 +554,7 @@ params = {
     'order': receiveOrders
 };
 async function startWebsocket() {
+    await delay(1000);
     websocket = api.start_websocket(params);
     await delay(5000);
 }
@@ -560,7 +562,7 @@ async function startWebsocket() {
 async function getOptionChain() {
     try {
         biasProcess.atmStrike = await getAtmStrike();
-        
+        await delay(2000)
         const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
         // console.log(optionChainResponse, 'optionChainResponse')
         if (optionChainResponse.stat === 'Ok') {
@@ -604,7 +606,7 @@ function updateITMSymbolAndStrike(optionType) {
 }
 
 async function updateITMSymbolfromOC() {
-    await delay(1000)
+    await delay(5000)
     // Get the Nifty option chain
     biasProcess.optionChain = await getOptionChain();
     await delay(1000)
@@ -1359,6 +1361,37 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
   prevEma9LessThanEma21 = ema9 < ema21;
   crossedUp = ema9 > ema21;
 }
+let positionDirection = '';
+async function XEma(XEmaResponse) {
+  if (!positionTaken) {
+    if (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > XEmaResponse) {
+      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = biasProcess.atmPutSymbol;
+      positionTaken = true;
+      positionDirection = 'long';
+    } else {
+      await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = biasProcess.atmCallSymbol;
+      positionTaken = true;
+      positionDirection = 'short';
+    }
+  } else {
+    if (positionDirection = 'short' && latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > XEmaResponse) {
+      await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = biasProcess.atmPutSymbol;
+      positionTaken = true;
+      positionDirection = 'long';
+    } else if(positionDirection = 'long' && latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < XEmaResponse) {
+      await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = biasProcess.atmPutSymbol;
+      positionTaken = true;
+      positionDirection = 'short';
+    }
+  }
+
+}
 
 async function crudecheckCrossOverExit(ema9, ema21) {
   if (prevEma9LessThanEma21 === '') {
@@ -1591,6 +1624,53 @@ const ema9and21ValuesIndicators = async (params) => {
   }
 }
 
+const emaXValuesIndicators = async (params) => {
+  try{
+    const reply = await api.get_time_price_series(params);
+
+    // console.log(reply[0], ' : reply'); 
+    // Extract 'intc' prices into a new array
+    const intcPrices = reply.map(item => parseFloat(item.intc));
+    
+    //last 50 items
+    const lastXItems = intcPrices.slice(0,10).reverse();
+
+    // console.log(first21Items)
+    //     [
+    //       22112,  22121.2,
+    //    22119.45,    22122,
+    //    22125.15,  22132.5,
+    //    22132.25, 22126.65,
+    //     22130.1
+    //  ]  : first9Items
+    //  [
+    //       22112,  22121.2, 22119.45,
+    //       22122, 22125.15,  22132.5,
+    //    22132.25, 22126.65,  22130.1,
+    //    22131.75,    22130,    22123,
+    //     22122.5,  22121.9,  22130.4,
+    //    22125.65,    22123,  22122.9,
+    //    22120.35,  22120.2,    22120
+    //  ]  : first21Items
+
+    const { Indicators } = require('@ixjb94/indicators');
+
+    // Sample financial data (replace this with your data)
+    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 75];
+    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 75];
+
+    // Calculate 9-period EMA
+    let ta = new Indicators();
+    let emaXValues = await ta.ema(lastXItems, 5);
+    //send last item from the array
+    return [emaXValues[emaXValues.length-1]];
+  }
+  catch (error) {
+    console.error('Error:', error);
+    throw error; // Rethrow the error to be caught in the calling function
+  }
+}
+
 const ema9and21Values = async (params) => {
   try{
     const reply = await api.get_time_price_series(params);
@@ -1710,7 +1790,7 @@ const ema9and21Values = async (params) => {
   // ]  : reply
   
   // updateEMA when atmStrike changes
-emaRecurringFunction = async () => {
+emaRecurringFunction = async (inputProp = null) => {
     try{
       tempAtmStrike = await getAtmStrike()
       if (tempAtmStrike!= biasProcess.atmStrike){
@@ -1814,7 +1894,7 @@ emaRecurringFunction = async () => {
         'exchange'   : globalInput.pickedExchange,
         'token' : globalInput.token,
         'starttime'    : epochTimeTrimmed,
-        'interval' : '3'
+        'interval' : '1'
         }
 
       // params2 = {
@@ -1827,23 +1907,27 @@ emaRecurringFunction = async () => {
       try {
         // const [callema9, callema21] = await ema9and21Values(params);
         // console.log(callema9, callema21, ' : callema9, callema21')
+        if(inputProp) {
+          const XEmaResponse = await emaXValuesIndicators(params); //call
+          await XEma(XEmaResponse)
+        } else {
+          const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
+          // const [putema9, putema21] = await ema9and21Values(params2); //put
 
-        const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
-        // const [putema9, putema21] = await ema9and21Values(params2); //put
+          send_notification('crudeoil: ltp '+ +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + ', ema9 '+ parseFloat(callema9).toFixed(2) + ', ema21 ' + parseFloat(callema21).toFixed(2))
+          // console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
+          
+          //send notification
 
-        send_notification('crudeoil: ltp '+ +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + ', ema9 '+ parseFloat(callema9).toFixed(2) + ', ema21 ' + parseFloat(callema21).toFixed(2))
-        // console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
-        
-        //send notification
+          // //buyer
+          await sellercrudecheckCrossOverExit(callema9, callema21)
+          // await crudecheckCrossOverExit(callema9, callema21)
+          // await crudecheckCrossOverExit(putema9, putema21)
 
-        // //buyer
-        await sellercrudecheckCrossOverExit(callema9, callema21)
-        // await crudecheckCrossOverExit(callema9, callema21)
-        // await crudecheckCrossOverExit(putema9, putema21)
-
-        // //seller
-        // sellercheckCrossOverExit(callema9, callema21)
-        // sellerputcheckCrossOverExit(putema9, putema21)
+          // //seller
+          // sellercheckCrossOverExit(callema9, callema21)
+          // sellerputcheckCrossOverExit(putema9, putema21)
+      }
         
       } catch (error) {
         console.error('Error:', error);
@@ -1875,7 +1959,7 @@ emaRecurringFunction = async () => {
     }
 
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
-getEma = async () => {
+getEma = async (inputProp = null) => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
 
@@ -1889,7 +1973,7 @@ getEma = async () => {
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     try {
-      await emaRecurringFunction();
+      await emaRecurringFunction(inputProp);
     } catch (error) {
         console.error("Error occured: " + error);
         // send_notification("Error occured: " + error)
@@ -1925,4 +2009,19 @@ runEma = async () => {
   }
   }
 
-runEma();
+runXEma = async (inputProp = null) => {
+  try{
+    await executeLogin();
+    await setNearestCrudeFutureToken();
+    await send_callback_notification();
+    await startWebsocket();
+    await updateITMSymbolfromOC();
+    limits = await api.get_limits()
+    globalInput.emaLotMultiplier = limits?.cash < 1500000 ?  3: 6;
+    intervalId = setInterval(getEma(inputProp), 1000);
+  }catch (error) {
+    console.log( error)
+  }
+  }
+// runEma();
+runEma(5);
