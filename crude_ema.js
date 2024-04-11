@@ -1910,7 +1910,7 @@ emaRecurringFunction = async () => {
         // console.log(callema9, callema21, ' : callema9, callema21')
         if(inputProp) {
           const XEmaResponse = await emaXValuesIndicators(params); //call
-          send_notification('crudeoil: ltp '+ +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + '\n ema '+ parseFloat(XEmaResponse).toFixed(2))
+          send_notification('crudeoil: ltp '+ +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + '\nema '+ parseFloat(XEmaResponse).toFixed(2))
           await XEma(XEmaResponse)
         } else {
           const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
