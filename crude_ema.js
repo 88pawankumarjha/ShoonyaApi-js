@@ -1,6 +1,7 @@
 // Initialization / nearest expiry / getAtmStrike
 // jupyter nbconvert --to script gpt.ipynb
 const debug = false;
+let inputProp = true; // true for XEma logic
 let limits;
 function isWeekend() {
   //todo
@@ -1790,7 +1791,7 @@ const ema9and21Values = async (params) => {
   // ]  : reply
   
   // updateEMA when atmStrike changes
-emaRecurringFunction = async (inputProp = null) => {
+emaRecurringFunction = async () => {
     try{
       tempAtmStrike = await getAtmStrike()
       if (tempAtmStrike!= biasProcess.atmStrike){
@@ -1959,7 +1960,7 @@ emaRecurringFunction = async (inputProp = null) => {
     }
 
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
-getEma = async (inputProp = null) => {
+getEma = async () => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
 
@@ -1973,7 +1974,7 @@ getEma = async (inputProp = null) => {
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     try {
-      await emaRecurringFunction(inputProp);
+      await emaRecurringFunction();
     } catch (error) {
         console.error("Error occured: " + error);
         // send_notification("Error occured: " + error)
@@ -1994,7 +1995,7 @@ const setNearestCrudeFutureToken = async () => {
   
 }
 
-runEma = async (inputProp = null) => {
+runEma = async () => {
   try{
     await executeLogin();
     await setNearestCrudeFutureToken();
@@ -2003,10 +2004,10 @@ runEma = async (inputProp = null) => {
     await updateITMSymbolfromOC();
     limits = await api.get_limits()
     globalInput.emaLotMultiplier = limits?.cash < 1500000 ?  3: 6;
-    intervalId = setInterval(getEma(inputProp), 1000);
+    intervalId = setInterval(getEma, 1000);
   }catch (error) {
     console.log( error)
   }
   }
 // runEma();
-runEma(3);
+runEma();
