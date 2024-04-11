@@ -1395,7 +1395,7 @@ async function XEma(XEmaResponse) {
       positionDirection = 'short';
     }
   }
-
+  positionTakenInSymbol && send_notification(`${(limits?.cash)?.substring(0,3)} MCX PnL: ${await calcPnL(api, true)} Rs \n${positionTakenInSymbol}: ltp: ${latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp}`);
 }
 
 async function crudecheckCrossOverExit(ema9, ema21) {
