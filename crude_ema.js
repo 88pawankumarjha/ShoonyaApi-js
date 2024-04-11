@@ -1366,26 +1366,30 @@ let positionDirection = '';
 async function XEma(XEmaResponse) {
   if (!positionTaken) {
     if (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > XEmaResponse) {
+      send_notification('inside !positionTaken token > ema')
       await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       positionTakenInSymbol = biasProcess.atmPutSymbol;
       positionTaken = true;
       positionDirection = 'long';
-    } else {
+    } else if(latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < XEmaResponse){
+      send_notification('inside !positionTaken token < ema')
       await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       positionTakenInSymbol = biasProcess.atmCallSymbol;
       positionTaken = true;
       positionDirection = 'short';
     }
-  } else {
+  } else if (positionTaken){
     if (positionDirection = 'short' && latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > XEmaResponse) {
       await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      send_notification('inside positionTaken token > ema')
       positionTakenInSymbol = biasProcess.atmPutSymbol;
       positionTaken = true;
       positionDirection = 'long';
     } else if(positionDirection = 'long' && latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < XEmaResponse) {
       await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      send_notification('inside positionTaken token < ema')
       positionTakenInSymbol = biasProcess.atmCallSymbol;
       positionTaken = true;
       positionDirection = 'short';
