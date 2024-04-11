@@ -1385,8 +1385,8 @@ async function XEma(XEmaResponse) {
       positionDirection = 'long';
     } else if(positionDirection = 'long' && latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < XEmaResponse) {
       await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmPutSymbol;
+      await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
+      positionTakenInSymbol = biasProcess.atmCallSymbol;
       positionTaken = true;
       positionDirection = 'short';
     }
@@ -1910,6 +1910,7 @@ emaRecurringFunction = async () => {
         // console.log(callema9, callema21, ' : callema9, callema21')
         if(inputProp) {
           const XEmaResponse = await emaXValuesIndicators(params); //call
+          send_notification('crudeoil: ltp '+ +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + '\n ema '+ parseFloat(XEmaResponse).toFixed(2))
           await XEma(XEmaResponse)
         } else {
           const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
