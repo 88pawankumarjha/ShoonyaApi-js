@@ -1379,14 +1379,14 @@ async function XEma(XEmaResponse) {
       positionDirection = 'short';
     }
   } else if (positionTaken){
-    if (positionDirection = 'short' && latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > XEmaResponse) {
+    if (positionDirection == 'short' && (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp > XEmaResponse)) {
       await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       send_notification('inside positionTaken token > ema')
       positionTakenInSymbol = biasProcess.atmPutSymbol;
       positionTaken = true;
       positionDirection = 'long';
-    } else if(positionDirection = 'long' && latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < XEmaResponse) {
+    } else if(positionDirection == 'long' && (latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp < XEmaResponse)) {
       await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
       send_notification('inside positionTaken token < ema')
