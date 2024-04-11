@@ -1661,7 +1661,7 @@ const emaXValuesIndicators = async (params) => {
 
     // Calculate 9-period EMA
     let ta = new Indicators();
-    let emaXValues = await ta.ema(lastXItems, 5);
+    let emaXValues = await ta.ema(lastXItems, 3);
     //send last item from the array
     return [emaXValues[emaXValues.length-1]];
   }
@@ -1894,7 +1894,7 @@ emaRecurringFunction = async (inputProp = null) => {
         'exchange'   : globalInput.pickedExchange,
         'token' : globalInput.token,
         'starttime'    : epochTimeTrimmed,
-        'interval' : '1'
+        'interval' : '3'
         }
 
       // params2 = {
@@ -1994,22 +1994,7 @@ const setNearestCrudeFutureToken = async () => {
   
 }
 
-runEma = async () => {
-  try{
-    await executeLogin();
-    await setNearestCrudeFutureToken();
-    await send_callback_notification();
-    await startWebsocket();
-    await updateITMSymbolfromOC();
-    limits = await api.get_limits()
-    globalInput.emaLotMultiplier = limits?.cash < 1500000 ?  3: 6;
-    intervalId = setInterval(getEma, 1000);
-  }catch (error) {
-    console.log( error)
-  }
-  }
-
-runXEma = async (inputProp = null) => {
+runEma = async (inputProp = null) => {
   try{
     await executeLogin();
     await setNearestCrudeFutureToken();
@@ -2024,4 +2009,4 @@ runXEma = async (inputProp = null) => {
   }
   }
 // runEma();
-runEma(5);
+runEma(3);
