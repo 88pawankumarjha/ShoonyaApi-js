@@ -307,6 +307,7 @@ const getAtmStrike = async () => {
   atm = Math.round((biasProcess.spotObject?.lp + (biasOutput.bias !== 0 ? biasOutput.bias : 0)) / globalInput.ocGap) * globalInput.ocGap;
   if (!isNaN(atm)) {return atm;}  
   else { 
+    console.log('isNaN(atm) true')
     const Spot = await fetchSpotPrice(api, globalInput.token, globalInput.pickedExchange);
     if (!Spot) { console.log('Not able to find the spot'); return null; }
     // debug && console.log(Spot)
@@ -644,6 +645,7 @@ async function startWebsocket() {
 async function getOptionChain() {
     try {
         biasProcess.atmStrike = await getAtmStrike();
+        console.log(biasProcess.atmStrike, ' : biasProcess.atmStrike')
         const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
         // console.log(optionChainResponse, 'optionChainResponse')
         if (optionChainResponse.stat === 'Ok') {
