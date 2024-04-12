@@ -303,6 +303,7 @@ const getAtmStrike = async () => {
   // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
   biasProcess.spotObject = latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`];
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
+  console.log(biasOutput.bias, 'biasOutput.bias')
   atm = Math.round((biasProcess.spotObject?.lp + (biasOutput.bias !== 0 ? biasOutput.bias : 0)) / globalInput.ocGap) * globalInput.ocGap;
   if (!isNaN(atm)) {return atm;}  
   else { 
