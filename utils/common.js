@@ -30,8 +30,8 @@ let calcBias = 0;
 let multiplier = 2;
 let exitMTM = -1500;
 let gainExitMTM = 350;
-let magicNumber = 200;
-let aggressiveMagicNumber = 250;
+let magicNumber = 250;
+let aggressiveMagicNumber = 300;
 let slOrders = '';
 let slOrdersExtra = '';
 let ocGapCalc = 0;
@@ -206,7 +206,19 @@ async function checkAlert(api) {
     }
     
     if (timeToMakeAMoveVal || parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {
-        if(!timeToMakeAMoveVal){
+        let inputMagicNumber = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
+        if ((parseFloat(cValue1Var) > (parseFloat(inputMagicNumber) * 3) ) || (parseFloat(pValue1Var) > (parseFloat(inputMagicNumber) * 3) )) {
+          if(+pValue1Var < +cValue1Var){
+            // bring call away
+            await takeDecision(apiLocal, true, 1, actionType.BOT) //going up and vix is high
+            send_notification('made a move based on SL to take call away', true)
+          }else{
+            // bring put away
+            await takeDecision(apiLocal, false, 1, actionType.BOT) //going down and vix is high
+            send_notification('made a move based on SL to take put away', true)
+          }
+        }
+        else if(!timeToMakeAMoveVal){
           let up = parseFloat(pValue2Var) < parseFloat(cValue1Var)
           let trendingUp = parseFloat(pValue1Var) > parseFloat(cExtra3Var)
           let trendingDown = parseFloat(cValue1Var) > parseFloat(pExtra3Var)
@@ -219,10 +231,9 @@ async function checkAlert(api) {
               await takeDecision(api, up, vixQuoteCalc, actionType.BOT)
           }
         }
-        else{
+        else if (timeToMakeAMoveVal){
           timeBasedMethodExecuted = true;
           // time to make a move
-          let inputMagicNumber = vixQuoteCalc > 0 ? magicNumber/Math.abs(+smallestCallPosition?.ls): aggressiveMagicNumber/Math.abs(+smallestCallPosition?.ls);
           if(+pValue1Var < inputMagicNumber && +cValue1Var < inputMagicNumber){
             if(+pValue1Var < +cValue1Var){
               // bring put closer
@@ -239,7 +250,8 @@ async function checkAlert(api) {
           setTimeout(() => {
             timeBasedMethodExecuted = false;
           }, 60000); // Reset the flag after 60 seconds (1 minute)
-      }
+        }
+        
     }
 }
 
