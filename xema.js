@@ -31,8 +31,8 @@ let globalBigInput = {
   filteredIndexCSV: undefined
 }
 //TODO change index
-getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
-getEMAQtyFor2L = () => debug ? 100 : [100, 60, 120, 60, 150, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
+getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'BANKNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
+getEMAQtyFor2L = () => debug ? 100 : [100, 60, 60, 60, 150, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
 let telegramSignals = {
   stopSignal: false,
   exitSignal: false,
@@ -288,8 +288,8 @@ getEMAQtyForGeneric = () => {
 
   return debug ? 100 : 
   limits?.cash < 1500000 ? 
-  [100, 300, 800, 300, 800, 250, 75][new Date().getDay()] : 
-  [100, 600, 1600, 600, 1500, 500, 75][new Date().getDay()]
+  [100, 300, 300, 300, 800, 250, 75][new Date().getDay()] : 
+  [100, 600, 600, 600, 1500, 500, 75][new Date().getDay()]
   }
 
 // Execute the findNearestExpiry function
