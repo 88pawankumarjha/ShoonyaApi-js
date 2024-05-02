@@ -299,6 +299,12 @@ getEMAQtyForGeneric = () => {
   // [100, 600, 720, 720, 1700, 500, 75][new Date().getDay()]
   }
 
+  getFreezeQty = () => {
+    return [600, 600, 1800, 900, 1800, 500, 75][new Date().getDay()]
+    // bnf early expiry
+    // return [600, 600, 900, 900, 1800, 500, 75][new Date().getDay()]
+    }
+
 // Execute the findNearestExpiry function
 findNearestExpiry();
 
@@ -469,7 +475,7 @@ exitHedgeOrder = async (positionsData) => {
         price: 0,
         remarks: 'ExitHedgeAPI'
     }
-    await api.place_order(order);
+    await my_default_place_order(order);
 }
 
 exitHedges = async () => {
@@ -1148,11 +1154,17 @@ const exitSellsAndOrStop = async (stop = false) => {
 const triggerATMChangeActions = async () => {
   await exitSellsAndOrStop(false);
 }
-// const my_default_place_order = async (order) => {
-//   const orderno = await api.place_order(order)
-//   await delay(2000);
-//   return orderno;
-// }
+const my_default_place_order = async (order) => {
+  let freeze_qty = getFreezeQty();
+  while (order?.quantity > freeze_qty)
+  {
+    let initialQty = order?.quantity;
+    order.quantity = freeze_qty;
+    await api.place_order(order)
+    order.quantity = initialQty - freeze_qty;
+  }
+  await api.place_order(order);
+}
 // const checkIfOrderNoIsCompletedOrNot = async (orderno) => {
 //   //check order status
 //   api.singleorderhistory(orderno)
@@ -1179,7 +1191,7 @@ const exitXemaLong = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestPutPosition?.tsym) {await api.place_order(order)}
+  if(positionProcess.smallestPutPosition?.tsym) {await my_default_place_order(order)}
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
   await delay(1000);
 }
@@ -1201,7 +1213,7 @@ const enterXemaLong = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  await api.place_order(order);
+  await my_default_place_order(order);
   // send_notification('entering Long', true)
   longPositionTaken = true;
   await delay(1000);
@@ -1222,7 +1234,7 @@ const exitXemaShort = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestCallPosition?.tsym) {await api.place_order(order)}
+  if(positionProcess.smallestCallPosition?.tsym) {await my_default_place_order(order)}
   shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
   await delay(1000);
 }
@@ -1245,7 +1257,7 @@ const enterXemaShort = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  await api.place_order(order);
+  await my_default_place_order(order);
   // send_notification('entering Short', true)
   shortPositionTaken = true;
   await delay(1000);
@@ -1268,7 +1280,7 @@ const enterXemaBuyCall = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  await api.place_order(order);
+  await my_default_place_order(order);
   send_notification('bought hedge call', true)
 }
 
@@ -1287,7 +1299,7 @@ const enterXemaBuyPut = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  await api.place_order(order);
+  await my_default_place_order(order);
   send_notification('bought hedge put', true)
 }
 async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
@@ -1392,8 +1404,11 @@ const runEma = async () => {
   try {
     await executeLogin();
     await startWebsocket();
-    await send_callback_notification();
+    // await send_callback_notification();
     await updateITMSymbolfromOC();
+
+    // freeze_qty
+    process.exit(0)
     await dynSubs();
     await updateTwoSmallestPositionsAndNeighboursSubs(false);
     limits = await api.get_limits()
