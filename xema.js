@@ -1122,8 +1122,13 @@ let shortPositionTaken = false; // Variable to track short position status
 const cancelOpenOrders = async () => {
   const orders = await api.get_orderbook();
   const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
-  if (filtered_data_API[0]?.norenordno) {await api.cancel_order(filtered_data_API[0]?.norenordno);}
+  for (const order of filtered_data_API) {
+    if (order?.norenordno) {
+      await api.cancel_order(order.norenordno);
+    }
+  }
 }
+
 
 function cleanupAndExit() {
   console.log('Cleanup actions completed.');
@@ -1156,15 +1161,19 @@ const triggerATMChangeActions = async () => {
 }
 const my_default_place_order = async (order) => {
   let freeze_qty = getFreezeQty();
-  while (order?.quantity > freeze_qty)
-  {
-    let initialQty = order?.quantity;
+  let initialQty = order.quantity;
+
+  while (order.quantity > freeze_qty) {
     order.quantity = freeze_qty;
-    await api.place_order(order)
+    await api.place_order(order);
     order.quantity = initialQty - freeze_qty;
   }
-  await api.place_order(order);
+  
+  if (order.quantity > 0) {
+    await api.place_order(order);
+  }
 }
+
 // const checkIfOrderNoIsCompletedOrNot = async (orderno) => {
 //   //check order status
 //   api.singleorderhistory(orderno)
@@ -1406,9 +1415,6 @@ const runEma = async () => {
     await startWebsocket();
     // await send_callback_notification();
     await updateITMSymbolfromOC();
-
-    // freeze_qty
-    process.exit(0)
     await dynSubs();
     await updateTwoSmallestPositionsAndNeighboursSubs(false);
     limits = await api.get_limits()
