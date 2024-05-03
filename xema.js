@@ -1150,7 +1150,7 @@ const exitSellsAndOrStop = async (stop = false) => {
     }, 4000);
     setTimeout(function() {
       cleanupAndExit();
-    }, 6000);
+    }, 10000);
   } else {
     if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   }
@@ -1413,6 +1413,7 @@ const runEma = async () => {
   try {
     await executeLogin();
     await startWebsocket();
+    process.exit(0);
     // await send_callback_notification();
     await updateITMSymbolfromOC();
     await dynSubs();
