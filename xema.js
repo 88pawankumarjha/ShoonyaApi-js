@@ -293,7 +293,7 @@ getEMAQtyForGeneric = () => {
   return debug ? 100 : 
   limits?.cash < 1500000 ? 
    [100, 360, 1200, 360, 1200, 300, 75][new Date().getDay()] : 
-   [100, 600, 1800, 750, 1800, 500, 75][new Date().getDay()]
+   [100, 600, 1800, 750, 1800, 510, 75][new Date().getDay()]
   // bnf early expiry
   // [100, 300, 300, 300, 800, 250, 75][new Date().getDay()] : 
   // [100, 600, 720, 720, 1700, 500, 75][new Date().getDay()]
