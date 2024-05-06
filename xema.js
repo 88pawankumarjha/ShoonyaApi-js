@@ -291,9 +291,9 @@ getEMAQtyForGeneric = () => {
   // [400, 525, 1600, 525, 1050, 490, 525][new Date().getDay()]
 
   return debug ? 100 : 
-  limits?.cash < 1500000 ? 
-   [100, 360, 1200, 360, 1200, 300, 75][new Date().getDay()] : 
-   [100, 600, 1800, 750, 1800, 700, 75][new Date().getDay()]
+  limits?.cash < 2000000 ? 
+   [100, 420, 1200, 360, 1200, 300, 75][new Date().getDay()] : 
+   [100, 960, 1800, 750, 1800, 700, 75][new Date().getDay()]
   // bnf early expiry
   // [100, 300, 300, 300, 800, 250, 75][new Date().getDay()] : 
   // [100, 600, 720, 720, 1700, 500, 75][new Date().getDay()]
@@ -1413,7 +1413,7 @@ const runEma = async () => {
   try {
     await executeLogin();
     await startWebsocket();
-    process.exit(0);
+    // process.exit(0);
     // await send_callback_notification();
     await updateITMSymbolfromOC();
     await dynSubs();
