@@ -1424,7 +1424,7 @@ const runEma = async () => {
   try {
     await executeLogin();
     await startWebsocket();
-    process.exit(0);
+    //process.exit(0);
     // await send_callback_notification();
     await updateITMSymbolfromOC();
     await dynSubs();
