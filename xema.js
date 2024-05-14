@@ -602,7 +602,7 @@ function receiveQuote(data) {
       const currentTime = Math.floor(Date.now() / 1000); 
       if(currentTime % 3 === 0){
         // send_notification('alert to exit\n' + 'Sold price: '+ positionProcess.soldPrice + '\nCurrent Price: ' + `${globalInput.pickedExchange}|${getTokenByTradingSymbol(option.tsym)}` )
-        send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(option.tsym)}`);
+        send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(positionProcess.soldPrice)}`);
       }
     }
     //  else {
