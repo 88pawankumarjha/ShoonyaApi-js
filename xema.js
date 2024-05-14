@@ -148,7 +148,7 @@ let latestOrders = {};
 
 let positionProcess = {
   soldPrice: 0,
-  soldTsym: '',
+  soldTsymToken: '',
   smallestCallPosition: undefined, // [{tsym: 'NIFTY07DEC23P20850', lp: '1.55', netqty: '-800', s_prdt_ali: 'MIS'}]
   smallestPutPosition: undefined,
   hedgeCall: undefined,
@@ -586,7 +586,7 @@ postOrderPosTracking = async (data) => {
     pnl = await calcPnL(api);
     // send_notification(pnl + ' ' + str, true)
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
-    if(data?.trantype === 'S') {positionProcess.soldPrice = data?.flprc; positionProcess.soldTsym = data?.tsym}
+    if(data?.trantype === 'S') {positionProcess.soldPrice = data?.flprc; positionProcess.soldTsymToken = data?.token}
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -597,16 +597,17 @@ function receiveQuote(data) {
         latestQuotes[data.e + '|' + data.tk] = data
         // console.log(latestQuotes[data.e + '|' + data.tk])
     }
+    let lastTriggerTimeQuote = 0;
 
-    if(latestQuotes[data.e + '|' + data.tk] > (positionProcess.soldPrice)){
-      const currentTime = Math.floor(Date.now()); 
-      const toke = getTokenByTradingSymbol(positionProcess.soldTsym);
-      if(currentTime % 10000 === 0){
+    if(latestQuotes[data.e + '|' + data.tk] > (positionProcess.soldPrice + 1)){
+      const currentTime = Math.floor(Date.now() / 1000); 
+      if(currentTime % 10 === 0 && currentTime - lastTriggerTime >= 10){
+        lastTriggerTime = currentTime;
         // send_notification('alert to exit\n' + 'Sold price: '+ positionProcess.soldPrice + '\nCurrent Price: ' + `${globalInput.pickedExchange}|${getTokenByTradingSymbol(option.tsym)}` )
-        // send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: latestQuotes[${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'} | ${positionProcess.soldTsym}].lp `);
-        send_notification(`alert to exit \nSold price: ${positionProcess.soldPrice} \nCurrent Price: ${latestQuotes[data.e|toke]?.lp}`);
-        // ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(positionProcess.soldTsym)}`);
-        // +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${positionProcess.soldTsym}`].lp)
+        // send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: latestQuotes[${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'} | ${positionProcess.soldTsymToken}].lp `);
+        send_notification(`alert to exit \nSold price: ${positionProcess.soldPrice} \nCurrent Price: ${latestQuotes[data.e|positionProcess.soldTsymToken]?.lp}`);
+        // ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(positionProcess.soldTsymToken)}`);
+        // +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${positionProcess.soldTsymToken}`].lp)
       }
     }
     //  else {
@@ -1118,8 +1119,8 @@ const emaMonitorATMs = async () => {
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
     
-    // send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX'][getTokenByTradingSymbol(positionProcess.soldTsym)]?.lp}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
-    send_notification(`cem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
+    // send_notification(`${positionProcess.soldTsymToken} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX']|[getTokenByTradingSymbol(positionProcess.soldTsymToken)]?.lp}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
+    send_notification(`${positionProcess.soldTsymToken} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX']|[getTokenByTradingSymbol(positionProcess.soldTsymToken)]?.lp} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     
     emaUpFastCall = callemaFast > callemaMedium;
     emaUpFastPut = putemaFast > putemaMedium;
