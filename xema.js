@@ -598,12 +598,14 @@ function receiveQuote(data) {
         // console.log(latestQuotes[data.e + '|' + data.tk])
     }
 
-    if(latestQuotes[data.e + '|' + positionProcess.soldTsymToken] > (positionProcess.soldPrice + 1)){
+    if(latestQuotes[data.e + '|' + positionProcess.soldTsymToken] > (positionProcess.soldPrice)){
       const currentTime = Math.floor(Date.now() / 1000); 
       if(currentTime % 10 === 0){
         // send_notification('alert to exit\n' + 'Sold price: '+ positionProcess.soldPrice + '\nCurrent Price: ' + `${globalInput.pickedExchange}|${getTokenByTradingSymbol(option.tsym)}` )
         // send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: latestQuotes[${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'} | ${positionProcess.soldTsymToken}].lp `);
-        send_notification(`alert to exit \nSold price: ${positionProcess.soldPrice} \nCurrent Price: ${latestQuotes[data.e|positionProcess.soldTsymToken]?.lp}`);
+        send_notification(`alert to exit 
+        \nSold price: ${positionProcess.soldPrice} 
+        \nCurrent Price: ${latestQuotes[data.e|positionProcess.soldTsymToken]?.lp}`);
         // ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(positionProcess.soldTsymToken)}`);
         // +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${positionProcess.soldTsymToken}`].lp)
       }
