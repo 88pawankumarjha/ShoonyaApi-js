@@ -598,7 +598,7 @@ function receiveQuote(data) {
         // console.log(latestQuotes[data.e + '|' + data.tk])
     }
 
-    if(latestQuotes[data.e + '|' + data.tk] > (positionProcess.soldPrice + 1)){
+    if(latestQuotes[data.e + '|' + data.tk] > (positionProcess.soldPrice)){
       const currentTime = Math.floor(Date.now()); 
       const toke = getTokenByTradingSymbol(positionProcess.soldTsym);
       if(currentTime % 10000 === 0){
