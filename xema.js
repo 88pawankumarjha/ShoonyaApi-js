@@ -147,6 +147,8 @@ let latestQuotes = {};
 let latestOrders = {};
 
 let positionProcess = {
+  soldPrice: 0,
+  soldTsym: '',
   smallestCallPosition: undefined, // [{tsym: 'NIFTY07DEC23P20850', lp: '1.55', netqty: '-800', s_prdt_ali: 'MIS'}]
   smallestPutPosition: undefined,
   hedgeCall: undefined,
@@ -584,6 +586,7 @@ postOrderPosTracking = async (data) => {
     pnl = await calcPnL(api);
     // send_notification(pnl + ' ' + str, true)
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
+    if(data?.trantype === 'S') {positionProcess.soldPrice = data?.flprc; positionProcess.soldTsym = data?.tsym}
 }
 
 // websocket with update smallest 2 positions on every new order
@@ -1102,7 +1105,7 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    send_notification('cem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' pem : ' +parseFloat(putemaMedium ).toFixed(2)+ '\ncef : ' + parseFloat(callemaFast).toFixed(2) + ' pef : ' +parseFloat(putemaFast).toFixed(2))
+    send_notification(positionProcess.soldTsym + ' @'+ positionProcess.soldPrice + '\ncem : ' + parseFloat(callemaMedium ).toFixed(2)+ ' pem : ' +parseFloat(putemaMedium ).toFixed(2)+ '\ncef : ' + parseFloat(callemaFast).toFixed(2) + ' pef : ' +parseFloat(putemaFast).toFixed(2))
     emaUpFastCall = callemaFast > callemaMedium;
     emaUpFastPut = putemaFast > putemaMedium;
     prevEmaUpFastCall = emaUpFastCall;
