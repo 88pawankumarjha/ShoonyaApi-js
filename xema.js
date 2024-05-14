@@ -601,8 +601,8 @@ function receiveQuote(data) {
 
     if(latestQuotes[data.e + '|' + data.tk] > (positionProcess.soldPrice + 1)){
       const currentTime = Math.floor(Date.now() / 1000); 
-      if(currentTime % 10 === 0 && currentTime - lastTriggerTime >= 10){
-        lastTriggerTime = currentTime;
+      if(currentTime % 10 === 0 && currentTime - lastTriggerTimeQuote >= 10){
+        lastTriggerTimeQuote = currentTime;
         // send_notification('alert to exit\n' + 'Sold price: '+ positionProcess.soldPrice + '\nCurrent Price: ' + `${globalInput.pickedExchange}|${getTokenByTradingSymbol(option.tsym)}` )
         // send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: latestQuotes[${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'} | ${positionProcess.soldTsymToken}].lp `);
         send_notification(`alert to exit \nSold price: ${positionProcess.soldPrice} \nCurrent Price: ${latestQuotes[data.e|positionProcess.soldTsymToken]?.lp}`);
