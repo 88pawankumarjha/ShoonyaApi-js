@@ -597,6 +597,11 @@ function receiveQuote(data) {
         latestQuotes[data.e + '|' + data.tk] = data
         // console.log(latestQuotes[data.e + '|' + data.tk])
     }
+
+    if(latestQuotes[data.e + '|' + data.tk] > (positionProcess.soldPrice + 1)){
+      // send_notification('alert to exit\n' + 'Sold price: '+ positionProcess.soldPrice + '\nCurrent Price: ' + `${globalInput.pickedExchange}|${getTokenByTradingSymbol(option.tsym)}` )
+      send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(option.tsym)}`);
+    }
     //  else {
     //     latestQuotes[data.e + '|' + data.tk] = data;
     // }
