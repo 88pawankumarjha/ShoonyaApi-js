@@ -597,8 +597,8 @@ function receiveQuote(data) {
         latestQuotes[data.e + '|' + data.tk] = data
         // console.log(latestQuotes[data.e + '|' + data.tk])
     }
-
-    if(latestQuotes[data.e + '|' + positionProcess.soldTsymToken] > (positionProcess.soldPrice)){
+//todo
+    // if(latestQuotes[data.e + '|' + positionProcess.soldTsymToken] > (positionProcess.soldPrice)){
       const currentTime = Math.floor(Date.now() / 1000); 
       if(currentTime % 10 === 0){
         // send_notification('alert to exit\n' + 'Sold price: '+ positionProcess.soldPrice + '\nCurrent Price: ' + `${globalInput.pickedExchange}|${getTokenByTradingSymbol(option.tsym)}` )
@@ -609,7 +609,7 @@ function receiveQuote(data) {
         // ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(positionProcess.soldTsymToken)}`);
         // +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${positionProcess.soldTsymToken}`].lp)
       }
-    }
+    // }
     //  else {
     //     latestQuotes[data.e + '|' + data.tk] = data;
     // }
