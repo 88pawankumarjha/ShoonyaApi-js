@@ -599,7 +599,7 @@ function receiveQuote(data) {
     }
     let lastTriggerTimeQuote = 0;
 
-    if(latestQuotes[data.e + '|' + data.tk] > (positionProcess.soldPrice + 1)){
+    if(latestQuotes[data.e + '|' + positionProcess.soldTsymToken] > (positionProcess.soldPrice + 1)){
       const currentTime = Math.floor(Date.now() / 1000); 
       if(currentTime % 10 === 0 && currentTime - lastTriggerTimeQuote >= 10){
         lastTriggerTimeQuote = currentTime;
