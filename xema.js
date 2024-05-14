@@ -603,7 +603,7 @@ function receiveQuote(data) {
       if(currentTime % 3 === 0){
         // send_notification('alert to exit\n' + 'Sold price: '+ positionProcess.soldPrice + '\nCurrent Price: ' + `${globalInput.pickedExchange}|${getTokenByTradingSymbol(option.tsym)}` )
         // send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: latestQuotes[${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'} | ${positionProcess.soldTsym}].lp `);
-        send_notification(`alert to exit \nSold price: ${positionProcess.soldPrice} \nCurrent Price: ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' : globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX'|getTokenByTradingSymbol(positionProcess.soldTsym)].lp}`);
+        send_notification(`alert to exit \nSold price: ${positionProcess.soldPrice} \nCurrent Price: ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' : globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX'|getTokenByTradingSymbol(positionProcess.soldTsym)]?.lp}`);
         // ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(positionProcess.soldTsym)}`);
         // +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${positionProcess.soldTsym}`].lp)
       }
@@ -1121,7 +1121,7 @@ const emaMonitorATMs = async () => {
       globalInput.pickedExchange === 'BFO' ? 'BSE' :
       globalInput.pickedExchange === 'NFO' ? 'NSE' :
       'MCX'
-    ][getTokenByTradingSymbol(positionProcess.soldTsym)].lp}
+    ][getTokenByTradingSymbol(positionProcess.soldTsym)]?.lp}
     cem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}
     cef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     
@@ -1375,7 +1375,7 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
 const setBiasValue = async () => {
   ltpSuggestedPut = +biasProcess.itmPutStrikePrice - (+latestQuotes[biasProcess.putSubStr]?.lp);
   ltpSuggestedCall = (+latestQuotes[biasProcess.callSubStr]?.lp + +biasProcess.itmCallStrikePrice);
-  biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`].lp));
+  biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]?.lp));
 }
 
 const optionBasedEmaRecurringFunction = async () => {
