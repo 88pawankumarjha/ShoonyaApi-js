@@ -150,6 +150,7 @@ let positionProcess = {
   soldPrice: 0,
   soldTsym: '',
   soldToken: '',
+  trailPrice: 0,
   smallestCallPosition: undefined, // [{tsym: 'NIFTY07DEC23P20850', lp: '1.55', netqty: '-800', s_prdt_ali: 'MIS'}]
   smallestPutPosition: undefined,
   hedgeCall: undefined,
@@ -589,6 +590,7 @@ postOrderPosTracking = async (data) => {
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = data?.flprc; 
+      positionProcess.trailPrice = positionProcess.soldPrice;
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
       console.log(`positionProcess ${positionProcess.soldPrice} ${positionProcess.soldTsym} ${positionProcess.soldToken}`)
@@ -629,14 +631,21 @@ function receiveQuote(data) {
       latestQuote = latestQuotes[subStrTemp2]?.lp;
       // console.log('latestQuote1 ', subStrTemp2 , ' ', latestQuote)
       const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
-      if (latestQuote > (+positionProcess.soldPrice + 5)) {
+
+      const trailPriceNumber = Number(positionProcess.trailPrice);
+      const trailPriceDivided = trailPriceNumber / 10;
+      const minimumValue = 5;
+      const maxTrailPrice = Math.max(trailPriceDivided, minimumValue);
+
+      if (latestQuote > (+positionProcess.trailPrice + maxTrailPrice)) {
         console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
           if (currentTime - lastNotificationTime >= 10) {
               lastNotificationTime = currentTime; // Update the last notification time
-              send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: ${latestQuote}`);
+              send_notification(`## Alert to exit ##\nSold Price: ${positionProcess.soldPrice}\nTrail Price: ${positionProcess.trailPrice}\nCurrent Price: ${latestQuote}`);
               positionProcess.soldToken = '';
               positionProcess.soldTsym = '';
               positionProcess.soldPrice = 0;
+              positionProcess.trailPrice = 0;
               triggerATMChangeActions();
           }
       }
@@ -1149,11 +1158,14 @@ const emaMonitorATMs = async () => {
     const subStrTemp = `${globalInput.pickedExchange}|${positionProcess.soldToken}`
     console.log('subStrTemp : ', subStrTemp)
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
+    //trail logic
+    const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
+    positionProcess.trailPrice = Math.min(positionProcess.soldPrice, latestPrice);
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
     // console.log('latestQuotes ', latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken])
     // send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX']|[getTokenByTradingSymbol(positionProcess.soldTsym)]?.lp}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
-    send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuote2} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
+    send_notification(`S @${positionProcess.soldPrice}\nT @${positionProcess.trailPrice}\nL: @${latestQuote2} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     
     emaUpFastCall = callemaFast > callemaMedium;
     emaUpFastPut = putemaFast > putemaMedium;
