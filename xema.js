@@ -615,16 +615,17 @@ function receiveQuote(data) {
 //       }
 //     }
 // }
-
-    const soldTsymTokenTemp = positionProcess.soldTsymToken;
-    const latestQuote = latestQuotes[data.e + '|' + soldTsymTokenTemp]?.lp;
-    const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
-    if (currentTime - lastNotificationTime >= 10) {
-      send_notification(`latestQuote ${latestQuote} for ${data.e} token ${soldTsymTokenTemp}`)
-        if (latestQuote > positionProcess.soldPrice) {
-            lastNotificationTime = currentTime; // Update the last notification time
-            send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: ${latestQuote}`);
-        }
+    if(data.e == globalInput.pickedExchange) {
+      const soldTsymTokenTemp = positionProcess.soldTsymToken;
+      const latestQuote = latestQuotes[globalInput.pickedExchange + '|' + soldTsymTokenTemp]?.lp;
+      const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
+      if (latestQuote > positionProcess.soldPrice - 10) {
+        send_notification(`latestQuote ${latestQuote} for ${data.e} token ${soldTsymTokenTemp}`)
+          if (currentTime - lastNotificationTime >= 10) {
+              lastNotificationTime = currentTime; // Update the last notification time
+              send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: ${latestQuote}`);
+          }
+      }
     }
 }
 
