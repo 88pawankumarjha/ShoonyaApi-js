@@ -596,6 +596,9 @@ postOrderPosTracking = async (data) => {
 }
 
 let lastNotificationTime = 0; // Initialize the last notification time
+let subStrTemp2;
+let latestQuote;
+
 // websocket with update smallest 2 positions on every new order
 function receiveQuote(data) {
     // console.log("Quote ::", data);
@@ -622,8 +625,9 @@ function receiveQuote(data) {
 //     }
 // }
     if(data.e == globalInput.pickedExchange) {
-      const latestQuote = latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken]?.lp;
-      console.log('latestQuote1 ', latestQuote)
+      subStrTemp2 = `${globalInput.pickedExchange}|${positionProcess.soldToken}`;
+      latestQuote = latestQuotes[subStrTemp2]?.lp;
+      console.log('latestQuote1 ', subStrTemp2 , ' ', latestQuote)
       const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
       if (latestQuote > (positionProcess.soldPrice + 2)) {
         console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
@@ -1142,14 +1146,14 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    const substrTemp = globalInput.pickedExchange + '|' + positionProcess.soldToken;
-    console.log('substrTemp : ', substrTemp)
-    const latestQuote = latestQuotes[substrTemp]?.lp;
+    const substrTemp = `${globalInput.pickedExchange}|${positionProcess.soldToken}`
+    console.log('substrTemp3 : ', substrTemp)
+    const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
     // console.log('latestQuotes ', latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken])
     // send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX']|[getTokenByTradingSymbol(positionProcess.soldTsym)]?.lp}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
-    send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuote} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
+    send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuote2} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     
     emaUpFastCall = callemaFast > callemaMedium;
     emaUpFastPut = putemaFast > putemaMedium;
