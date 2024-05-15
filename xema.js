@@ -629,7 +629,7 @@ function receiveQuote(data) {
       latestQuote = latestQuotes[subStrTemp2]?.lp;
       // console.log('latestQuote1 ', subStrTemp2 , ' ', latestQuote)
       const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
-      if (latestQuote > (positionProcess.soldPrice + 5)) {
+      if (latestQuote > (+positionProcess.soldPrice + 5)) {
         console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
           if (currentTime - lastNotificationTime >= 10) {
               lastNotificationTime = currentTime; // Update the last notification time
