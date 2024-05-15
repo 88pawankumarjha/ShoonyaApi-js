@@ -627,7 +627,7 @@ function receiveQuote(data) {
     if(data.e == globalInput.pickedExchange) {
       subStrTemp2 = `${globalInput.pickedExchange}|${positionProcess.soldToken}`;
       latestQuote = latestQuotes[subStrTemp2]?.lp;
-      console.log('latestQuote1 ', subStrTemp2 , ' ', latestQuote)
+      // console.log('latestQuote1 ', subStrTemp2 , ' ', latestQuote)
       const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
       if (latestQuote > (positionProcess.soldPrice + 2)) {
         console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
