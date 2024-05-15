@@ -628,6 +628,9 @@ function receiveQuote(data) {
           if (currentTime - lastNotificationTime >= 10) {
               lastNotificationTime = currentTime; // Update the last notification time
               send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: ${latestQuote}`);
+              positionProcess.soldToken = '';
+              positionProcess.soldTsym = '';
+              positionProcess.soldPrice = 0;
               triggerATMChangeActions();
           }
       }
