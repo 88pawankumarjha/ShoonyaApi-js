@@ -619,7 +619,7 @@ function receiveQuote(data) {
       const soldTsymTokenTemp = positionProcess.soldTsymToken;
       const latestQuote = latestQuotes[globalInput.pickedExchange + '|' + soldTsymTokenTemp]?.lp;
       const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
-      if (latestQuote > positionProcess.soldPrice - 10) {
+      if (latestQuote > (positionProcess.soldPrice - 10)) {
         send_notification(`latestQuote ${latestQuote} for ${data.e} token ${soldTsymTokenTemp}`)
           if (currentTime - lastNotificationTime >= 10) {
               lastNotificationTime = currentTime; // Update the last notification time
@@ -1133,7 +1133,7 @@ const emaMonitorATMs = async () => {
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
     
-    let subStr = `${globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX'}|${positionProcess.soldTsymToken}`;
+    let subStr = `${globalInput.pickedExchange}|${positionProcess.soldTsymToken}`;
 
     // send_notification(`${positionProcess.soldTsymToken} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX']|[getTokenByTradingSymbol(positionProcess.soldTsymToken)]?.lp}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     send_notification(`${positionProcess.soldTsymToken} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[subStr]?.lp} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
