@@ -1146,8 +1146,8 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    const substrTemp = `${globalInput.pickedExchange}|${positionProcess.soldToken}`
-    console.log('substrTemp3 : ', substrTemp)
+    const subStrTemp = `${globalInput.pickedExchange}|${positionProcess.soldToken}`
+    console.log('subStrTemp : ', subStrTemp)
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
