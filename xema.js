@@ -591,6 +591,7 @@ postOrderPosTracking = async (data) => {
       positionProcess.soldPrice = data?.flprc; 
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
+      console.log('positionProcess ', positionProcess)
     }
 }
 
@@ -1140,8 +1141,8 @@ const emaMonitorATMs = async () => {
       }
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
-    
-    const latestQuote = latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken]?.lp;
+    const substrTemp = globalInput.pickedExchange + '|' + positionProcess.soldToken;
+    const latestQuote = latestQuotes[substrTemp]?.lp;
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
     // console.log('latestQuotes ', latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken])
