@@ -629,17 +629,16 @@ function receiveQuote(data) {
     if(data.e == globalInput.pickedExchange) {
       subStrTemp2 = `${globalInput.pickedExchange}|${positionProcess.soldToken}`;
       latestQuote = latestQuotes[subStrTemp2]?.lp;
-      // console.log('latestQuote1 ', subStrTemp2 , ' ', latestQuote)
-      const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
+      if (latestQuote !== undefined) {
+        const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
+        const trailPriceNumber = Number(positionProcess.trailPrice);
+        const trailPriceDivided = trailPriceNumber / 10;
+        const minimumValue = 5;
+        const maxTrailPrice = Math.max(trailPriceDivided, minimumValue);
 
-      const trailPriceNumber = Number(positionProcess.trailPrice);
-      const trailPriceDivided = trailPriceNumber / 10;
-      const minimumValue = 5;
-      const maxTrailPrice = Math.max(trailPriceDivided, minimumValue);
-
-      if (latestQuote > (+positionProcess.trailPrice + maxTrailPrice)) {
-        console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
-          if (currentTime - lastNotificationTime >= 10) {
+        if (latestQuote > (+positionProcess.trailPrice + maxTrailPrice)) {
+            console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
+            if (currentTime - lastNotificationTime >= 10) {
               lastNotificationTime = currentTime; // Update the last notification time
               send_notification(`## Alert to exit ##\nSold Price: ${positionProcess.soldPrice}\nTrail Price: ${positionProcess.trailPrice}\nCurrent Price: ${latestQuote}`);
               positionProcess.soldToken = '';
@@ -647,7 +646,8 @@ function receiveQuote(data) {
               positionProcess.soldPrice = 0;
               positionProcess.trailPrice = 0;
               triggerATMChangeActions();
-          }
+            }
+        }
       }
     }
 }
