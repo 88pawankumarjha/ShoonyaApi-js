@@ -632,7 +632,7 @@ function receiveQuote(data) {
       if (latestQuote !== undefined) {
         const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
         const trailPriceNumber = Number(positionProcess.trailPrice);
-        const trailPriceDivided = trailPriceNumber / 8;
+        const trailPriceDivided = trailPriceNumber / 10;
         const minimumValue = 10;
         const maxTrailPrice = Math.max(trailPriceDivided, minimumValue);
 
@@ -1156,16 +1156,26 @@ const emaMonitorATMs = async () => {
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
     const subStrTemp = `${globalInput.pickedExchange}|${positionProcess.soldToken}`
-    console.log('subStrTemp : ', subStrTemp)
+    // console.log('subStrTemp : ', subStrTemp)
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
     positionProcess.trailPrice = Math.min(positionProcess.soldPrice, latestPrice);
+    
+    const isDefined = (value) => value !== undefined && value !== null;
+
+    const strTemp = (isDefined(positionProcess.soldPrice) && isDefined(positionProcess.trailPrice) &&
+                 positionProcess.soldPrice > 0 && positionProcess.trailPrice > 0 && 
+                 isDefined(latestQuote2))
+                  ? `S @${positionProcess.soldPrice} T @${positionProcess.trailPrice}\nL: @${latestQuote2}\n`
+                  : `STL not available\n`;
+    
+    strTemp = (positionProcess.soldPrice && positionProcess.trailPrice && latestQuote2) ? `S @${positionProcess.soldPrice} T @${positionProcess.trailPrice}\nL: @${latestQuote2}\n` : '';
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
     // console.log('latestQuotes ', latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken])
     // send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX']|[getTokenByTradingSymbol(positionProcess.soldTsym)]?.lp}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
-    send_notification(`S @${positionProcess.soldPrice} T @${positionProcess.trailPrice}\nL: @${latestQuote2} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
+    send_notification(`${strTemp}cem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     
     emaUpFastCall = callemaFast > callemaMedium;
     emaUpFastPut = putemaFast > putemaMedium;
