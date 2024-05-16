@@ -1169,8 +1169,6 @@ const emaMonitorATMs = async () => {
                  isDefined(latestQuote2))
                   ? `S @${positionProcess.soldPrice} T @${positionProcess.trailPrice}\nL: @${latestQuote2}\n`
                   : `STL not available\n`;
-    
-    strTemp = (positionProcess.soldPrice && positionProcess.trailPrice && latestQuote2) ? `S @${positionProcess.soldPrice} T @${positionProcess.trailPrice}\nL: @${latestQuote2}\n` : '';
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
     // console.log('latestQuotes ', latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken])
