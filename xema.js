@@ -1165,7 +1165,7 @@ const emaMonitorATMs = async () => {
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
     // console.log('latestQuotes ', latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken])
     // send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX']|[getTokenByTradingSymbol(positionProcess.soldTsym)]?.lp}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
-    send_notification(`S @${positionProcess.soldPrice}\nT @${positionProcess.trailPrice}\nL: @${latestQuote2} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
+    send_notification(`S @${positionProcess.soldPrice} T @${positionProcess.trailPrice}\nL: @${latestQuote2} \ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     
     emaUpFastCall = callemaFast > callemaMedium;
     emaUpFastPut = putemaFast > putemaMedium;
