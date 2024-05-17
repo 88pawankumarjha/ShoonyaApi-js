@@ -1160,7 +1160,7 @@ const emaMonitorATMs = async () => {
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    positionProcess.trailPrice = Math.min(positionProcess.soldPrice, latestPrice);
+    positionProcess.trailPrice = Math.min(Math.min(positionProcess.soldPrice, latestPrice), positionProcess.trailPrice);
     
     const isDefined = (value) => value !== undefined && value !== null;
 
