@@ -632,7 +632,7 @@ function receiveQuote(data) {
       if (latestQuote !== undefined) {
         const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
         const trailPriceNumber = Number(positionProcess.trailPrice);
-        const trailPriceDivided = trailPriceNumber / 10;
+        const trailPriceDivided = trailPriceNumber / 5;
         const minimumValue = 10;
         const maxTrailPrice = Math.max(trailPriceDivided, minimumValue);
 
