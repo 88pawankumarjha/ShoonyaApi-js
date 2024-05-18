@@ -1168,7 +1168,7 @@ const emaMonitorATMs = async () => {
                       isDefined(positionProcess.trailPrice) &&
                       isDefined(latestQuote2) &&
                       positionProcess.soldPrice > 0 && 
-                      positionProcess.trailPrice > 0
+                      positionProcess.trailPrice > 0)
                   ? `S @${positionProcess.soldPrice} T @${+positionProcess.trailPrice + positionProcess.maxTrailPriceSL}\nL @${latestQuote2}\n`
                   : `STL not available\n`;
     // console.log('positionProcess ', positionProcess)
