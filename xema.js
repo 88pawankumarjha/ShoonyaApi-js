@@ -151,6 +151,7 @@ let positionProcess = {
   soldTsym: '',
   soldToken: '',
   trailPrice: 0,
+  maxTrailPriceSL: 0,
   smallestCallPosition: undefined, // [{tsym: 'NIFTY07DEC23P20850', lp: '1.55', netqty: '-800', s_prdt_ali: 'MIS'}]
   smallestPutPosition: undefined,
   hedgeCall: undefined,
@@ -626,29 +627,28 @@ function receiveQuote(data) {
 //       }
 //     }
 // }
-    if(data.e == globalInput.pickedExchange) {
-      subStrTemp2 = `${globalInput.pickedExchange}|${positionProcess.soldToken}`;
-      latestQuote = latestQuotes[subStrTemp2]?.lp;
-      if (latestQuote !== undefined) {
-        const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
-        const trailPriceNumber = Number(positionProcess.trailPrice);
-        const trailPriceDivided = trailPriceNumber / 5;
-        const minimumValue = 10;
-        const maxTrailPrice = Math.max(trailPriceDivided, minimumValue);
+    if(data.e == globalInput.pickedExchange) return
+    subStrTemp2 = `${globalInput.pickedExchange}|${positionProcess.soldToken}`;
+    latestQuote = latestQuotes[subStrTemp2]?.lp;
+    if (latestQuote !== undefined) return
+    const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
+    if (currentTime - lastNotificationTime < 10) return;
 
-        if (latestQuote > (+positionProcess.trailPrice + maxTrailPrice)) {
-            console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
-            if (currentTime - lastNotificationTime >= 10) {
-              lastNotificationTime = currentTime; // Update the last notification time
-              send_notification(`## Alert to exit ##\nSold Price: ${positionProcess.soldPrice}\nTrail Price: ${positionProcess.trailPrice}\nCurrent Price: ${latestQuote}`);
-              positionProcess.soldToken = '';
-              positionProcess.soldTsym = '';
-              positionProcess.soldPrice = 0;
-              positionProcess.trailPrice = 0;
-              triggerATMChangeActions();
-            }
-        }
-      }
+    const trailPriceNumber = Number(positionProcess.trailPrice);
+    const trailPriceDivided = trailPriceNumber / 5;
+    const minimumValue = 10;
+    positionProcess.maxTrailPriceSL = Math.max(trailPriceDivided, minimumValue);
+
+    if (latestQuote > (trailPriceNumber + positionProcess.maxTrailPriceSL)) {
+        // console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
+        lastNotificationTime = currentTime; // Update the last notification time
+        send_notification(`## Alert to exit ##\nSold Price: ${positionProcess.soldPrice}\nTrail Price: ${positionProcess.trailPrice}\nCurrent Price: ${latestQuote}`);
+        // Clear position process state
+        positionProcess.soldToken = '';
+        positionProcess.soldTsym = '';
+        positionProcess.soldPrice = 0;
+        positionProcess.trailPrice = 0;
+        triggerATMChangeActions();
     }
 }
 
@@ -1164,10 +1164,12 @@ const emaMonitorATMs = async () => {
     
     const isDefined = (value) => value !== undefined && value !== null;
 
-    const strTemp = (isDefined(positionProcess.soldPrice) && isDefined(positionProcess.trailPrice) &&
-                 positionProcess.soldPrice > 0 && positionProcess.trailPrice > 0 && 
-                 isDefined(latestQuote2))
-                  ? `S @${positionProcess.soldPrice} T @${positionProcess.trailPrice}\nL: @${latestQuote2}\n`
+    const strTemp = (isDefined(positionProcess.soldPrice) && 
+                      isDefined(positionProcess.trailPrice) &&
+                      isDefined(latestQuote2) &&
+                      positionProcess.soldPrice > 0 && 
+                      positionProcess.trailPrice > 0
+                  ? `S @${positionProcess.soldPrice} T @${+positionProcess.trailPrice + positionProcess.maxTrailPriceSL}\nL @${latestQuote2}\n`
                   : `STL not available\n`;
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
