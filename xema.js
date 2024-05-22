@@ -586,7 +586,6 @@ postOrderPosTracking = async (data) => {
     // console.log('order placed: ', data)
     str = '\n' + data?.trantype + ' ' + data?.flprc + ' ' + data?.tsym + ' ';
     pnl = await calcPnL(api);
-    // send_notification(pnl + ' ' + str, true)
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = data?.flprc; 
@@ -907,8 +906,6 @@ async function checkAlert() {
     if (!pExtraVars.every(element => element === null)) {
     resStr += `\nPE: ${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}`;
     }
-    // resStr += (pExtraVars.length !== 0) ? `\nPE: ${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}` : '';
-    // send_notification(resStr);
     resStr = '';
 
     if (parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {
@@ -918,9 +915,6 @@ async function checkAlert() {
 //      vix high or early morning then move away
 //      vix low or not early morning then move closer
         if((up && biasOutput.bias > 0) || (!up && biasOutput.bias < 0) || trendingUp || trendingDown ){
-            // send_notification(`Going ${up ? 'UP':'DOWN️'}, VIX ${biasProcess.vix}%, Bias ${biasOutput.bias}, 
-            //     \nCE: ${cExtra0Var} ,${cValue1Var} ,${cValue2Var} ,${cExtra3Var}\nPE: ${pExtra0Var} ,${pValue1Var} ,${pValue2Var} ,${pExtra3Var}
-            //     \n3:05pm-2distance, 2:40-3, 1:40-4, 12:40-5, 11:40-6, 10:40-7, 9:40-8, 9:18-9`, true);
             await takeAction(up)
         }
     }
@@ -1137,7 +1131,7 @@ const emaMonitorATMs = async () => {
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    positionProcess.trailPrice = Math.min(+latestPrice + (+latestPrice * 0.2), positionProcess.trailPrice);
+    positionProcess.trailPrice = parseFloat(Math.min(+latestPrice + (+latestPrice * 0.2), positionProcess.trailPrice)).toFixed(2)
     
     
     const isDefined = (value) => value !== undefined && value !== null;
@@ -1152,7 +1146,6 @@ const emaMonitorATMs = async () => {
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
     // console.log('latestQuotes ', latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken])
-    // send_notification(`${positionProcess.soldTsym} @ ${positionProcess.soldPrice}\nnow: @ ${latestQuotes[globalInput.pickedExchange === 'BFO' ? 'BSE' :globalInput.pickedExchange === 'NFO' ? 'NSE' :'MCX']|[getTokenByTradingSymbol(positionProcess.soldTsym)]?.lp}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     send_notification(`${strTemp}cem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}\ncef: ${parseFloat(callemaFast).toFixed(2)} pef: ${parseFloat(putemaFast).toFixed(2)}`);
     
     emaUpFastCall = callemaFast > callemaMedium;
@@ -1399,7 +1392,7 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     }
   }
   currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
-  send_notification(biasOutput.bias + ' ' + currentPositionStatus)
+  send_notification((limits?.cash)?.substring(0,3) +  ' : ' + biasOutput.bias + ' ' + currentPositionStatus + ' in ')
 }
 
 const setBiasValue = async () => {
