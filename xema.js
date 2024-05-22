@@ -151,7 +151,6 @@ let positionProcess = {
   soldTsym: '',
   soldToken: '',
   trailPrice: 0,
-  maxTrailPriceSL: 0,
   smallestCallPosition: undefined, // [{tsym: 'NIFTY07DEC23P20850', lp: '1.55', netqty: '-800', s_prdt_ali: 'MIS'}]
   smallestPutPosition: undefined,
   hedgeCall: undefined,
@@ -591,7 +590,7 @@ postOrderPosTracking = async (data) => {
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = data?.flprc; 
-      positionProcess.trailPrice = positionProcess.soldPrice;
+      positionProcess.trailPrice = Math.max(((+positionProcess.soldPrice) + (+positionProcess.soldPrice * 0.2)), (+positionProcess.soldPrice + 10));
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
       console.log(`positionProcess ${positionProcess.soldPrice} ${positionProcess.soldTsym} ${positionProcess.soldToken}`)
@@ -602,45 +601,23 @@ let lastNotificationTime = 0; // Initialize the last notification time
 let subStrTemp2;
 let latestQuote;
 
-// websocket with update smallest 2 positions on every new order
 function receiveQuote(data) {
-    // console.log("Quote ::", data);
     // Update the latest quote value for the corresponding instrument
     if(data?.lp) {
-        latestQuotes[data.e + '|' + data.tk] = data
-        // console.log(latestQuotes[data.e + '|' + data.tk])
+        latestQuotes[data.e + '|' + data.tk] = data;
     }
-    //  else {
-    //     latestQuotes[data.e + '|' + data.tk] = data;
-    // }
     
-//     if(latestQuotes[data.e + '|' + positionProcess.soldTsym] > (positionProcess.soldPrice)){
-//       const currentTime = Math.floor(Date.now() / 1000); 
-//       if(currentTime % 10 === 0){
-//         // send_notification('alert to exit\n' + 'Sold price: '+ positionProcess.soldPrice + '\nCurrent Price: ' + `${globalInput.pickedExchange}|${getTokenByTradingSymbol(option.tsym)}` )
-//         // send_notification(`alert to exit\nSold price: ${positionProcess.soldPrice}\nCurrent Price: latestQuotes[${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'} | ${positionProcess.soldTsym}].lp `);
-//         send_notification(`alert to exit 
-//         \nSold price: ${positionProcess.soldPrice} 
-//         \nCurrent Price: ${latestQuotes[data.e|positionProcess.soldTsym]?.lp}`);
-//         // ${globalInput.pickedExchange} | ${getTokenByTradingSymbol(positionProcess.soldTsym)}`);
-//         // +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${positionProcess.soldTsym}`].lp)
-//       }
-//     }
-// }
     if(data.e == globalInput.pickedExchange) return
+    
     subStrTemp2 = `${globalInput.pickedExchange}|${positionProcess.soldToken}`;
     latestQuote = latestQuotes[subStrTemp2]?.lp;
+    
     if (latestQuote !== undefined) return
-    const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
-    if (currentTime - lastNotificationTime < 10) return;
 
-    const trailPriceNumber = Number(positionProcess.trailPrice);
-    const trailPriceDivided = trailPriceNumber / 5;
-    const minimumValue = 10;
-    positionProcess.maxTrailPriceSL = Math.max(trailPriceDivided, minimumValue);
-
-    if (latestQuote > (trailPriceNumber + positionProcess.maxTrailPriceSL)) {
-        // console.log(`latestQuote ${latestQuote} for ${globalInput.pickedExchange} token ${positionProcess.soldToken} tsym ${positionProcess.soldTsym}`)
+    if (latestQuote > Number(positionProcess.trailPrice)) {
+      const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
+      if (currentTime - lastNotificationTime >= 10) {
+        triggerATMChangeActions();
         lastNotificationTime = currentTime; // Update the last notification time
         send_notification(`## Alert to exit ##\nSold Price: ${positionProcess.soldPrice}\nTrail Price: ${positionProcess.trailPrice}\nCurrent Price: ${latestQuote}`);
         // Clear position process state
@@ -648,7 +625,7 @@ function receiveQuote(data) {
         positionProcess.soldTsym = '';
         positionProcess.soldPrice = 0;
         positionProcess.trailPrice = 0;
-        triggerATMChangeActions();
+      }
     }
 }
 
@@ -1160,7 +1137,8 @@ const emaMonitorATMs = async () => {
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    positionProcess.trailPrice = Math.min(Math.min(positionProcess.soldPrice, latestPrice), positionProcess.trailPrice);
+    positionProcess.trailPrice = Math.min(+latestPrice + (+latestPrice * 0.2), positionProcess.trailPrice);
+    
     
     const isDefined = (value) => value !== undefined && value !== null;
 
@@ -1169,7 +1147,7 @@ const emaMonitorATMs = async () => {
                       isDefined(latestQuote2) &&
                       positionProcess.soldPrice > 0 && 
                       positionProcess.trailPrice > 0)
-                  ? `S @${positionProcess.soldPrice} T @${+positionProcess.trailPrice + positionProcess.maxTrailPriceSL}\nL @${latestQuote2}\n`
+                  ? `S @${positionProcess.soldPrice} T @${+positionProcess.trailPrice}\nL @${latestQuote2}\n`
                   : `STL not available\n`;
     // console.log('positionProcess ', positionProcess)
     // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
