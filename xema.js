@@ -611,7 +611,7 @@ function receiveQuote(data) {
     subStrTemp2 = `${globalInput.pickedExchange}|${positionProcess.soldToken}`;
     latestQuote = latestQuotes[subStrTemp2]?.lp;
     
-    if (latestQuote !== undefined) return
+    if (latestQuote === undefined) return
 
     if (latestQuote > Number(positionProcess.trailPrice)) {
       const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
@@ -619,11 +619,6 @@ function receiveQuote(data) {
         triggerATMChangeActions();
         lastNotificationTime = currentTime; // Update the last notification time
         send_notification(`## Alert to exit ##\nSold Price: ${positionProcess.soldPrice}\nTrail Price: ${positionProcess.trailPrice}\nCurrent Price: ${latestQuote}`);
-        // Clear position process state
-        positionProcess.soldToken = '';
-        positionProcess.soldTsym = '';
-        positionProcess.soldPrice = 0;
-        positionProcess.trailPrice = 0;
       }
     }
 }
@@ -1210,6 +1205,12 @@ const exitSellsAndOrStop = async (stop = false) => {
   } else {
     if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   }
+
+  // Clear position process state
+  positionProcess.soldToken = '';
+  positionProcess.soldTsym = '';
+  positionProcess.soldPrice = 0;
+  positionProcess.trailPrice = 0;
 }
 
 const triggerATMChangeActions = async () => {
@@ -1392,7 +1393,7 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     }
   }
   currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
-  send_notification((limits?.cash)?.substring(0,3) +  ' : ' + biasOutput.bias + ' ' + currentPositionStatus + ' in ')
+  send_notification((limits?.cash)?.substring(0,3) +  ' : ' + biasOutput.bias + ' ' + currentPositionStatus)
 }
 
 const setBiasValue = async () => {
