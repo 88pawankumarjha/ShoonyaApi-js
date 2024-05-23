@@ -44,6 +44,10 @@ let telegramSignals = {
   faster: false,
   isPlaying: true
 }
+
+const trailDelta = 1.5;
+const trailInit = 1.2;
+
 let globalInput = {
   susertoken: '',
   secondSession: false,
@@ -589,7 +593,7 @@ postOrderPosTracking = async (data) => {
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = data?.flprc; 
-      positionProcess.trailPrice = Math.max(((+positionProcess.soldPrice) + (+positionProcess.soldPrice * 0.2)), (+positionProcess.soldPrice + 10));
+      positionProcess.trailPrice = Math.max(((+positionProcess.soldPrice * trailInit)), (+positionProcess.soldPrice + 10));
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
       console.log(`positionProcess ${positionProcess.soldPrice} ${positionProcess.soldTsym} ${positionProcess.soldToken}`)
@@ -1119,6 +1123,7 @@ const emaMonitorATMs = async () => {
       'starttime'    : epochTimeTrimmed,
       'interval' : '1'
       }
+
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
     const subStrTemp = `${globalInput.pickedExchange}|${positionProcess.soldToken}`
@@ -1126,7 +1131,7 @@ const emaMonitorATMs = async () => {
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    positionProcess.trailPrice = parseFloat(Math.min(+latestPrice + (+latestPrice * 0.2), positionProcess.trailPrice)).toFixed(2)
+    positionProcess.trailPrice = parseFloat(Math.min((+latestPrice * trailDelta), positionProcess.trailPrice)).toFixed(2)
     
     
     const isDefined = (value) => value !== undefined && value !== null;
@@ -1175,8 +1180,15 @@ function cleanupAndExit() {
   process.exit(0);
 }
 
-let lastExecutionTime = 0;
+function resetTrailPrice() {
+  // Clear position process state
+  positionProcess.soldToken = '';
+  positionProcess.soldTsym = '';
+  positionProcess.soldPrice = 0;
+  positionProcess.trailPrice = 0;
+}
 
+let lastExecutionTime = 0;
 const exitSellsAndOrStop = async (stop = false) => {
 
   const currentTime = Date.now();
@@ -1205,12 +1217,6 @@ const exitSellsAndOrStop = async (stop = false) => {
   } else {
     if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
   }
-
-  // Clear position process state
-  positionProcess.soldToken = '';
-  positionProcess.soldTsym = '';
-  positionProcess.soldPrice = 0;
-  positionProcess.trailPrice = 0;
 }
 
 const triggerATMChangeActions = async () => {
@@ -1259,6 +1265,7 @@ const exitXemaLong = async () => {
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   if(positionProcess.smallestPutPosition?.tsym) {await my_default_place_order(order)}
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
+  resetTrailPrice();
   await delay(1000);
 }
 const enterXemaLong = async () => {
@@ -1302,6 +1309,7 @@ const exitXemaShort = async () => {
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   if(positionProcess.smallestCallPosition?.tsym) {await my_default_place_order(order)}
   shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
+  resetTrailPrice();
   await delay(1000);
 }
 const enterXemaShort = async () => {
