@@ -45,7 +45,7 @@ let telegramSignals = {
   isPlaying: true
 }
 
-const trailDelta = 1.5;
+const trailDelta = 1.3;
 const trailInit = 1.2;
 
 let globalInput = {
@@ -300,8 +300,8 @@ getEMAQtyForGeneric = () => {
 
   return debug ? 100 : 
   limits?.cash < 2000000 ? 
-   [100, 420, 1600, 510, 1600, 400, 1200][new Date().getDay()] : 
-   [100, 960, 3200, 1200, 3200, 900, 2800][new Date().getDay()]
+   [100, 420, 1600, 510, 1600, 500, 1200][new Date().getDay()] : 
+   [100, 960, 3200, 1200, 3200, 1000, 2800][new Date().getDay()]
   // bnf early expiry
   // [100, 300, 300, 300, 800, 250, 75][new Date().getDay()] : 
   // [100, 600, 720, 720, 1700, 500, 75][new Date().getDay()]
