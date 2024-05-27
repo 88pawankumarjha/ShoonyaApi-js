@@ -593,7 +593,7 @@ postOrderPosTracking = async (data) => {
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = data?.flprc; 
-      positionProcess.trailPrice = Math.max(((+positionProcess.soldPrice * trailInit)), (+positionProcess.soldPrice + 10));
+      positionProcess.trailPrice = Math.max((+positionProcess.soldPrice * trailInit), (+positionProcess.soldPrice + 10));
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
       console.log(`positionProcess ${positionProcess.soldPrice} ${positionProcess.soldTsym} ${positionProcess.soldToken}`)
@@ -1131,7 +1131,7 @@ const emaMonitorATMs = async () => {
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    positionProcess.trailPrice = parseFloat(Math.min(Math.min((+latestPrice * trailDelta), positionProcess.trailPrice),(+positionProcess.soldPrice + 10))).toFixed(2)
+    positionProcess.trailPrice = parseFloat(Math.max(Math.min((+latestPrice * trailDelta), positionProcess.trailPrice),(+positionProcess.soldPrice + 10))).toFixed(2)
     
     
     const isDefined = (value) => value !== undefined && value !== null;
