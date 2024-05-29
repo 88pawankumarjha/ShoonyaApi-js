@@ -45,9 +45,6 @@ let telegramSignals = {
   isPlaying: true
 }
 
-const trailDelta = 1.3;
-const trailInit = 1.2;
-
 let globalInput = {
   susertoken: '',
   secondSession: false,
@@ -593,7 +590,8 @@ postOrderPosTracking = async (data) => {
     send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = data?.flprc; 
-      positionProcess.trailPrice = Math.max((+positionProcess.soldPrice * trailInit), (+positionProcess.soldPrice + 10));
+      const trailDelta1 = + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
+      positionProcess.trailPrice = +positionProcess.soldPrice + trailDelta1;
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
       console.log(`positionProcess ${positionProcess.soldPrice} ${positionProcess.soldTsym} ${positionProcess.soldToken}`)
@@ -1131,7 +1129,9 @@ const emaMonitorATMs = async () => {
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    positionProcess.trailPrice = parseFloat(Math.min(Math.min((+latestPrice * trailDelta), positionProcess.trailPrice),(+positionProcess.soldPrice + 10))).toFixed(2)
+    const trailDelta = + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
+    positionProcess.trailPrice = parseFloat(Math.min((+latestPrice * trailDelta), positionProcess.trailPrice)).toFixed(2)
+    // positionProcess.trailPrice = +positionProcess.soldPrice + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
     
     
     const isDefined = (value) => value !== undefined && value !== null;
