@@ -305,7 +305,7 @@ getEMAQtyForGeneric = () => {
   }
 
   getFreezeQty = () => {
-    return [600, 600, 1800, 900, 1800, 500, 1800][new Date().getDay()]
+    return [600, 600, 1800, 900, 1800, 1000, 1800][new Date().getDay()]
     // bnf early expiry
     // return [600, 600, 900, 900, 1800, 500, 75][new Date().getDay()]
     }
