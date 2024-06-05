@@ -2,6 +2,10 @@
 // jupyter nbconvert --to script gpt.ipynb
 const debug = false;
 
+const smallAccountQty = [100, 600, 1800, 750, 1500, 400, 1200];
+const bigAccountQty = [100, 1200, 3600, 1500, 3000, 800, 2800];
+const indexDayArray = ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'FINNIFTY'];
+
 function isWeekend() {
   //todo
   return false; // used to set the positions to ITM
@@ -31,7 +35,7 @@ let globalBigInput = {
   filteredIndexCSV: undefined
 }
 //TODO change index
- getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'FINNIFTY'][new Date().getDay()] || 'NIFTY';
+ getPickedIndexHere = () => debug ? 'NIFTY' : indexDayArray[new Date().getDay()] || 'NIFTY';
  getEMAQtyFor2L = () => debug ? 100 : [100, 60, 120, 60, 150, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
 // bnf early expiry
 // getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'BANKNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
@@ -289,6 +293,7 @@ const Api = require("./lib/RestApi");
 let api = new Api({});
 
 let limits;
+
 getEMAQtyForGeneric = () => {
   // return debug ? 100 : 
   // limits?.cash < 800000 ? 
@@ -297,15 +302,15 @@ getEMAQtyForGeneric = () => {
 
   return debug ? 100 : 
   limits?.cash < 2500000 ? 
-   [100, 600, 1800, 750, 1800, 500, 1200][new Date().getDay()] : 
-   [100, 1200, 3600, 1500, 3600, 1000, 2800][new Date().getDay()]
+  smallAccountQty[new Date().getDay()] : 
+  bigAccountQty[new Date().getDay()]
   // bnf early expiry
   // [100, 300, 300, 300, 800, 250, 75][new Date().getDay()] : 
   // [100, 600, 720, 720, 1700, 500, 75][new Date().getDay()]
   }
 
   getFreezeQty = () => {
-    return [600, 600, 1800, 900, 1800, 1000, 1800][new Date().getDay()]
+    return [600, 900, 1800, 900, 1800, 1000, 1800][new Date().getDay()]
     // bnf early expiry
     // return [600, 600, 900, 900, 1800, 500, 75][new Date().getDay()]
     }
@@ -625,18 +630,37 @@ function receiveQuote(data) {
     }
 }
 
+
+let debounceTimer = null;
 function receiveOrders(data) {
     // console.log("Order ::", data);
     // Update the latest order value for the corresponding instrument
-    if(data.status === 'REJECTED') {
+    if (data.status === 'REJECTED') {
       send_notification('################## ORDER REJECTED PLS CHECK ##################', true);
-      exitSellsAndOrStop(true);
-    }
-    if(data.status === 'COMPLETE') {
-        latestOrders[data.Instrument] = data;
-        // update the smallest positions after each order
-        postOrderPosTracking(data)
-    }
+
+      // Clear any existing debounce timer
+      if (debounceTimer) {
+          clearTimeout(debounceTimer);
+      }
+
+      // Set a new debounce timer
+      debounceTimer = setTimeout(() => {
+          exitSellsAndOrStop(true).then(() => {
+              console.log('exited');
+          }).catch((error) => {
+              console.error('Error exiting sells and/or stop:', error);
+          }).finally(() => {
+            // Reset the debounceTimer to null after the timeout function completes
+            debounceTimer = null;
+          });
+      }, 1000); // Debounce duration in milliseconds (e.g., 1000ms = 1 second)
+  }
+  
+  if (data.status === 'COMPLETE') {
+      latestOrders[data.Instrument] = data;
+      // update the smallest positions after each order
+      postOrderPosTracking(data);
+  }
 }
 
 function open(data) {
@@ -1191,32 +1215,37 @@ function resetTrailPrice() {
 
 let lastExecutionTime = 0;
 const exitSellsAndOrStop = async (stop = false) => {
-
   const currentTime = Date.now();
   // Check if one minute has passed since the last execution
   if (currentTime - lastExecutionTime < 55000) {
-    return; // Exit if less than one minute has passed
+      return; // Exit if less than one minute has passed
   }
 
   lastExecutionTime = currentTime;
 
-  //exit positions
+  // Exit positions
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  if (positionProcess.smallestPutPosition?.tsym) { await exitXemaLong();}
-  if(positionProcess.smallestCallPosition?.tsym) {await exitXemaShort();}
-  if(stop) {
-    send_notification('exiting all and stopping', true)
-    setTimeout(function() {
-      cancelOpenOrders();
-    }, 2000);
-    setTimeout(function() {
-      exitHedges();
-    }, 4000);
-    setTimeout(function() {
-      cleanupAndExit();
-    }, 10000);
+  if (positionProcess.smallestPutPosition?.tsym) {
+      await exitXemaLong();
+  }
+  if (positionProcess.smallestCallPosition?.tsym) {
+      await exitXemaShort();
+  }
+  if (stop) {
+      send_notification('exiting all and stopping', true);
+      setTimeout(function() {
+          cancelOpenOrders();
+      }, 2000);
+      setTimeout(function() {
+          exitHedges();
+      }, 4000);
+      setTimeout(function() {
+          cleanupAndExit();
+      }, 10000);
   } else {
-    if (longPositionTaken || shortPositionTaken) { send_notification('exiting all');}
+      if (longPositionTaken || shortPositionTaken) {
+          send_notification('exiting all');
+      }
   }
 }
 
