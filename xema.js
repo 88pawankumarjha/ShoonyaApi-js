@@ -1494,7 +1494,7 @@ getEma = async () => {
   if(seconds === 25){
     try {
       //TODO uncomment
-      if(isTimeEqualsNotAfterProps(15,26,false)) {
+      if(isTimeEqualsNotAfterProps(14,30,false)) {
         await exitSellsAndOrStop(true);
       }
     } catch (error) {
