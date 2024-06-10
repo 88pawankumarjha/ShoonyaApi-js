@@ -2,8 +2,8 @@
 // jupyter nbconvert --to script gpt.ipynb
 const debug = false;
 
-const smallAccountQty = [100, 600, 900, 600, 900, 350, 1200];
-const bigAccountQty = [100, 1200, 1200, 1200, 1800, 700, 2800];
+const smallAccountQty = [100, 450, 600, 450, 800, 300, 1200];
+const bigAccountQty = [100, 900, 1000, 900, 1400, 600, 2800];
 const indexDayArray = ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'FINNIFTY'];
 
 function isWeekend() {
