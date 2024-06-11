@@ -1137,13 +1137,13 @@ const emaMonitorATMs = async () => {
       'exchange'   : globalInput.pickedExchange,
       'token' : getTokenByTradingSymbol(biasProcess.atmCallSymbol),
       'starttime'    : epochTimeTrimmed,
-      'interval' : '1'
+      'interval' : '2'
       }
     paramsPut = {
       'exchange'   : globalInput.pickedExchange,
       'token' : getTokenByTradingSymbol(biasProcess.atmPutSymbol),
       'starttime'    : epochTimeTrimmed,
-      'interval' : '1'
+      'interval' : '2'
       }
 
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
