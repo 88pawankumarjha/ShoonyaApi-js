@@ -159,15 +159,10 @@ async function fetchAllBiases(api, exchange = 'NFO', iteration) {
         biasesConfig.push({ token: '26000', ocGap: 50, keyword: 'NIFTY ' });
         biasesConfig.push({ token: '26009', ocGap: 100, keyword: 'BANKNIFTY ' });
         biasesConfig.push({ token: '26037', ocGap: 50, keyword: 'FINNIFTY ' });
-        biasesConfig.push({ token: '1', ocGap: 100, keyword: 'SENSEX ' });
-        biasesConfig.push({ token: '12', ocGap: 100, keyword: 'BANKEX ' });
     }
     if (getPickedExchange() === 'BFO') {
-        biasesConfig.push({ token: '26000', ocGap: 50, keyword: 'NIFTY ' });
-        biasesConfig.push({ token: '26009', ocGap: 100, keyword: 'BANKNIFTY ' });
-        biasesConfig.push({ token: '26037', ocGap: 50, keyword: 'FINNIFTY ' });
-        biasesConfig.push({ token: '1', ocGap: 100, keyword: 'SENSEX ' });
-        biasesConfig.push({ token: '12', ocGap: 100, keyword: 'BANKEX ' });
+      biasesConfig.push({ token: '1', ocGap: 100, keyword: 'SENSEX ' });
+      biasesConfig.push({ token: '12', ocGap: 100, keyword: 'BANKEX ' });
     }
     if (getPickedExchange() === 'MCX') {
 //      biasesConfig.push({ token: '1', ocGap: 100, keyword: 'SENSEX ' });
