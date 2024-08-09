@@ -61,6 +61,7 @@ async function send_callback_notification() {
               { text: 'CS', callback_data: 'CS' },
               { text: 'PA', callback_data: 'PA' },
               { text: 'PS', callback_data: 'PS' },
+              { text: 'Exch', callback_data: 'toggleExchange' },
               { text: '🛑', callback_data: 'stop' },
               { text: '×', callback_data: 'exit' }
             ]]};
