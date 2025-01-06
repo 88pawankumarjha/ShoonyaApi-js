@@ -18,9 +18,9 @@
     "adm-zip": "^0.5.10",
     "axios": "^0.21.4",
     "crypto-js": "^4.1.1",
+    "csv-parser": "^3.0.0",
     "dotenv": "^16.3.1",
     "fs": "0.0.1-security",
-    "ijavascript": "^5.2.1",
     "jszip": "^3.10.1",
     "moment": "^2.29.4",
     "node-fetch": "^2.7.0",
@@ -28,7 +28,6 @@
     "openai": "^4.20.1",
     "papaparse": "^5.4.1",
     "speakeasy": "^2.0.0",
-    "talib": "^1.1.5",
     "technicalindicators": "^3.1.0",
     "unzipper": "^0.10.14",
     "ws": "^7.4.0"

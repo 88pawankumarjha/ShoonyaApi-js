@@ -1,0 +1,211 @@
+{
+  source: 'API',
+  apkversion: 'js:1.0.0',
+  uid: 'FA63911',
+  pwd: 'b540cdcb62476d1bbf7b1158ed9686b06da335fe9ed7cb4d81b151aabae3520a',
+  factor2: '705388',
+  vc: 'FA63911_U',
+  appkey: 'f7c7b21f08e7d8f70c9b3c0e4a79e12d9b83c0ea8ea70558f11807df40d01307',
+  imei: 'abc1234'
+}
+post https://api.shoonya.com/NorenWClientTP/QuickAuth jData={"source":"API","apkversion":"js:1.0.0","uid":"FA63911","pwd":"b540cdcb62476d1bbf7b1158ed9686b06da335fe9ed7cb4d81b151aabae3520a","factor2":"705388","vc":"FA63911_U","appkey":"f7c7b21f08e7d8f70c9b3c0e4a79e12d9b83c0ea8ea70558f11807df40d01307","imei":"abc1234"}&jKey=
+Reply:  {
+  request_time: '09:18:06 29-10-2024',
+  actid: 'FA63911',
+  access_type: [ 'WEB', 'TT', 'MOB', 'API' ],
+  uname: 'PAWAN KUMAR JHA',
+  prarr: [
+    { prd: 'C', s_prdt_ali: 'CNC', exch: [Array] },
+    { prd: 'M', s_prdt_ali: 'NRML', exch: [Array] },
+    { prd: 'I', s_prdt_ali: 'MIS', exch: [Array] },
+    { prd: 'H', s_prdt_ali: 'CO', exch: [Array] },
+    { prd: 'B', s_prdt_ali: 'BO', exch: [Array] }
+  ],
+  exch_prd: [
+    { exch: 'NSE', prds: [Array] },
+    { exch: 'NIPO', prds: [Array] },
+    { exch: 'NFO', prds: [Array] },
+    { exch: 'CDS', prds: [Array] },
+    { exch: 'BSE', prds: [Array] },
+    { exch: 'BCD', prds: [Array] },
+    { exch: 'MCX', prds: [Array] },
+    { exch: 'NCX', prds: [Array] },
+    { exch: 'BSTAR', prds: [Array] },
+    { exch: 'BFO', prds: [Array] }
+  ],
+  stat: 'Ok',
+  susertoken: 'c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56',
+  susertokenspl: '5cfff3127aae0c2aa27d6ff65a77192dd74ecfdaa90907481f179f30dcb78c79',
+  email: '88pawankumarjha@gmail.com',
+  uid: 'FA63911',
+  brnchid: 'HO',
+  totp_set: '1',
+  orarr: [ 'MKT', 'LMT', 'SL-LMT', 'SL-MKT' ],
+  exarr: [
+    'NSE',   'NIPO',
+    'NFO',   'CDS',
+    'BSE',   'BCD',
+    'MCX',   'NCX',
+    'BSTAR', 'BFO'
+  ],
+  values: [ '2', '3', '1' ],
+  mws: {
+    '1': [
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object]
+    ],
+    '2': [
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object]
+    ],
+    '3': [
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object], [Object], [Object],
+      [Object]
+    ]
+  },
+  brkname: 'FINV',
+  dmsg: '',
+  lastaccesstime: '1730173686',
+  lastpwdtime: '1728885361'
+}
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26000"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26009"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26037"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24150 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24350 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51100 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51500 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23750 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23950 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49017"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49008"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43126"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43106"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39610"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39595"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+N[-68] 24285 (24) B[-58] 51354 (8) F[-36] 23851 (9)
+post https://api.shoonya.com/NorenWClientTP/OrderBook jData={"uid":"FA63911"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+No orders with status TRIGGER_PENDING.
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26000"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26009"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26037"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51100 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51500 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24150 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24350 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23750 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23950 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43126"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43106"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39610"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39595"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49017"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49008"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+N[-73] 24286 (30) B[-66] 51356 (18) F[-43] 23850 (15)
+post https://api.shoonya.com/NorenWClientTP/OrderBook jData={"uid":"FA63911"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+No orders with status TRIGGER_PENDING.
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26000"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26009"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26037"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24150 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24350 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23750 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23950 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51100 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51500 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49017"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49008"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39610"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39595"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43126"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43106"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+N[-73] 24285 (29) B[-58] 51357 (11) F[-42] 23849 (13)
+post https://api.shoonya.com/NorenWClientTP/OrderBook jData={"uid":"FA63911"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+No orders with status TRIGGER_PENDING.
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26000"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26009"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26037"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23750 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23950 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51200 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51600 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24150 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24350 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39610"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39595"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43128"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43108"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49017"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49008"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+N[-61] 24289 (21) B[-37] 51405 (38) F[-31] 23856 (9)
+post https://api.shoonya.com/NorenWClientTP/OrderBook jData={"uid":"FA63911"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+No orders with status TRIGGER_PENDING.
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26000"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26009"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26037"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51200 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51600 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24150 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24350 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23750 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23950 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43128"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43108"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49017"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49008"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39610"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39595"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+N[-57] 24291 (19) B[-28] 51409 (33) F[-28] 23855 (5)
+post https://api.shoonya.com/NorenWClientTP/OrderBook jData={"uid":"FA63911"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+No orders with status TRIGGER_PENDING.
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26000"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26009"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26037"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23750 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23950 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51200 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51600 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24200 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24400 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43128"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43108"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"54751"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49010"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39610"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39595"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+N[-51] 24312 (34) B[-22] 51410 (28) F[-27] 23853 (2)
+post https://api.shoonya.com/NorenWClientTP/OrderBook jData={"uid":"FA63911"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+No orders with status TRIGGER_PENDING.
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26000"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26009"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NSE","token":"26037"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24200 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"NIFTY 24400 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51200 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"BANKNIFTY 51600 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23750 CE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/SearchScrip jData={"uid":"FA63911","exch":"NFO","stext":"FINNIFTY 23950 PE"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"54751"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"49010"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39610"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"39595"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43128"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+post https://api.shoonya.com/NorenWClientTP/GetQuotes jData={"uid":"FA63911","exch":"NFO","token":"43108"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+N[-32] 24317 (20) B[-11] 51410 (17) F[-20] 23860 (2)
+post https://api.shoonya.com/NorenWClientTP/OrderBook jData={"uid":"FA63911"}&jKey=c2a28eb25feeab8245ceb611781cc575a76eb804a51d3430dd251ea7dcea7b56
+No orders with status TRIGGER_PENDING.
+Finished all iterations.
+stopped

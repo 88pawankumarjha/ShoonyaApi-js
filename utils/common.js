@@ -835,7 +835,7 @@ async function processOrders(api, exchange = 'NFO') {
     }
     if (slOrders) {
       await checkAlert(api);
-      await send_notification(slOrders);
+      await send_notification("2 - "+slOrders);
       slOrders = '';
       slOrdersExtra = '';
       await updatePositions(api);
