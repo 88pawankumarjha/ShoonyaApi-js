@@ -1,6 +1,7 @@
 node_modules
 .env
 creds.js
+creds*.js
 credsMed.js
 BFO_symbols.txt
 NFO_symbols.txt

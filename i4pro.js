@@ -1,19 +1,49 @@
+const { glob } = require('fs/promises');
 const { isTimeEqualsNotAfterProps, identify_option_type, fetchSpotPrice, delay, getStrike, calcVix, nearByTsymPutAgg, nearByTsymPutSub, nearByTsymCallAgg, nearByTsymCallSub, nearByPositions, calcPnL } = require('./utils/customLibrary');
 
 const maxLossPerOrderPercent = 0.33; // 0.33% of the limits
 const maxLossPerDayPercent = 1; // 1% of the limits
 const maxGainPerDayPercent = 1; // 1% of the limits
+const limitPerLot = 260000; // 300000 Lakh per lot
+
 
 let globalInputCaller = {
     quantityInLots: 0
 };
 
 // Define the named asynchronous function
-async function executeI4Pro() {
+async function executeI4Pro(api) {
     try {
         // Wait for the exported Promise to resolve
-        const globalInput = await require('./queryBias_i4pro.js');
-        globalInputCaller = globalInput; // Assign the resolved value
+        const {runAsyncTasks} = require('./queryBias_i4pro.js');
+        const globalInput = await runAsyncTasks(api);
+        globalInputCaller = globalInput;
+
+
+
+// module.exports = async function() {
+//     let globalInput = {
+//       susertoken: '',
+//       secondSession: false,
+//       launchChildProcessApp: false,
+//       indexName: getPickedIndexHere(),
+//       delayTime: 10000,
+//       ocGap: undefined,
+//       token: undefined,
+//       pickedExchange: undefined,
+//       inputOptTsym: undefined,
+//       WEEKLY_EXPIRY: undefined,
+//       MONTHLY_EXPIRY: undefined,
+//     };
+  
+//     globalInput.token = idxNameTokenMap.get(globalInput.indexName);
+//     globalInput.ocGap = idxNameOcGap.get(globalInput.indexName);
+  
+//     // ... (rest of the code remains the same)
+  
+//     return globalInput;
+//   };
+
     } catch (error) {
         if (error.response && error.response.status === 502) {
             console.error("502 Bad Gateway Error in executeI4Pro:", error);
@@ -24,7 +54,7 @@ async function executeI4Pro() {
 }
 
 const getQuantityInLots = () => {
-    globalInputCaller.quantityInLots = Math.floor(globalInputCaller?.limits / 250000) //assume 1 Lakh per lot
+    globalInputCaller.quantityInLots = Math.floor(globalInputCaller?.limits / limitPerLot) //assume 1 Lakh per lot
 }
 
 async function getLTPfromSymbol(api, tsym) {
@@ -80,6 +110,7 @@ const placeSellOrder = async (api) => {
     }
     globalInputCaller.pickedExchange === 'BFO' ? await delay(3500) : await delay(1500);
     const response = await api.place_order(orderSubCE);
+    globalInputCaller.soldOptionToken = globalInputCaller.atmStrikeToken
     console.log("orderSubCE Response:", response);
 }
 
@@ -228,33 +259,55 @@ const exitAll = async (api) => {
 }
 
 const checkExitCondition = async (globalInputCaller) => {
-    // const maxLossPerDay = (globalInputCaller?.limits / 100) * maxLossPerDayPercent; //200000 / 100 * 1 = 2000
-    // const maxGainPerDay = (globalInputCaller?.limits / 100) * maxGainPerDayPercent; //200000 / 100 * 1 = 2000
 
-    let pnl = await calcPnL(globalInputCaller.api);
+    let pnl = await calcPnL(api);
+    console.log("######pnl: ", pnl)
 
     // exit this script if the loss is more than 1% of the limits or the gain is more than 1% of the limits
+    console.log("parseFloat(pnl.replace('%', '')) , -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) , maxGainPerDayPercent: ", parseFloat(pnl.replace('%', '')) , -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) , maxGainPerDayPercent);
+    console.log("parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent: ", parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent);
     if (parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent || parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent) {
-        exitAll(globalInputCaller.api).then(() => {
-            console.log("Exiting the script as the loss is more than 1% of the limits or the gain is more than 1% of the limits.");
-            return true;
+        exitAll(api).then(() => {
+            console.log("######Exiting the script as the loss is more than 1% of the limits or the gain is more than 1% of the limits.");
+            process.exit(0);
+
         });
     }
 
     if(isTimeEqualsNotAfterProps(14,40,false) && !(isTimeEqualsNotAfterProps(15,29,false))){
-        exitAll(globalInputCaller.api).then(() => {
-            console.log("Exiting the script as the time is more than 2:40 PM.");
-            process.exit(0)
+        exitAll(api).then(() => {
+            console.log("######Exiting the script as the time is more than cut off time eg: 2:40 PM.");
+            process.exit(0);
         });
+        
     }
+
+    
+    //get ltp of the option
+    // console.log("######globalInputCaller?.optionInAction: ", globalInputCaller?.optionInAction);
+    // console.log("######globalInputCaller?.soldOptionToken: ", globalInputCaller?.soldOptionToken);
+    const positionsData = await api.get_positions();
+    // console.log("######positionsData: ", positionsData);
+    const filtered_data = Array.isArray(positionsData) ? positionsData.filter(item => item?.netqty < 0) : [];
+    filtered_data?.forEach((position) => {
+        
+            console.log("######position lp: ", position?.lp);
+        
+    });
+
+    // console.log("######globalInputCaller?.finalWeeklyExpiryExchange: ", globalInputCaller?.finalWeeklyExpiryExchange);
+    // let quoteResp = await api.get_quotes(globalInputCaller?.finalWeeklyExpiryExchange, globalInputCaller?.soldOptionToken)
+    // console.log("######quoteResp: ", quoteResp?.lp);
 
 
     return false;
 };
 
 // Use an IIFE to handle `await` at the top level
-const i4pro = async () => {
-    await executeI4Pro(); // sets values to globalInputCaller
+const i4pro = async (api) => {
+    // console.log("i4pro function called", api);
+    
+    await executeI4Pro(api); // sets values to globalInputCaller
 
     // eg:
 
@@ -318,9 +371,7 @@ const i4pro = async () => {
     //   } i4pro
 
     getQuantityInLots();
-    console.log(globalInputCaller, "i4pro"); // Output the result after function execution
-
-    let api = globalInputCaller.api;
+    console.log("###### ",globalInputCaller?.resultBias[globalInputCaller.finalWeeklyExpiryName], "calcbias", globalInputCaller.finalWeeklyExpiryName) // Output the result after function execution
 
     const shouldExit = await checkExitCondition(globalInputCaller);
     if (shouldExit) {
@@ -333,40 +384,41 @@ const i4pro = async () => {
     // console.log(positionsData, "positionsData");
 
     const orders = await api.get_orderbook();
-// console.log(orders, "orders");
+    // console.log(orders, "orders");
 
-// if(orders is not pending)
-const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && item?.instname === 'OPTIDX'): [];
+    // if(orders is not pending)
+    const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && item?.instname === 'OPTIDX'): [];
 
-if (filtered_data_SL_CE.length === 0) {
+    if (filtered_data_SL_CE.length === 0) {
 
-    // sell optionInAction 
-    await placeSLOrder(api);
+        // sell optionInAction 
+        await placeSLOrder(api);
 
-    // await checkIfSLOrderPlaced(api);
+        // await checkIfSLOrderPlaced(api);
+        
+        await placeSellOrder(api);
+        // await checkIfSellOrderPlaced(api);
+
+    } else {
+        console.log("######trigger: ", filtered_data_SL_CE[0].trgprc);
+        console.log("######There are orders with status 'TRIGGER_PENDING' and instname 'OPTIDX'.");
+    }
+
+};
+
+const runI4ProEveryMinute = async (api) => {
+    // Run the function immediately
+    await i4pro(api);
     
-    await placeSellOrder(api);
-    // await checkIfSellOrderPlaced(api);
-
-} else {
-    console.log("There are orders with status 'TRIGGER_PENDING' and instname 'OPTIDX'.");
-}
-
-};
-
-const runI4ProEveryMinute = async () => {
-
-    i4pro().catch(error => {
-        console.error("Unhandled error in i4pro:", error);
-    });
-};
-
-// Run the function immediately
-runI4ProEveryMinute();
-
-// Set an interval to run the function every minute (60000 milliseconds)
-setInterval(runI4ProEveryMinute, 60000);
-
-
+  }
+  
+  module.exports = runI4ProEveryMinute;
 // TODO:
 // once the LTP has moved to profit then it should shift the SL order to minor profit.
+
+// other file is ccalled only once, even if called multiple times it login is giving issue
+
+// check executeI4Pro commented  code + separate login method
+// or merge both files
+
+module.exports = i4pro; // Export the function for testing purposes

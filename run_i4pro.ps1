@@ -1,0 +1,1 @@
+Start-Process -FilePath "node" -ArgumentList ".\i4pro.js" -RedirectStandardOutput "output.log" -RedirectStandardError "output_err.log" -NoNewWindow

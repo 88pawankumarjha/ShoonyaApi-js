@@ -1,4 +1,4 @@
-const runAsyncTasks = async () => {
+const runAsyncTasks = async (api) => {
 
 const axios = require('axios');
 const fs = require('fs');
@@ -7,12 +7,12 @@ const https = require('https');
 const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
+let apiLocal = api;
 
 const { calculateAtmOptionsSumPrice, i4find_bias } = require('./utils/i4Utils');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates,
   identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, calcPnL, isTimeEqualsNotAfterProps } = require('./utils/customLibrary');
-const Api = require("./lib/RestApi");
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -79,56 +79,6 @@ let globalInput = {
 //   atmStrikeToken: '47416',
 //   optionInAction: 'NIFTY19DEC24P24600'
 // }
-let api = new Api({});
-globalInput.api = api;
-
-// login method
-const { spawn } = require('child_process');
-const { config } = require('dotenv');
-const loginAsync = async (api) => {
-  try {
-    const response = await api.login(authparams);
-    // console.log(response);
-    return true;
-  } catch (error) {
-    return false;
-  }
-};
-const executeLogin = async () => {
-  try {
-    // console.log("executeLogin");
-    const isLoggedIn = await loginAsync(api);
-    if (!isLoggedIn) {
-      return;
-    }
-    if (globalInput.launchChildProcessApp) {
-      await spawnAndHandleChildProcess();
-    }
-  } catch (error) {
-    console.error("Error in executeLogin:", error);
-  }
-};
-
-const spawnAndHandleChildProcess = async () => {
-  try {
-    const childProcess = spawn('node', ['app.js'], {
-      stdio: ['pipe', 'ignore', 'ignore', 'ipc'],
-    });
-    childProcess.on('message', handleChildProcessMessage);
-    childProcess.on('close', handleChildProcessClose);
-    childProcess.send('Hello from the parent process!');
-  } catch (error) {
-    console.error("Error spawning child process:", error);
-  }
-};
-
-const handleChildProcessMessage = (message) => {
-  console.log(`Message from Child Process: ${message}`);
-};
-
-const handleChildProcessClose = (code) => {
-  console.log(`Child process exited with code ${code}`);
-};
 
 // Function to download the ZIP file
 function downloadFile(url, destination) {
@@ -238,13 +188,13 @@ async function findNearestExpiryLoop() {
     // console.log('after then async', globalInput.LotSize)
     // console.log(globalInput, 'globalInput.finalWeeklyExpiryExchange, globalInput.finalWeeklyExpiryName2')
 // try{
-//     let searchResult2 = await api.searchscrip(globalInput.finalWeeklyExpiryExchange, globalInput.inputOptTsym.replace(/\d+$/, ''));
+//     let searchResult2 = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, globalInput.inputOptTsym.replace(/\d+$/, ''));
 //     console.log(searchResult2, 'searchResult2');
 //   } catch (error) {
 //     console.log('error in findNearestExpiryLoop', error);
 //   }
-// console.log(api, globalInput.atmStrikeToken, globalInput.finalWeeklyExpiryExchange, 'api, globalInput.atmStrikeToken, globalInput.finalWeeklyExpiryExchange');
-//     fetchSpotPrice(api, globalInput.atmStrikeToken, globalInput.finalWeeklyExpiryExchange).then((SpotOfATMOption) => {  
+// console.log(apiLocal, globalInput.atmStrikeToken, globalInput.finalWeeklyExpiryExchange, 'apiLocal, globalInput.atmStrikeToken, globalInput.finalWeeklyExpiryExchange');
+//     fetchSpotPrice(apiLocal, globalInput.atmStrikeToken, globalInput.finalWeeklyExpiryExchange).then((SpotOfATMOption) => {  
       // console.log('SpotOfATMOption: ', SpotOfATMOption)
     // })
     // console.log('SpotOfATMOption: ', SpotOfATMOption)
@@ -258,9 +208,6 @@ async function findNearestExpiryLoop() {
 
 const runEma = async () => {
   try {
-    apiLocal = api;
-    await executeLogin();
-    
     const searchResult = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, globalInput.inputOptTsym);
     // console.log(searchResult, 'searchResult2');
     globalInput.LotSize = searchResult.values[0].ls;
@@ -353,7 +300,7 @@ const findBias= async () => {
     biasesConfig.push({ exch: 'BFO', token: '12', ocGap: 100, keyword: 'BANKEX ' });
     
     const biases = await Promise.all(
-      biasesConfig.map(config => i4find_bias(api, config.token, config.ocGap, config.keyword, config.exch))
+      biasesConfig.map(config => i4find_bias(apiLocal, config.token, config.ocGap, config.keyword, config.exch))
     );
     
     const filteredBiases = biases.filter(bias => bias !== null);
@@ -390,7 +337,7 @@ const getATMToken = async (side) => {
   // console.log(globalInput.keyword, globalInput.atmStrike, side, 'globalInput.keyword, globalInput.atmStrike, side')
   let newSearchSymbol = globalInput.keyword + (globalInput.atmStrike) + ` ${side ? 'PE' : 'CE'}`;
   // console.log(newSearchSymbol, 'newSearchSymbol')
-  const searchResult = await api.searchscrip(globalInput.finalWeeklyExpiryExchange, newSearchSymbol);
+  const searchResult = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, newSearchSymbol);
   // console.log(searchResult, 'searchResult');
   // if(keyword[0] === getPickedIndex()[0] && globalInput.finalWeeklyExpiryExchange === 'BFO')
   //    {
@@ -400,15 +347,15 @@ const getATMToken = async (side) => {
   //   else {
         // console.log(searchResult.values[0].tsym, 'searchResult.values[0].tsym');
         globalInput.optionInAction = searchResult.values[0].tsym;
+        console.log('######globalInput.optionInAction', globalInput.optionInAction)
         return searchResult.values[0].token;
     // }
 };
 
 const findATM = async () => {
   try {
-    const Spot = await fetchSpotPrice(api, globalInput.token, globalInput.finalWeeklyExpiryExchange);
-    // console.log('Spot: ', Spot)
-
+    const Spot = await fetchSpotPrice(apiLocal, globalInput.token, globalInput.finalWeeklyExpiryExchange);
+    console.log('######Spot: ', Spot?.lp)
     // Spot:  {
     //   request_time: '11:01:08 17-12-2024',
     //   stat: 'Ok',
@@ -447,7 +394,8 @@ const findATM = async () => {
     globalInput.atmStrike = atmStrike;
     globalInput.atmStrikePrice = atmStrike;
     globalInput.atmStrikeToken = await getATMToken(checkPositiveBias());
-    // console.log("globalInput.atmStrikeToken: ", globalInput);
+    // console.log("######globalInput.atmStrikeToken: ", globalInput);
+  
   } catch (error) { 
     console.log('error in findATM', error);
   }
@@ -455,7 +403,7 @@ const findATM = async () => {
 
 const getLimitsCash = async () => {
   try {
-    const limits = await api.get_limits()
+    const limits = await apiLocal.get_limits()
     // console.log("Limits: ", limits);
     // Limits:  {
     //   request_time: '11:49:38 06-01-2025',
@@ -526,4 +474,4 @@ await findNearestExpiryLoop();
 return globalInput;
 
 }
-module.exports = runAsyncTasks();
+module.exports = {runAsyncTasks};

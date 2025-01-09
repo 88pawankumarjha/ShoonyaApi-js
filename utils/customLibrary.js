@@ -13,6 +13,11 @@ const identify_option_type = (symbol) => {
 }
 module.exports.identify_option_type = identify_option_type;
 
+const check_if_loggedIn = (api) => {
+  console.log(api, 'api1111')
+  return !!api?.__susertoken;
+}
+module.exports.check_if_loggedIn = check_if_loggedIn;
 
 module.exports.delay = (ms) => {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -24,15 +29,15 @@ module.exports.calcVix = async (api) => {
 }
 
 module.exports.calcPnL = async (api, mcxOnly = false) => {
-let positions = await api.get_positions();
-let limits = await api.get_limits()
+let positions = await api?.get_positions();
+let limits = await api?.get_limits()
 
 if(mcxOnly) {positions = positions.filter(option => option.exch == 'MCX')}
-const total_pnl = positions?.reduce((acc, pos) => {
+const total_pnl = positions && positions.length > 0 ? positions.reduce((acc, pos) => {
   const ur_mtm = parseFloat(pos?.urmtom);
   const r_pnl = parseFloat(pos?.rpnl);
   return acc + ur_mtm + r_pnl;
-}, 0);
+}, 0) : 0;
 return parseFloat((total_pnl/limits?.cash)*100).toFixed(2) + '%';
 };
 
