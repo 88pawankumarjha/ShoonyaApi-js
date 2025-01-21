@@ -273,15 +273,13 @@ const checkExitCondition = async (globalInputCaller) => {
     // exit this script if the loss is more than 1% of the limits or the gain is more than 1% of the limits
     console.log("parseFloat(pnl.replace('%', '')) , -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) , maxGainPerDayPercent: ", parseFloat(pnl.replace('%', '')), -maxLossPerDayPercent, parseFloat(pnl.replace('%', '')), maxGainPerDayPercent);
     console.log("parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent: ", parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent, parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent);
-    if (parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent || parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent) {
-        await exitAll(api);
-        console.log("######Exiting the script as the loss/gain is more than the desired limit");
-        shouldExit = true;
-    }
-
     if (isTimeEqualsNotAfterProps(14, 40, false) && !(isTimeEqualsNotAfterProps(15, 29, false))) {
         await exitAll(api);
         console.log("######Exiting the script as the time is more than cut off time eg: 2:40 PM.");
+        shouldExit = true;
+    } else if (parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent || parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent) {
+        await exitAll(api);
+        console.log("######Exiting the script as the loss/gain is more than the desired limit");
         shouldExit = true;
     }
 
