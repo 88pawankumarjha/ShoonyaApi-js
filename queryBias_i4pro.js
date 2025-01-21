@@ -1,5 +1,5 @@
 const runAsyncTasks = async (api) => {
-
+  try {
 const axios = require('axios');
 const fs = require('fs');
 const unzipper = require('unzipper');
@@ -100,9 +100,15 @@ function downloadFile(url, destination) {
 
 // Function to unzip the downloaded file in the current working directory
 function unzipFile(zipFilePath) {
-  const zip = new AdmZip(zipFilePath);
-  zip.extractAllTo('./', true);
-  //console.log('Unzipped in the current working directory.');
+  
+
+  try {
+    const zip = new AdmZip(zipFilePath);
+    zip.extractAllTo('./', true);
+    //console.log('Unzipped in the current working directory.');
+  } catch (error) {
+    console.error('Error in unzipFile');
+  }
 }
 
 async function findNearestExpiry(exchangeType, inputIndexName) {
@@ -346,14 +352,26 @@ const getATMToken = async (side) => {
   //   }
   //   else {
         // console.log(searchResult.values[0].tsym, 'searchResult.values[0].tsym');
-        globalInput.optionInAction = searchResult.values[0].tsym;
+        
+        //TODO: improve this hardcoded one
+        globalInput.ocGap = globalInput.keyword === 'NIFTY' ? 50 : 100;
+        calcOcGapMultiplier = side? -2:2;
+        let mewOTMSearchSymbol = globalInput.keyword + (globalInput.atmStrike + (globalInput.ocGap * calcOcGapMultiplier)) + ` ${side ? 'PE' : 'CE'}`;
+        const searchResultOTM = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, mewOTMSearchSymbol);
+        console.log('######globalInput.optionInAction', globalInput.atmStrike, globalInput.ocGap, side)
+        console.log('######searchResultOTM', mewOTMSearchSymbol)
+        globalInput.optionInAction = searchResultOTM.values[0].tsym;
         console.log('######globalInput.optionInAction', globalInput.optionInAction)
+        
+        // globalInput.optionInAction = searchResult.values[0].tsym;
+        
         return searchResult.values[0].token;
     // }
 };
 
 const findATM = async () => {
   try {
+
     const Spot = await fetchSpotPrice(apiLocal, globalInput.token, globalInput.finalWeeklyExpiryExchange);
     console.log('######Spot: ', Spot?.lp)
     // Spot:  {
@@ -472,6 +490,10 @@ await findNearestExpiryLoop();
 
 
 return globalInput;
+} catch (error) {
+  console.error("Error in runAsyncTasks:", error);
+  throw error;
+}
 
 }
 module.exports = {runAsyncTasks};

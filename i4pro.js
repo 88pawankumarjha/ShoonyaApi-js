@@ -3,9 +3,12 @@ const { isTimeEqualsNotAfterProps, identify_option_type, fetchSpotPrice, delay, 
 
 const maxLossPerOrderPercent = 0.33; // 0.33% of the limits
 const maxLossPerDayPercent = 1; // 1% of the limits
-const maxGainPerDayPercent = 1; // 1% of the limits
+const maxGainPerDayPercent = 1.5; // 1% of the limits
 const limitPerLot = 260000; // 300000 Lakh per lot
+const waitAfterLoss = 15; // 30 minutes
+const waitAfterGain = 5; // 30 minutes
 
+let pnl = '';
 
 let globalInputCaller = {
     quantityInLots: 0
@@ -15,34 +18,34 @@ let globalInputCaller = {
 async function executeI4Pro(api) {
     try {
         // Wait for the exported Promise to resolve
-        const {runAsyncTasks} = require('./queryBias_i4pro.js');
+        const { runAsyncTasks } = require('./queryBias_i4pro.js');
         const globalInput = await runAsyncTasks(api);
         globalInputCaller = globalInput;
 
 
 
-// module.exports = async function() {
-//     let globalInput = {
-//       susertoken: '',
-//       secondSession: false,
-//       launchChildProcessApp: false,
-//       indexName: getPickedIndexHere(),
-//       delayTime: 10000,
-//       ocGap: undefined,
-//       token: undefined,
-//       pickedExchange: undefined,
-//       inputOptTsym: undefined,
-//       WEEKLY_EXPIRY: undefined,
-//       MONTHLY_EXPIRY: undefined,
-//     };
-  
-//     globalInput.token = idxNameTokenMap.get(globalInput.indexName);
-//     globalInput.ocGap = idxNameOcGap.get(globalInput.indexName);
-  
-//     // ... (rest of the code remains the same)
-  
-//     return globalInput;
-//   };
+        // module.exports = async function() {
+        //     let globalInput = {
+        //       susertoken: '',
+        //       secondSession: false,
+        //       launchChildProcessApp: false,
+        //       indexName: getPickedIndexHere(),
+        //       delayTime: 10000,
+        //       ocGap: undefined,
+        //       token: undefined,
+        //       pickedExchange: undefined,
+        //       inputOptTsym: undefined,
+        //       WEEKLY_EXPIRY: undefined,
+        //       MONTHLY_EXPIRY: undefined,
+        //     };
+
+        //     globalInput.token = idxNameTokenMap.get(globalInput.indexName);
+        //     globalInput.ocGap = idxNameOcGap.get(globalInput.indexName);
+
+        //     // ... (rest of the code remains the same)
+
+        //     return globalInput;
+        //   };
 
     } catch (error) {
         if (error.response && error.response.status === 502) {
@@ -66,33 +69,33 @@ async function getLTPfromSymbol(api, tsym) {
     const ltpResponse = await api.get_quotes(globalInputCaller.pickedExchange, localToken);
     // console.log(ltpResponse.lp, 'ltpResponse.lp')
     return [ltpResponse.lp, ltpResponse.uc];
-  }
+}
 
 const placeSLOrder = async (api) => {
     let orderSubCESL = {};
     localSLPrice = await getLTPfromSymbol(api, globalInputCaller.optionInAction);
     // take limits and then calculate the SL price -> sl loss should be 0.33% of the limits
-    
+
     const maxLossPerOrder = (globalInputCaller?.limits / 100) * maxLossPerOrderPercent; //200000 / 100 * 0.33 = 660
     const calcQuantity = globalInputCaller.quantityInLots * globalInputCaller.LotSize;
-    const calcSLPrice = Number(localSLPrice[0] || 10) + (maxLossPerOrder/calcQuantity);
+    const calcSLPrice = Number(localSLPrice[0] || 10) + (maxLossPerOrder / calcQuantity);
 
     orderSubCESL = {
-                buy_or_sell: 'B',
-                product_type: 'M',
-                exchange: globalInputCaller.pickedExchange,
-                tradingsymbol: globalInputCaller.optionInAction,
-                quantity: calcQuantity,
-                discloseqty: 0,
-                price_type: 'SL-LMT',
-                price: Math.min(Number(Math.round(calcSLPrice)+2), Number(localSLPrice[1])), // price should be 4 times the LTP
-                trigger_price: Math.min(Number(Math.round(calcSLPrice)), (Number(localSLPrice[1])-0.5)),
-                remarks: 'CommonOrderCEEntryAPISL'
-              }
+        buy_or_sell: 'B',
+        product_type: 'M',
+        exchange: globalInputCaller.pickedExchange,
+        tradingsymbol: globalInputCaller.optionInAction,
+        quantity: calcQuantity,
+        discloseqty: 0,
+        price_type: 'SL-LMT',
+        price: Math.min(Number(Math.round(calcSLPrice) + 2), Number(localSLPrice[1])), // price should be 4 times the LTP
+        trigger_price: Math.min(Number(Math.round(calcSLPrice)), (Number(localSLPrice[1]) - 0.5)),
+        remarks: 'CommonOrderCEEntryAPISL'
+    }
     globalInputCaller.pickedExchange === 'BFO' ? await delay(3500) : await delay(1500);
     const response = await api.place_order(orderSubCESL);
     console.log("orderSubCESL Response:", response);
-    
+
 }
 
 const placeSellOrder = async (api) => {
@@ -136,16 +139,17 @@ const cancelOpenOrders = async (api) => {
     const orders = await api.get_orderbook();
     const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING') : [];
     for (const order of filtered_data_API) {
-      if (order?.norenordno) {
-        await api.cancel_order(order.norenordno);
-      }
+        if (order?.norenordno) {
+            await api.cancel_order(order.norenordno);
+            console.log("Cancelling order:", order.norenordno);
+        }
     }
-  }
+}
 
 const exitAll = async (api) => {
     const positionsData = await api.get_positions();
     // console.log(positionsData, "positionsData");
-    
+
     // [
     //   {
     //     stat: 'Ok',
@@ -250,8 +254,10 @@ const exitAll = async (api) => {
     // ] positionsData
 
     for (let i = 0; i < positionsData.length; i++) {
-        if ((positionsData[i].tsym.includes("PE") || positionsData[i].tsym.includes("CE")) && parseInt(positionsData[i].netqty) < 0) {
+        console.log(positionsData[i].tsym, positionsData[i].netqty, 'positionsData[i].netqty');
+        if (parseInt(positionsData[i].netqty) < 0) {
             await exitOrder(positionsData[i], api);
+            console.log("Exiting the position:", positionsData[i].tsym);
             await delay(1500);
             await cancelOpenOrders(api)
         }
@@ -260,29 +266,29 @@ const exitAll = async (api) => {
 
 const checkExitCondition = async (globalInputCaller) => {
 
-    let pnl = await calcPnL(api);
-    console.log("######pnl: ", pnl)
+    pnl = await calcPnL(api);
+    console.log(pnl, " ######pnl")
+    let shouldExit = false;
 
     // exit this script if the loss is more than 1% of the limits or the gain is more than 1% of the limits
-    console.log("parseFloat(pnl.replace('%', '')) , -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) , maxGainPerDayPercent: ", parseFloat(pnl.replace('%', '')) , -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) , maxGainPerDayPercent);
-    console.log("parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent: ", parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent);
+    console.log("parseFloat(pnl.replace('%', '')) , -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) , maxGainPerDayPercent: ", parseFloat(pnl.replace('%', '')), -maxLossPerDayPercent, parseFloat(pnl.replace('%', '')), maxGainPerDayPercent);
+    console.log("parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent , parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent: ", parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent, parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent);
     if (parseFloat(pnl.replace('%', '')) < -maxLossPerDayPercent || parseFloat(pnl.replace('%', '')) > maxGainPerDayPercent) {
-        exitAll(api).then(() => {
-            console.log("######Exiting the script as the loss is more than 1% of the limits or the gain is more than 1% of the limits.");
-            process.exit(0);
-
-        });
+        await exitAll(api);
+        console.log("######Exiting the script as the loss/gain is more than the desired limit");
+        shouldExit = true;
     }
 
-    if(isTimeEqualsNotAfterProps(14,40,false) && !(isTimeEqualsNotAfterProps(15,29,false))){
-        exitAll(api).then(() => {
-            console.log("######Exiting the script as the time is more than cut off time eg: 2:40 PM.");
-            process.exit(0);
-        });
-        
+    if (isTimeEqualsNotAfterProps(14, 40, false) && !(isTimeEqualsNotAfterProps(15, 29, false))) {
+        await exitAll(api);
+        console.log("######Exiting the script as the time is more than cut off time eg: 2:40 PM.");
+        shouldExit = true;
     }
 
-    
+    if (shouldExit) {
+        console.log("Exiting the script...");
+        process.exit(0);
+    }
     //get ltp of the option
     // console.log("######globalInputCaller?.optionInAction: ", globalInputCaller?.optionInAction);
     // console.log("######globalInputCaller?.soldOptionToken: ", globalInputCaller?.soldOptionToken);
@@ -290,9 +296,9 @@ const checkExitCondition = async (globalInputCaller) => {
     // console.log("######positionsData: ", positionsData);
     const filtered_data = Array.isArray(positionsData) ? positionsData.filter(item => item?.netqty < 0) : [];
     filtered_data?.forEach((position) => {
-        
-            console.log("######position lp: ", position?.lp);
-        
+
+        console.log(position?.lp, " ###### : position.lp");
+
     });
 
     // console.log("######globalInputCaller?.finalWeeklyExpiryExchange: ", globalInputCaller?.finalWeeklyExpiryExchange);
@@ -303,10 +309,107 @@ const checkExitCondition = async (globalInputCaller) => {
     return false;
 };
 
+const placeOrderSet = async (api) => {
+
+    // sell optionInAction 
+    await placeSLOrder(api);
+
+    // await checkIfSLOrderPlaced(api);
+
+    await placeSellOrder(api);
+    // await checkIfSellOrderPlaced(api);
+}
+
+const updateTriggerOrder = async (api, order) => {
+    let orderSubCESL = {};
+
+    console.log(order, " : checking the SL order");
+    console.log(order.trgprc, " : order.trgprc");
+
+    localLTPPrice = await getLTPfromSymbol(api, order.tsym);
+    // take limits and then calculate the SL price -> sl loss should be 0.33% of the limits
+    // console.log("######localLTPPrice: ", localLTPPrice);
+
+    const maxLossPerOrder = (globalInputCaller?.limits / 100) * maxLossPerOrderPercent; //200000 / 100 * 0.33 = 660
+    const calcQuantity = globalInputCaller.quantityInLots * globalInputCaller.LotSize;
+    const calcSLPrice = Number(localLTPPrice[0] || 10) + (maxLossPerOrder / calcQuantity);
+    // console.log("######calcSLPrice , order.trgprc", calcSLPrice, order.trgprc);
+
+    // let modifyparams = {
+    //     'orderno' : reply.norenordno,
+    //     'exchange' : 'NSE',
+    //     'tradingsymbol' : 'ACC-EQ',
+    //     'newquantity' : 2,
+    //     'newprice_type' : 'LMT',
+    //     'newprice' : 2202.00
+    // }
+
+    if (order.trgprc - calcSLPrice > 2) {
+        // api.modify_order(exchange='NSE', tradingsymbol='INFY-EQ', orderno=orderno,
+        //     newquantity=2, newprice_type='LMT', newprice=1505)
+
+        /*
+          let values                  = {'ordersource':'API'};
+                  values["uid"]           = self.__username;
+                  values["actid"]         = self.__accountid;
+                  values["norenordno"]    = modifyparams.orderno;
+                  values["exch"]          = modifyparams.exchange;
+                  values["tsym"]          = modifyparams.tradingsymbol;
+                  values["qty"]           = modifyparams.newquantity.toString();
+                  values["prctyp"]        = modifyparams.newprice_type;        
+                  values["prc"]           = modifyparams.newprice.toString();
+        
+                  if((modifyparams.newprice_type == 'SL-LMT') || (modifyparams.newprice_type == 'SL-MKT'))
+                  {        
+                    values["trgprc"] = modifyparams.newtrigger_price.toString();        
+                  }
+        
+                  //#if cover order or high leverage order
+                  if( modifyparams.bookloss_price !== undefined)
+                  {
+                      values["blprc"]       = modifyparams.bookloss_price.toString();    
+                  }
+                  //#trailing price
+                  if(modifyparams.trail_price !== undefined)
+                  {
+                      values["trailprc"] = modifyparams.trail_price.toString();    
+                  }
+                  //#book profit of bracket order   
+                  if(modifyparams.bookprofit_price !== undefined)
+                  {
+                      values["bpprc"]       = modifyparams.bookprofit_price.toString();    
+                  }            
+        
+                  let reply = post_request("modifyorder", values, self.__susertoken);
+        */
+
+        orderSubModSL = {
+            orderno: order.norenordno,
+            exchange: globalInputCaller.pickedExchange,
+            tradingsymbol: order.tsym,
+            newquantity: order.qty,
+            newprice_type: 'SL-LMT',
+            newprice: Math.min(Number(Math.round(calcSLPrice) + 2), Number(localLTPPrice[1])),
+            buy_or_sell: 'B',
+            product_type: 'M',
+            newtrigger_price: Math.min(Number(Math.round(calcSLPrice)), (Number(localLTPPrice[1]) - 0.5)),
+            remarks: 'CommonOrderCEModAPISL'
+        }
+        await api.modify_order(orderSubModSL)//order.token, localLTPPrice, order.qty, order.ordtype, order.price, order.exch, order.trantype, order.ordvalidity, order.ordvalidity);
+        console.log(order.trgprc, calcSLPrice, ' ###### : SL order modified');
+        return;
+    } else {
+        console.log(order.trgprc, calcSLPrice, ' ###### : trigger, calc - SL order not modified');
+
+        return;
+    }
+}
+
+
 // Use an IIFE to handle `await` at the top level
 const i4pro = async (api) => {
     // console.log("i4pro function called", api);
-    
+
     await executeI4Pro(api); // sets values to globalInputCaller
 
     // eg:
@@ -371,36 +474,84 @@ const i4pro = async (api) => {
     //   } i4pro
 
     getQuantityInLots();
-    console.log("###### ",globalInputCaller?.resultBias[globalInputCaller.finalWeeklyExpiryName], "calcbias", globalInputCaller.finalWeeklyExpiryName) // Output the result after function execution
+    console.log("###### ", globalInputCaller?.resultBias[globalInputCaller.finalWeeklyExpiryName], "calcbias", globalInputCaller.finalWeeklyExpiryName) // Output the result after function execution
 
     const shouldExit = await checkExitCondition(globalInputCaller);
     if (shouldExit) {
         process.exit(0);
     }
-    
+
     // create SL order + sell optionInAction --> quantityInLots * LotSize
 
     // const positionsData = await api.get_positions();
     // console.log(positionsData, "positionsData");
 
+    await delay(1000);
     const orders = await api.get_orderbook();
     // console.log(orders, "orders");
 
     // if(orders is not pending)
-    const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING'  && item?.instname === 'OPTIDX'): [];
+    const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING' && item?.instname === 'OPTIDX') : [];
+    const moment = require('moment');
 
     if (filtered_data_SL_CE.length === 0) {
+        let mostRecentOrder = null;
+        if (orders && orders.length > 0) {
+            mostRecentOrder = orders.sort((a, b) => b.ordenttm - a.ordenttm)[0];
+            console.log("Most Recent Order:", mostRecentOrder);
+        } else {
+            console.log("No orders found.");
+        }
 
-        // sell optionInAction 
-        await placeSLOrder(api);
+        // Check if 30 minutes have passed
+        const currentTime = moment().utcOffset("+05:30").unix(); // Current time in seconds (IST)
+        // const orderTime = parseInt(mostRecentOrder.ordenttm); // Order time in seconds
 
-        // await checkIfSLOrderPlaced(api);
-        
-        await placeSellOrder(api);
-        // await checkIfSellOrderPlaced(api);
+        // Ensure the norentm property is in a valid date format
+
+        let orderTime;
+        let orderDate;
+
+        if (mostRecentOrder.norentm) {
+            // Parse the order time directly in IST
+            orderDate = moment(mostRecentOrder.norentm, 'HH:mm:ss DD-MM-YYYY').utcOffset("+05:30", true);
+            if (orderDate.isValid()) {
+                orderTime = orderDate.unix(); // Convert to seconds since Unix epoch (IST)
+            } else {
+                console.error("Invalid date format for norentm:", mostRecentOrder.norentm);
+                orderTime = parseInt(mostRecentOrder.ordenttm); // Order time in seconds;
+            }
+        } else {
+            console.error("No norentm property found in the most recent order:", mostRecentOrder);
+            orderTime = parseInt(mostRecentOrder.ordenttm); // Order time in seconds;
+        }
+        console.log(orderDate.format("HH:mm:ss DD-MM-YYYY"), ": Parsed order time (IST)");
+        console.log(moment.unix(currentTime).utcOffset("+05:30").format("HH:mm:ss DD-MM-YYYY"), ": Current time (IST)");
+
+        // Calculate time passed since the most recent order
+        const timePassed = Math.abs(currentTime - orderTime); // Absolute difference in seconds
+        const minimumWaitTime = waitAfterLoss * 60; // Convert minutes to seconds
+        const minimumWaitTimeGain = waitAfterGain * 60; // Convert minutes to seconds
+
+        console.log(`Time passed since last order: ${(timePassed / 60).toFixed(2)} mins`);
+
+        if (parseFloat(pnl.replace('%', '')) >= 0) {
+            if (timePassed >= Math.max(waitAfterGain, minimumWaitTimeGain)) {
+                await placeOrderSet(api);
+            } else {
+                console.log(`######Time passed since the most recent order: ${Math.floor(timePassed / 60)} mins.`); //
+            }
+        } else {
+            if (timePassed >= Math.max(waitAfterLoss, minimumWaitTime)) {
+                await placeOrderSet(api);
+            } else {
+                console.log(`######Time passed since the most recent order: ${Math.floor(timePassed / 60)} mins.`); //
+            }
+        }
 
     } else {
-        console.log("######trigger: ", filtered_data_SL_CE[0].trgprc);
+        // console.log("######trigger: ", filtered_data_SL_CE[0].trgprc);
+        await updateTriggerOrder(api, filtered_data_SL_CE[0]);
         console.log("######There are orders with status 'TRIGGER_PENDING' and instname 'OPTIDX'.");
     }
 
@@ -409,16 +560,11 @@ const i4pro = async (api) => {
 const runI4ProEveryMinute = async (api) => {
     // Run the function immediately
     await i4pro(api);
-    
-  }
-  
-  module.exports = runI4ProEveryMinute;
+
+}
+
+module.exports = runI4ProEveryMinute;
 // TODO:
 // once the LTP has moved to profit then it should shift the SL order to minor profit.
-
-// other file is ccalled only once, even if called multiple times it login is giving issue
-
-// check executeI4Pro commented  code + separate login method
-// or merge both files
 
 module.exports = i4pro; // Export the function for testing purposes

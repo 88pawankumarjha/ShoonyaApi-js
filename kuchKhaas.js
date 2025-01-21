@@ -16,6 +16,6 @@ const loginAsync = async () => {
     // Set an interval to run the function every minute (60000 milliseconds)
     setInterval(async () => {
         await i4proTestMethod(api);
-    }, 20000);
+    }, 30000);
     
 })();
