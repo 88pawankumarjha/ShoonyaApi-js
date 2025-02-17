@@ -636,7 +636,7 @@ function receiveOrders(data) {
     // console.log("Order ::", data);
     // Update the latest order value for the corresponding instrument
     if (data.status === 'REJECTED') {
-      send_notification('################## ORDER REJECTED PLS CHECK ##################', true);
+      send_notification('######### ORDER REJECTED PLS CHECK #########', true);
 
       // Clear any existing debounce timer
       if (debounceTimer) {
@@ -1573,7 +1573,7 @@ const runEma = async () => {
 // Function to pause the EMA calculations
 const pauseEma = () => {
   if (telegramSignals.isPlaying) {
-    console.log("#########################pausing")
+    console.log("#############pausing")
     clearInterval(intervalIdForEMA);
     telegramSignals.isPlaying = false;
   }
@@ -1582,7 +1582,7 @@ const pauseEma = () => {
 // Function to resume the EMA calculations
 const resumeEma = () => {
   if (!telegramSignals.isPlaying) {
-    console.log("#########################resuming")
+    console.log("#############resuming")
     intervalIdForEMA = setInterval(getEma, delayForEMA);
     telegramSignals.isPlaying = true;
   }

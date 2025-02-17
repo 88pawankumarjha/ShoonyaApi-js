@@ -1,4 +1,4 @@
-const runAsyncTasks = async (api) => {
+const runAsyncTasks = async (api, hasRunFindNearestExpiry) => {
   try {
 const axios = require('axios');
 const fs = require('fs');
@@ -8,6 +8,7 @@ const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
 let apiLocal = api;
+let passiveScale = 2;
 
 const { calculateAtmOptionsSumPrice, i4find_bias } = require('./utils/i4Utils');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
@@ -100,9 +101,7 @@ function downloadFile(url, destination) {
 
 // Function to unzip the downloaded file in the current working directory
 function unzipFile(zipFilePath) {
-  
-
-  try {
+    try {
     const zip = new AdmZip(zipFilePath);
     zip.extractAllTo('./', true);
     //console.log('Unzipped in the current working directory.');
@@ -119,13 +118,15 @@ async function findNearestExpiry(exchangeType, inputIndexName) {
   zipFilePath = `./${exchangeType}_symbols.zip`;
   csvFilePath = `./${exchangeType}_symbols.txt`;
   try {
-    downloadFile(zipFileUrl, downloadedFileName)
-      .then(() => {
-        unzipFile(downloadedFileName);
-      })
-      .catch(error => {
-        console.error('Error in unzipping file');
-      });
+    if (!hasRunFindNearestExpiry) {
+      downloadFile(zipFileUrl, downloadedFileName)
+        .then(() => {
+          unzipFile(downloadedFileName);
+        })
+        .catch(error => {
+          console.error('Error in unzipping file');
+        });
+    }
     await delay(1000);
     // Read CSV data into a JavaScript object
     const csvData = fs.readFileSync(csvFilePath, 'utf-8');
@@ -181,11 +182,11 @@ async function runFindNearestExpiry(currentIndexType, currentIndexName) {
 }
 
 async function findNearestExpiryLoop() {
- await runFindNearestExpiry('NFO', 'BANKNIFTY');
- await runFindNearestExpiry('NFO', 'FINNIFTY');
- await runFindNearestExpiry('BFO', 'BANKEX');
- await runFindNearestExpiry('NFO', 'NIFTY');
- await runFindNearestExpiry('BFO', 'SENSEX');
+    await runFindNearestExpiry('NFO', 'BANKNIFTY');
+    await runFindNearestExpiry('NFO', 'FINNIFTY');
+    await runFindNearestExpiry('BFO', 'BANKEX');
+    await runFindNearestExpiry('NFO', 'NIFTY');
+    await runFindNearestExpiry('BFO', 'SENSEX');
 
     // console.log(globalInput, 'globalInput.finalWeeklyExpiryExchange, globalInput.finalWeeklyExpiryName')
 // console.log('before then async', globalInput.LotSize)
@@ -354,17 +355,12 @@ const getATMToken = async (side) => {
         // console.log(searchResult.values[0].tsym, 'searchResult.values[0].tsym');
         
         //TODO: improve this hardcoded one
-        globalInput.ocGap = globalInput.keyword === 'NIFTY' ? 50 : 100;
-        calcOcGapMultiplier = side? -2:2;
+        globalInput.ocGap = globalInput.keyword.startsWith('NIFTY') ? 50 : 100;
+        calcOcGapMultiplier = side? -(passiveScale):(passiveScale);
         let mewOTMSearchSymbol = globalInput.keyword + (globalInput.atmStrike + (globalInput.ocGap * calcOcGapMultiplier)) + ` ${side ? 'PE' : 'CE'}`;
         const searchResultOTM = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, mewOTMSearchSymbol);
-        console.log('######globalInput.optionInAction', globalInput.atmStrike, globalInput.ocGap, side)
-        console.log('######searchResultOTM', mewOTMSearchSymbol)
         globalInput.optionInAction = searchResultOTM.values[0].tsym;
-        console.log('######globalInput.optionInAction', globalInput.optionInAction)
-        
-        // globalInput.optionInAction = searchResult.values[0].tsym;
-        
+
         return searchResult.values[0].token;
     // }
 };
@@ -373,7 +369,7 @@ const findATM = async () => {
   try {
 
     const Spot = await fetchSpotPrice(apiLocal, globalInput.token, globalInput.finalWeeklyExpiryExchange);
-    console.log('######Spot: ', Spot?.lp)
+    console.log('### SPT :', Spot?.lp)
     // Spot:  {
     //   request_time: '11:01:08 17-12-2024',
     //   stat: 'Ok',
@@ -412,7 +408,7 @@ const findATM = async () => {
     globalInput.atmStrike = atmStrike;
     globalInput.atmStrikePrice = atmStrike;
     globalInput.atmStrikeToken = await getATMToken(checkPositiveBias());
-    // console.log("######globalInput.atmStrikeToken: ", globalInput);
+    // console.log("###globalInput.atmStrikeToken: ", globalInput);
   
   } catch (error) { 
     console.log('error in findATM', error);
@@ -492,7 +488,7 @@ await findNearestExpiryLoop();
 return globalInput;
 } catch (error) {
   console.error("Error in runAsyncTasks:", error);
-  throw error;
+  // throw error;
 }
 
 }

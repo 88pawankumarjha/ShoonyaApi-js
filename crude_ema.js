@@ -506,7 +506,7 @@ function receiveOrders(data) {
     // console.log("Order ::", data);
     // Update the latest order value for the corresponding instrument
     if(data.status === 'REJECTED') {
-      send_notification('################## ORDER REJECTED PLS CHECK ##################', true);
+      send_notification('######### ORDER REJECTED PLS CHECK #########', true);
       exitAll();
       // exitSellsAndOrStop(true);
     }

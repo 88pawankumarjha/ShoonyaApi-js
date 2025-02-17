@@ -2221,7 +2221,7 @@ const runEma = async () => {
 // Function to pause the EMA calculations
 const pauseEma = () => {
   if (telegramSignals.isPlaying) {
-    console.log("#########################pausing")
+    console.log("#############pausing")
     clearInterval(intervalIdForEMA);
     telegramSignals.isPlaying = false;
   }
@@ -2230,7 +2230,7 @@ const pauseEma = () => {
 // Function to resume the EMA calculations
 const resumeEma = () => {
   if (!telegramSignals.isPlaying) {
-    console.log("#########################resuming")
+    console.log("#############resuming")
     intervalIdForEMA = setInterval(getEma, delayForEMA);
     telegramSignals.isPlaying = true;
   }
