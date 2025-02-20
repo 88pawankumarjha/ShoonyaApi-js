@@ -8,7 +8,7 @@ const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
 let apiLocal = api;
-let passiveScale = 2;
+let passiveScale = 4;
 
 const { calculateAtmOptionsSumPrice, i4find_bias } = require('./utils/i4Utils');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");

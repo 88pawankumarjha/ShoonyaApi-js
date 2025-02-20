@@ -78,16 +78,18 @@ api.login(authparams)
         
 
         api.get_orderbook()
-        .then((reply) => { 
-          console.log(reply, 'orderbook');
+        .then(async (reply) => { 
+        //   console.log(reply, 'orderbook');
             orders = reply;
-            console.log(reply, "orders data");
+            // console.log(reply, "orders data");
 
             const orderSubCE = {
               buy_or_sell: 'S', product_type: 'M', exchange: "BFO",
               tradingsymbol: 'SENSEX2520476800PE', quantity: 20,
               discloseqty: 0, price_type: 'MKT', price: 0, remarks: 'CommonOrderCEEntryAPI'
           };
+        //   const data = await api.get_security_info(exchange='NSE', token='22')
+        //   console.log(data, 'data')
           // await placeOrder(api, orderSubCE);
         });
         
