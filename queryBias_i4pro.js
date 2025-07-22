@@ -8,12 +8,30 @@ const AdmZip = require('adm-zip');
 const { parse } = require('papaparse');
 const moment = require('moment');
 let apiLocal = api;
-let passiveScale = 4;
+const today = new Date();
+let isExpiryToday = today.getDay() === 4 || today.getDay() === 3; //4 for thursday and 3 for wednesday
+let passiveScale = isExpiryToday? 0: -1;
+// let temporaryHardodedVWAPValue = 24875;
+
+let temporaryHardodedVWAPValue;
+try {
+  temporaryHardodedVWAPValue = parseFloat(
+    fs.readFileSync('C:/Users/88paw/OneDrive/Documents/aws/vwapValue.txt', 'utf-8').trim()
+  );
+  console.log('###VWAP value read from file:', temporaryHardodedVWAPValue);
+} catch (e) {
+  console.error('###Could not read VWAP value from file, using default.');
+  temporaryHardodedVWAPValue = 24875; // fallback value
+}
+let biasFlag = false, biasFlagNumber = 0;
+// let indices = ['SENSEX'];
+let indices = ['NIFTY'];
+// const indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'SENSEX', 'BANKEX'];
 
 const { calculateAtmOptionsSumPrice, i4find_bias } = require('./utils/i4Utils');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates,
-  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, calcPnL, isTimeEqualsNotAfterProps } = require('./utils/customLibrary');
+  identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, calcPnL, isTimeEqualsNotAfterProps, calcVix } = require('./utils/customLibrary');
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -52,6 +70,7 @@ let globalInput = {
   optionInAction: '',
   bias: false,
   limits: 0,
+  spotLP: 0,
   resultBias : {}
 }
 
@@ -132,8 +151,13 @@ async function findNearestExpiry(exchangeType, inputIndexName) {
     const csvData = fs.readFileSync(csvFilePath, 'utf-8');
     const { data: symbolDf } = parse(csvData, { header: true });
     //exclude sensex50
-    globalBigInput.filteredIndexCSV = filterAndMapDates(moment, symbolDf.filter((row) => ['OPTIDX', 'FUTIDX'].includes(row.Instrument) && row.TradingSymbol.startsWith(inputIndexName) && !row.TradingSymbol.startsWith('SENSEX50')));
-
+    // console.log(symbolDf, "symbolDf");
+    // console.log(inputIndexName, 'inputIndexName');
+    const filteredRows = symbolDf.filter((row) => ['OPTIDX', 'FUTIDX'].includes(row.Instrument) && row.TradingSymbol.toUpperCase().startsWith(inputIndexName.toUpperCase()) && !row.TradingSymbol.startsWith('NIFTYNXT50') && !row.TradingSymbol.startsWith('SENSEX50') && !row.TradingSymbol.startsWith('ZYDUSLIFE'))
+    // console.log(filteredRows, 'filteredRows');
+    globalBigInput.filteredIndexCSV = filterAndMapDates(moment, filteredRows);
+    // console.log('Input Index Name:', inputIndexName);
+    // console.log('Final Filtered Rows:', globalBigInput.filteredIndexCSV);
     const expiryList = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => row.Instrument === 'OPTIDX').map((row) => row?.Expiry || ''))];
     const expiryFutList = globalBigInput.filteredIndexCSV
       .filter((row) => row.Instrument === 'FUTIDX')
@@ -141,11 +165,12 @@ async function findNearestExpiry(exchangeType, inputIndexName) {
     expiryList.sort();
     expiryFutList.sort((a, b) => moment(a.Expiry).diff(moment(b.Expiry)));
 
-    globalInput.inputOptTsym = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => (row.Instrument === 'OPTIDX' && row.Expiry === expiryList[0])).map((row) => row.TradingSymbol))][0];
-    globalInput.WEEKLY_EXPIRY = expiryList[0];
+    globalInput.inputOptTsym = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => (row.Instrument === 'OPTIDX' && row.Expiry === expiryList[isExpiryToday? 1: 0])).map((row) => row.TradingSymbol))][0];
+    globalInput.WEEKLY_EXPIRY = expiryList[isExpiryToday? 1: 0];
     globalInput.MONTHLY_EXPIRY = expiryFutList[0]?.Expiry;
     globalInput.pickedExchange = expiryFutList[0]?.Exchange;
     globalInput.LotSize = expiryFutList[0]?.LotSize;
+    // globalInput.LotSize = 75;
     globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty / globalInput.LotSize);
 
     // globalInput.finalWeeklyExpiryName.obj =expiryFutList[0]
@@ -182,11 +207,11 @@ async function runFindNearestExpiry(currentIndexType, currentIndexName) {
 }
 
 async function findNearestExpiryLoop() {
-    await runFindNearestExpiry('NFO', 'BANKNIFTY');
-    await runFindNearestExpiry('NFO', 'FINNIFTY');
-    await runFindNearestExpiry('BFO', 'BANKEX');
+    // await runFindNearestExpiry('NFO', 'BANKNIFTY');
+    // await runFindNearestExpiry('NFO', 'FINNIFTY');
+    // await runFindNearestExpiry('BFO', 'BANKEX');
     await runFindNearestExpiry('NFO', 'NIFTY');
-    await runFindNearestExpiry('BFO', 'SENSEX');
+    // await runFindNearestExpiry('BFO', 'SENSEX');
 
     // console.log(globalInput, 'globalInput.finalWeeklyExpiryExchange, globalInput.finalWeeklyExpiryName')
 // console.log('before then async', globalInput.LotSize)
@@ -218,6 +243,7 @@ const runEma = async () => {
     const searchResult = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, globalInput.inputOptTsym);
     // console.log(searchResult, 'searchResult2');
     globalInput.LotSize = searchResult.values[0].ls;
+    // globalInput.LotSize = 75;
     await findBias();
     await takePosition();
 
@@ -272,8 +298,6 @@ let indexLP = "25000";
 
 let nbfsbBias = [];
 
-const indices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'SENSEX', 'BANKEX'];
-
 const findBias= async () => {
 // TODO
   // find vwap of sum of ATM options price - if price from calc of ATM options price > vwap then do not sell
@@ -301,10 +325,10 @@ const findBias= async () => {
   const biasesConfig = [];
 
     biasesConfig.push({ exch: 'NFO', token: '26000', ocGap: 50, keyword: 'NIFTY ' });
-    biasesConfig.push({ exch: 'NFO', token: '26009', ocGap: 100, keyword: 'BANKNIFTY ' });
-    biasesConfig.push({ exch: 'NFO', token: '26037', ocGap: 50, keyword: 'FINNIFTY ' });
-    biasesConfig.push({ exch: 'BFO', token: '1', ocGap: 100, keyword: 'SENSEX ' });
-    biasesConfig.push({ exch: 'BFO', token: '12', ocGap: 100, keyword: 'BANKEX ' });
+    // biasesConfig.push({ exch: 'NFO', token: '26009', ocGap: 100, keyword: 'BANKNIFTY ' });
+    // biasesConfig.push({ exch: 'NFO', token: '26037', ocGap: 50, keyword: 'FINNIFTY ' });
+    // biasesConfig.push({ exch: 'BFO', token: '1', ocGap: 100, keyword: 'SENSEX ' });
+    // biasesConfig.push({ exch: 'BFO', token: '12', ocGap: 100, keyword: 'BANKEX ' });
     
     const biases = await Promise.all(
       biasesConfig.map(config => i4find_bias(apiLocal, config.token, config.ocGap, config.keyword, config.exch))
@@ -328,23 +352,48 @@ const findBias= async () => {
     
 };
 
-const checkPositiveBias = () => {
-  let biasFlag = false;
+const findIndexVwapValue = async () => {
+  try {
+    return temporaryHardodedVWAPValue;
+  } catch (error) {
+    console.log('error in findIndexVwapValue', error);
+  }
+};
 
-  //check the bias from the options price
+const checkPositiveBias = async () => {
+  indices = [globalInput.finalWeeklyExpiryName];
   indices.forEach((index, i) => {
     globalInput.resultBias[index] = nbfsbBias[i];
   });
-  biasFlag = globalInput.resultBias[globalInput.finalWeeklyExpiryName] > 0;
+  
+  biasFlagNumber = globalInput.resultBias[globalInput.finalWeeklyExpiryName] > 0 ? biasFlagNumber + 2 : biasFlagNumber - 2;
+
+    //calc if spot is above vwap then increase biasFlagNumber else decrease biasFlagNumber
+  let indexLP = globalInput.spotLP;
+  // indexVwap = globalInput.atmStrikePrice;
+  let indexVwap = await findIndexVwapValue();
+  biasFlagNumber = indexLP > indexVwap ? biasFlagNumber + 1 : biasFlagNumber - 1;
+
+  //vix (if high vix then decrease biasFlagNumber else increase biasFlagNumber)
+  const calcVixVal = await calcVix(api);
+  if(calcVixVal > 0) {biasFlagNumber = biasFlagNumber > 0 ? biasFlagNumber - 1 : biasFlagNumber < 0 ? biasFlagNumber + 1 : biasFlagNumber}
+  else if(calcVixVal < 0) {biasFlagNumber = biasFlagNumber > 0 ? biasFlagNumber + 1 : biasFlagNumber < 0 ? biasFlagNumber - 1 : biasFlagNumber}
+
+  // set the biasFlag 
+  if (biasFlagNumber > 0) {biasFlag = true, globalInput.skipTakingNewOrders = false}
+  else if (biasFlagNumber < 0) {biasFlag = false, globalInput.skipTakingNewOrders = false}
+  else {biasFlag = false, globalInput.skipTakingNewOrders = true}
+  
+  console.log('### vw', indexVwap, 'v:', calcVixVal, ' bias#:', biasFlagNumber);
 
   return biasFlag;
 }
 
 const getATMToken = async (side) => {
   // console.log(globalInput.keyword, globalInput.atmStrike, side, 'globalInput.keyword, globalInput.atmStrike, side')
-  let newSearchSymbol = globalInput.keyword + (globalInput.atmStrike) + ` ${side ? 'PE' : 'CE'}`;
+  // let newSearchSymbol = globalInput.keyword + (globalInput.atmStrike) + ` ${side ? 'PE' : 'CE'}`;
   // console.log(newSearchSymbol, 'newSearchSymbol')
-  const searchResult = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, newSearchSymbol);
+  // const searchResult = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, newSearchSymbol);
   // console.log(searchResult, 'searchResult');
   // if(keyword[0] === getPickedIndex()[0] && globalInput.finalWeeklyExpiryExchange === 'BFO')
   //    {
@@ -356,12 +405,13 @@ const getATMToken = async (side) => {
         
         //TODO: improve this hardcoded one
         globalInput.ocGap = globalInput.keyword.startsWith('NIFTY') ? 50 : 100;
+        
         calcOcGapMultiplier = side? -(passiveScale):(passiveScale);
         let mewOTMSearchSymbol = globalInput.keyword + (globalInput.atmStrike + (globalInput.ocGap * calcOcGapMultiplier)) + ` ${side ? 'PE' : 'CE'}`;
         const searchResultOTM = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, mewOTMSearchSymbol);
-        globalInput.optionInAction = searchResultOTM.values[0].tsym;
+        globalInput.optionInAction = searchResultOTM.values[isExpiryToday? 1: 0].tsym;
 
-        return searchResult.values[0].token;
+        return searchResultOTM?.values[0].token;
     // }
 };
 
@@ -370,6 +420,7 @@ const findATM = async () => {
 
     const Spot = await fetchSpotPrice(apiLocal, globalInput.token, globalInput.finalWeeklyExpiryExchange);
     console.log('### SPT :', Spot?.lp)
+    globalInput.spotLP = Spot?.lp;
     // Spot:  {
     //   request_time: '11:01:08 17-12-2024',
     //   stat: 'Ok',
@@ -407,7 +458,11 @@ const findATM = async () => {
 
     globalInput.atmStrike = atmStrike;
     globalInput.atmStrikePrice = atmStrike;
-    globalInput.atmStrikeToken = await getATMToken(checkPositiveBias());
+    const checkPositiveBiasValue = await checkPositiveBias();
+    globalInput.bias = checkPositiveBiasValue;
+    globalInput.atmStrikeToken = await getATMToken(checkPositiveBiasValue);
+    // globalInput.atmStrikeToken = await getATMToken(false);
+    
     // console.log("###globalInput.atmStrikeToken: ", globalInput);
   
   } catch (error) { 
@@ -468,8 +523,7 @@ const getLimitsCash = async () => {
 
 const takePosition = async () => {
   
-  // console.log("Positive Bias for ", globalInput.finalWeeklyExpiryName, " is ", checkPositiveBias()); 
-  globalInput.bias = checkPositiveBias();
+  // globalInput.bias = false;
   await findATM();
   await getLimitsCash();
 

@@ -25,6 +25,7 @@ module.exports.delay = (ms) => {
 
 module.exports.calcVix = async (api) => {
   const vixQuote = await api.get_quotes('NSE', '26017') || 1;
+  // console.log(vixQuote, '### vixQuote')
   return parseFloat((((vixQuote?.lp - vixQuote?.c)/vixQuote?.c)*100) || 1).toFixed(2) || 1;
 }
 
@@ -38,7 +39,7 @@ const total_pnl = positions && positions.length > 0 ? positions.reduce((acc, pos
   const r_pnl = parseFloat(pos?.rpnl);
   return acc + ur_mtm + r_pnl;
 }, 0) : 0;
-return parseFloat((total_pnl/limits?.cash)*100).toFixed(2) + '%';
+return parseFloat((total_pnl/limits?.cash)*100).toFixed(2);
 };
 
 

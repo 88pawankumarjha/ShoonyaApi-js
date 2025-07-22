@@ -3,13 +3,13 @@ const { isTimeEqualsNotAfterProps, identify_option_type, fetchSpotPrice, delay, 
 const moment = require('moment');
 const { tr } = require('@ixjb94/indicators');
 
-const maxLossPerOrderPercent = 0.22;
-const maxLossPerDayPercent = 0.75, maxGainPerDayPercent = 1.2;
-const limitPerLot = 250000, waitAfterLoss = 15, waitAfterGain = 5;
+const maxLossPerOrderPercent = 0.15;
+const maxLossPerDayPercent = 1.5, maxGainPerDayPercent = 1.5;
+let bookProfitMark = 0.2;
+let limitPerLot = 500000, waitAfterLoss = 25, waitAfterGainInit = 15, waitAfterGain = 10;
 let pnl = '', globalInputCaller = { quantityInLots: 0 };
 let soldOptionPrice = 0;
-let SLMinorProfitMark = 0.1;
-let bookProfitMark = 0.2;
+let SLMinorProfitMark = 0.12;
 let profitInRs = 0, profitInPercent = 0;
 let exitHr = 15, exitMin = 15;
 
@@ -77,7 +77,7 @@ const placeSellOrder = async (api) => {
         };
         globalInputCaller.soldOptionToken = globalInputCaller.atmStrikeToken;
         const response = await placeOrder(api, orderSubCE);
-    
+
         const orders = await api.get_orderbook();
         for (const order of orders) {
             if (order?.norenordno && order?.trantype == 'S') {
@@ -138,7 +138,16 @@ const exitAll = async (api) => {
 const checkExitCondition = async (globalInputCaller) => {
     try {
         pnl = await calcPnL(api);
-        console.log("### PNL :", pnl)
+        // console.log("### PNL :", pnl)
+
+        const currentTime = moment();
+        const startTime = moment().startOf('day').add(9, 'hours').add(15, 'minutes');
+        const timeDiff = currentTime.diff(startTime, 'minutes');
+        console.log("### PNL :", pnl, `(${Math.abs(timeDiff)} mins)`);
+
+        // const timePassed = Math.abs(currentTime - orderTime); // Absolute difference in seconds
+        // const minimumWaitTime = waitAfterLoss * 60; // Convert minutes to seconds
+
 
         let shouldExit = false;
 
@@ -163,6 +172,10 @@ const checkExitCondition = async (globalInputCaller) => {
 };
 
 const placeOrderSet = async (api) => {
+    if (globalInputCaller.skipTakingNewOrders) {
+        console.log('### Skipping new orders');
+        return
+    }
     try {
         await placeSLOrder(api);
         await placeSellOrder(api);
@@ -187,20 +200,20 @@ const updateTriggerOrder = async (api, order) => {
     const filtered_data = Array.isArray(positionsData) ? positionsData.filter(item => item?.netqty < 0) : [];
     const position = filtered_data[0];
     profitInRs = (Math.round(soldOptionPrice - position?.lp) * order.qty);
-    profitInPercent = ((profitInRs/globalInputCaller?.limits) * 100).toFixed(2);
-    console.log('order & position:', globalInputCaller?.optionInAction, position?.tsym);
-    if ( profitInPercent >= bookProfitMark && globalInputCaller?.optionInAction != position?.tsym) {
-        console.log('### ------ BP:', profitInPercent);
+    profitInPercent = ((profitInRs / globalInputCaller?.limits) * 100).toFixed(2);
+    console.log('optionInAction & position:', globalInputCaller?.optionInAction, position?.tsym);
+    if (profitInPercent >= bookProfitMark && globalInputCaller?.optionInAction != position?.tsym) {
+        console.log('### ------ BP:', profitInPercent, '%');
         await exitAll(api);
         return;
     }
-    
+
     //bring SL to minor profit
-    let moveMinorProfitCondition = soldOptionPrice != 0 ? order.trgprc > Math.round(soldOptionPrice): false;
-    let movedToMinorProfit = soldOptionPrice != 0 ? order.trgprc <= (Math.round(soldOptionPrice)-1) : true;
+    let moveMinorProfitCondition = soldOptionPrice != 0 ? order.trgprc > Math.round(soldOptionPrice) : false;
+    let movedToMinorProfit = soldOptionPrice != 0 ? order.trgprc <= (Math.round(soldOptionPrice) - 1) : true;
     if (moveMinorProfitCondition) {
         console.log('### SSL :', Number(Math.round(order.trgprc)), Number(Math.round(calcSLPrice)), order.tsym.slice(-6));
-        if ( profitInPercent >= SLMinorProfitMark) {
+        if (profitInPercent >= SLMinorProfitMark) {
             console.log('### ------ SLP:', Number(Math.round(order.trgprc)), Number(Math.round(calcSLPrice)));
             orderSubModSL = {
                 orderno: order.norenordno,
@@ -220,7 +233,7 @@ const updateTriggerOrder = async (api, order) => {
     } else if ((order.trgprc - calcSLPrice > 2) && movedToMinorProfit) {
         let moveSLCloser = soldOptionPrice != 0 ? calcSLPrice <= order.trgprc : true;
         console.log('### SSL :', Number(Math.round(order.trgprc)), Number(Math.round(calcSLPrice)), order.tsym.slice(-6));
-        if(moveSLCloser) {
+        if (moveSLCloser) {
             orderSubModSL = {
                 orderno: order.norenordno,
                 exchange: globalInputCaller.pickedExchange,
@@ -246,10 +259,16 @@ const updateTriggerOrder = async (api, order) => {
 const i4pro = async (api, hasRunFindNearestExpiry) => {
     try {
         await executeI4Pro(api, hasRunFindNearestExpiry);
-
+        if (!hasRunFindNearestExpiry) {
+            await exitAll(api);
+            waitAfterGain = 0;
+        }
+        else {
+            waitAfterGain = waitAfterGainInit;
+        }
         getQuantityInLots();
         const resultBiasString = Object.entries(globalInputCaller?.resultBias).map(([key, value]) => `${key[0]}:${value}`).join(', ');
-        console.log("### BIA :", globalInputCaller?.resultBias[globalInputCaller.finalWeeklyExpiryName], '|' , resultBiasString);
+        console.log("### BIA :", globalInputCaller?.resultBias[globalInputCaller.finalWeeklyExpiryName], '|', resultBiasString);
 
         const shouldExit = await checkExitCondition(globalInputCaller);
         if (shouldExit) {
@@ -259,14 +278,15 @@ const i4pro = async (api, hasRunFindNearestExpiry) => {
         await delay(1000);
 
         const orders = await api.get_orderbook();
+        let mostRecentOrder = null;
+        const recentOrders = Array.isArray(orders) ? orders.sort((a, b) => b.ordenttm - a.ordenttm) : [];
+        // const recentOrders = orders?.sort((a, b) => b.ordenttm - a.ordenttm);
+        mostRecentOrder = recentOrders && recentOrders[0];
 
         const filtered_data_SL_CE = Array.isArray(orders) ? orders.filter(item => item?.status === 'TRIGGER_PENDING' && item?.instname === 'OPTIDX') : [];
 
         if (filtered_data_SL_CE.length === 0) {
-            let mostRecentOrder = null;
             if (orders && orders.length > 0) {
-                mostRecentOrder = orders.sort((a, b) => b.ordenttm - a.ordenttm)[0];
-
                 const currentTime = moment().utcOffset("+05:30").unix(); // Current time in seconds (IST)
                 let orderTime;
                 let orderDate;
@@ -287,16 +307,25 @@ const i4pro = async (api, hasRunFindNearestExpiry) => {
                 const minimumWaitTimeGain = waitAfterGain * 60; // Convert minutes to seconds
 
                 if (parseFloat(pnl.replace('%', '')) >= 0) {
-                    if (timePassed >= Math.max(waitAfterGain, minimumWaitTimeGain)) {
+                    if (!hasRunFindNearestExpiry) {
+                        await exitAll(api);
+                        await placeOrderSet(api);
+                    }
+                    else if (timePassed >= Math.max(waitAfterGain, minimumWaitTimeGain)) {
                         await placeOrderSet(api);
                     } else {
-                        console.log(`### TIM: ${Math.floor(timePassed / 60)} mins. ${moment().utcOffset("+05:30").format('HH:mm:ss')}`);
+                        console.log(`### TIM: ${Math.floor(timePassed / 60)}/${Math.floor(Math.max(waitAfterGain, minimumWaitTimeGain) / 60)} mins. ${moment().utcOffset("+05:30").format('HH:mm:ss')}`);
                     }
                 } else {
-                    if (timePassed >= Math.max(waitAfterLoss, minimumWaitTime)) {
+
+                    if (!hasRunFindNearestExpiry) {
+                        await exitAll(api);
+                        await placeOrderSet(api);
+                    }
+                    else if (timePassed >= Math.max(waitAfterLoss, minimumWaitTime)) {
                         await placeOrderSet(api);
                     } else {
-                        console.log(`### TIM: ${Math.floor(timePassed / 60)} mins. ${moment().utcOffset("+05:30").format('HH:mm:ss')}`);
+                        console.log(`### TIM: ${Math.floor(timePassed / 60)}/${Math.floor(Math.max(waitAfterGain, minimumWaitTime) / 60)} mins. ${moment().utcOffset("+05:30").format('HH:mm:ss')}`);
                     }
                 }
             } else {
