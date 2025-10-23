@@ -9,7 +9,7 @@ const { parse } = require('papaparse');
 const moment = require('moment');
 let apiLocal = api;
 const today = new Date();
-let isExpiryToday = today.getDay() === 4 || today.getDay() === 3; //4 for thursday and 3 for wednesday
+let isExpiryToday = today.getDay() === 1 || today.getDay() === 2; //1 for monday and 2 for tuesday
 let passiveScale = isExpiryToday? 0: -1;
 // let temporaryHardodedVWAPValue = 24875;
 
@@ -169,7 +169,7 @@ async function findNearestExpiry(exchangeType, inputIndexName) {
     globalInput.WEEKLY_EXPIRY = expiryList[isExpiryToday? 1: 0];
     globalInput.MONTHLY_EXPIRY = expiryFutList[0]?.Expiry;
     globalInput.pickedExchange = expiryFutList[0]?.Exchange;
-    globalInput.LotSize = expiryFutList[0]?.LotSize;
+    globalInput.LotSize = expiryFutList[0]?.LotSize ? Number(expiryFutList[0].LotSize) : 75;
     // globalInput.LotSize = 75;
     globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty / globalInput.LotSize);
 
@@ -242,7 +242,7 @@ const runEma = async () => {
   try {
     const searchResult = await apiLocal.searchscrip(globalInput.finalWeeklyExpiryExchange, globalInput.inputOptTsym);
     // console.log(searchResult, 'searchResult2');
-    globalInput.LotSize = searchResult.values[0].ls;
+    globalInput.LotSize = searchResult.values[0].ls ? Number(searchResult.values[0].ls) : 75;
     // globalInput.LotSize = 75;
     await findBias();
     await takePosition();
@@ -366,18 +366,29 @@ const checkPositiveBias = async () => {
     globalInput.resultBias[index] = nbfsbBias[i];
   });
   
-  biasFlagNumber = globalInput.resultBias[globalInput.finalWeeklyExpiryName] > 0 ? biasFlagNumber + 2 : biasFlagNumber - 2;
+  biasFlagNumber = globalInput.resultBias[globalInput.finalWeeklyExpiryName] > 0 ? biasFlagNumber + 1 : biasFlagNumber - 1;
+    console.log('### --- biasFlagNumber0 bias:', biasFlagNumber);
 
     //calc if spot is above vwap then increase biasFlagNumber else decrease biasFlagNumber
   let indexLP = globalInput.spotLP;
   // indexVwap = globalInput.atmStrikePrice;
   let indexVwap = await findIndexVwapValue();
-  biasFlagNumber = indexLP > indexVwap ? biasFlagNumber + 1 : biasFlagNumber - 1;
+
+  biasFlagNumber = indexLP > indexVwap ? biasFlagNumber + 2 : biasFlagNumber - 2;
+  console.log('### --- biasFlagNumber vwap:', biasFlagNumber);
 
   //vix (if high vix then decrease biasFlagNumber else increase biasFlagNumber)
   const calcVixVal = await calcVix(api);
   if(calcVixVal > 0) {biasFlagNumber = biasFlagNumber > 0 ? biasFlagNumber - 1 : biasFlagNumber < 0 ? biasFlagNumber + 1 : biasFlagNumber}
-  else if(calcVixVal < 0) {biasFlagNumber = biasFlagNumber > 0 ? biasFlagNumber + 1 : biasFlagNumber < 0 ? biasFlagNumber - 1 : biasFlagNumber}
+  else if(calcVixVal < 0) {biasFlagNumber = biasFlagNumber > 0 ? biasFlagNumber + 1 : biasFlagNumber - 1}
+  console.log('### --- biasFlagNumber vix:', biasFlagNumber);
+
+  
+  //vix (if PNL is positive then move it towards negative biasFlagNumber else bring it closer to 0)
+  const calcPnLValue = await calcPnL(api);
+  if(calcPnLValue < 0) {biasFlagNumber = biasFlagNumber > 0 ? biasFlagNumber - 1 : biasFlagNumber < 0 ? biasFlagNumber + 1 : biasFlagNumber}
+  else if(calcPnLValue > 0) {biasFlagNumber = biasFlagNumber > 0 ? biasFlagNumber + 1 : biasFlagNumber - 1}
+  console.log('### --- biasFlagNumber PnL:', biasFlagNumber);
 
   // set the biasFlag 
   if (biasFlagNumber > 0) {biasFlag = true, globalInput.skipTakingNewOrders = false}
@@ -513,7 +524,7 @@ const getLimitsCash = async () => {
     //   mr_der_a: '938.54',
     //   mr_com_a: '266618.46'
     // }
-    globalInput.limits = Math.floor(+(limits?.cash) + +(limits?.payout));
+    globalInput.limits = Math.floor(+(limits?.collateral) + +(limits?.payout));
     // console.log("Limits: ", globalInput.limits);
 
   } catch (error) {

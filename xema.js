@@ -296,12 +296,12 @@ let limits;
 
 getEMAQtyForGeneric = () => {
   // return debug ? 100 : 
-  // limits?.cash < 800000 ? 
+  // limits?.collateral < 800000 ? 
   // [100, 75, 240, 75, 200, 70, 75][new Date().getDay()] : 
   // [400, 525, 1600, 525, 1050, 490, 525][new Date().getDay()]
 
   return debug ? 100 : 
-  limits?.cash < 2500000 ? 
+  limits?.collateral < 2500000 ? 
   smallAccountQty[new Date().getDay()] : 
   bigAccountQty[new Date().getDay()]
   // bnf early expiry
@@ -592,10 +592,10 @@ postOrderPosTracking = async (data) => {
     // console.log('order placed: ', data)
     str = '\n' + data?.trantype + ' ' + data?.flprc + ' ' + data?.tsym + ' ';
     pnl = await calcPnL(api);
-    send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
+    send_notification((limits?.collateral)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = data?.flprc; 
-      const trailDelta1 = + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
+      const trailDelta1 = + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
       positionProcess.trailPrice = +positionProcess.soldPrice + trailDelta1;
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
@@ -1153,9 +1153,9 @@ const emaMonitorATMs = async () => {
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    const trailDelta = + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
+    const trailDelta = + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
     positionProcess.trailPrice = parseFloat(Math.min((+latestPrice * trailDelta), positionProcess.trailPrice)).toFixed(2)
-    // positionProcess.trailPrice = +positionProcess.soldPrice + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
+    // positionProcess.trailPrice = +positionProcess.soldPrice + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
     
     
     const isDefined = (value) => value !== undefined && value !== null;
@@ -1431,7 +1431,7 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     }
   }
   currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
-  send_notification((limits?.cash)?.substring(0,3) +  ' : ' + biasOutput.bias + ' ' + currentPositionStatus)
+  send_notification((limits?.collateral)?.substring(0,3) +  ' : ' + biasOutput.bias + ' ' + currentPositionStatus)
 }
 
 const setBiasValue = async () => {
@@ -1518,7 +1518,7 @@ const runEma = async () => {
     globalInput.emaLotMultiplierQty = getEMAQtyForGeneric();
     globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty/globalInput.LotSize);
     
-    // console.log(limits?.cash, ' limits')
+    // console.log(limits?.collateral, ' limits')
     // console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
     // console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
     //TODO uncomment

@@ -16,15 +16,16 @@ setInterval(updateCalcVWAPFromFile, 60000);
 // // Initialization / nearest expiry / getAtmStrike
 // jupyter nbconvert --to script gpt.ipynb
 const debug = false;
-const pnlThreshold = -1.5; // 0.5% PnL threshold for exit
-const pnlUpThreshold = 2; // 2% PnL threshold for exit
+const pnlThreshold = -1; // 0.5% PnL threshold for exit
+const pnlUpThreshold = 0.5; // 0.5% PnL threshold for exit
 const smallAccountQty = [75, 75, 75, 75, 75, 75, 75];
 const bigAccountQty = [150, 150, 150, 150, 150, 150, 150];
 const indexDayArray = ['NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY']; //sunday to saturday
 let biasCalcFlag = false;
+let pnlMood = 'neutral';
 
 const today = new Date();
-let isExpiryToday = today.getDay() === 4 || today.getDay() === 3; //4 for thursday and 3 for wednesday
+let isExpiryToday = today.getDay() === 1 || today.getDay() === 2; //1 for monday and 2 for tuesday
 // let isExpiryToday = false;
 function isWeekend() {
   //todo
@@ -320,12 +321,12 @@ let limits;
 
 getEMAQtyForGeneric = () => {
   // return debug ? 100 : 
-  // limits?.cash < 800000 ? 
+  // limits?.collateral < 800000 ? 
   // [100, 75, 240, 75, 200, 70, 75][new Date().getDay()] : 
   // [400, 525, 1600, 525, 1050, 490, 525][new Date().getDay()]
 
   return debug ? 75 : 
-  limits?.cash < 800000 ? 
+  limits?.collateral < 1800000 ? 
   smallAccountQty[new Date().getDay()] : 
   bigAccountQty[new Date().getDay()]
   // bnf early expiry
@@ -619,11 +620,11 @@ postOrderPosTracking = async (data) => {
     // console.log('order placed: ', data)
     str = '\n' + data?.trantype + ' ' + data?.flprc + ' ' + data?.tsym + ' ';
     pnl = await calcPnL(api);
-    send_notification((limits?.cash)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
+    send_notification((limits?.collateral)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = data?.flprc; 
-      const trailDelta1 = + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
+      const trailDelta1 = + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
       positionProcess.trailPrice = +positionProcess.soldPrice + trailDelta1;
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
@@ -994,7 +995,7 @@ async function checkAlert() {
     if (parseFloat(pValue2Var) < parseFloat(cValue1Var) || parseFloat(cValue2Var) < parseFloat(pValue1Var)) {
         let up = parseFloat(pValue2Var) < parseFloat(cValue1Var)
         let trendingUp = parseFloat(pValue1Var) > parseFloat(cExtra3Var)
-        let trendingDown = parseFloat(cValue1Var) > parseFloat(pExtra3Var)
+        let trendingDown = parseFloat(cValue1Var) > parseFloat(pExtra3Var);
 //      vix high or early morning then move away
 //      vix low or not early morning then move closer
         if((up && biasOutput.bias > 0) || (!up && biasOutput.bias < 0) || trendingUp || trendingDown ){
@@ -1002,6 +1003,8 @@ async function checkAlert() {
         }
     }
 }
+
+let isExiting = false; // Add this flag to block new entries during exit
 
 function getTokenByTradingSymbol(tradingSymbol) {
     const option = biasProcess.optionChain?.values.find(option => option?.tsym === tradingSymbol);
@@ -1246,9 +1249,9 @@ const emaMonitorATMs = async () => {
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
     //trail logic
     const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    const trailDelta = + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
+    const trailDelta = + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
     positionProcess.trailPrice = parseFloat(Math.min((+latestPrice * trailDelta), positionProcess.trailPrice)).toFixed(2)
-    // positionProcess.trailPrice = +positionProcess.soldPrice + (( +limits?.cash / 100 ) / globalInput.emaLotMultiplierQty);
+    // positionProcess.trailPrice = +positionProcess.soldPrice + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
     
     const isDefined = (value) => value !== undefined && value !== null;
 
@@ -1269,16 +1272,16 @@ const emaMonitorATMs = async () => {
     // } else {
     //   console.log('No position taken, not sending notification'); 
     // }
-    emaUpFastCall = callemaMedium - callemaSlow > -3;
-    emaUpFastPut = putemaMedium - putemaSlow > -3;
-    prevEmaUpMediumCall = emaUpFastCall;
-    prevEmaUpMediumPut = emaUpFastPut;
-    return [prevEmaUpMediumCall, prevEmaUpMediumPut];
+    emaUpFastCall = callemaMedium - callemaSlow > -2;
+    emaUpFastPut = putemaMedium - putemaSlow > -2;
+    prevEmaUpFastCall = emaUpFastCall;
+    prevEmaUpFastPut = emaUpFastPut;
+    return [prevEmaUpFastCall, prevEmaUpFastPut];
   } catch (error) {
     // handle the exception locally
     console.error("Child method encountered an exception:", error.message);
     // optionally, rethrow the exception if needed
-    return [prevEmaUpMediumCall, prevEmaUpMediumPut];
+    return [prevEmaUpFastCall, prevEmaUpFastPut];
   }
 }
 
@@ -1311,7 +1314,7 @@ function resetTrailPrice() {
 
 let lastExecutionTime = 0;
 const exitSellsAndOrStop = async (stop = false) => {
-
+  isExiting = stop ? true : false; // Set exit mode
   await delay(1000);
   pnlTemp1 = await calcPnL(api);
   const pnlValue = typeof pnlTemp1 === 'string' ? parseFloat(pnlTemp1.replace('%', '')) : pnlTemp1;
@@ -1333,12 +1336,14 @@ const exitSellsAndOrStop = async (stop = false) => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
   if (positionProcess.smallestPutPosition?.tsym) {
       await exitXemaLong();
+      longPositionTaken = false;
   }
   if (positionProcess.smallestCallPosition?.tsym) {
       await exitXemaShort();
+      shortPositionTaken = false;
   }
   if (stop) {
-      send_notification('exiting all and stopping', true);
+      send_notification('exiting all and stopping');
       setTimeout(function() {
           cancelOpenOrders();
       }, 2000);
@@ -1347,11 +1352,19 @@ const exitSellsAndOrStop = async (stop = false) => {
       }, 4000);
       setTimeout(function() {
           cleanupAndExit();
+          // Also reset position flags after cleanup
+          longPositionTaken = false;
+          shortPositionTaken = false;
+          isExiting = false; // Reset after exit
       }, 10000);
   } else {
       if (longPositionTaken || shortPositionTaken) {
           send_notification('exiting all');
       }
+      // Also reset position flags after normal exit
+      longPositionTaken = false;
+      shortPositionTaken = false;
+      isExiting = false; // Reset after exit
   }
 }
 
@@ -1411,6 +1424,7 @@ const exitXemaLong = async () => {
     send_notification(`pnlTemp1: ${pnlValue} is not less than ${pnlThreshold} nor greater than ${pnlUpThreshold}`);  }
   }
 const enterXemaLong = async () => {
+  if (isExiting) return; // Block entry during exit
   let tempTradingPutSymbol = biasProcess.atmPutSymbol;
   // if(isTimeEqualsNotAfterProps(14,40,false)) {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
   // if(globalInput.pickedExchange === 'BFO') {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
@@ -1463,6 +1477,7 @@ const exitXemaShort = async () => {
   }
 }
 const enterXemaShort = async () => {
+  if (isExiting) return; // Block entry during exit
 
   let tempTradingCallSymbol = biasProcess.atmCallSymbol;
   // if(isTimeEqualsNotAfterProps(14,40,false)) {tempTradingPutSymbol = biasProcess.itmCallSymbol;}
@@ -1558,7 +1573,17 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
 
   currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
   pnl = await calcPnL(api);
-  send_notification((limits?.cash)?.substring(0,3) +  ' : ' + biasOutput.bias + ' ' + currentPositionStatus + ' PnL: ' + pnl);
+  //if pnl is greater than 0.25% then send notification good
+  
+  if (pnl > 0.25) {
+    pnlMood = 'good';
+  } else if (pnl < -0.25) {
+    pnlMood = 'bad';
+  } else {
+    pnlMood = 'neutral';
+  }
+  send_notification((limits?.collateral)?.substring(0,3) + ' PnL: ' + pnlMood + ' : ' + biasOutput.bias + ' ' + currentPositionStatus);
+  console.log(' PnL: ' + pnl);
 }
 
 const setBiasValue = async () => {
@@ -1645,7 +1670,7 @@ const runEma = async () => {
     globalInput.emaLotMultiplierQty = getEMAQtyForGeneric();
     globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty/globalInput.LotSize);
     
-    // console.log(limits?.cash, ' limits')
+    // console.log(limits?.collateral, ' limits')
     // console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
     // console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
     //TODO uncomment

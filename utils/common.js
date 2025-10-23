@@ -8,7 +8,6 @@ let apiLocal;
 const bot = new TelegramBot(telegramBotToken, { polling: true });
 let interval = 10000, setCustomInterval = value => interval = value ? interval + 50000 : 10000, getCustomInterval = () => interval;
 let stopSignal = false, setStopSignal = value => stopSignal = value, getStopSignal = () => stopSignal;
-const getIsBFO = () => [1, 5, 6].includes(new Date().getDay());
 let vixQuoteCalc = 0;
 
 const isTimeAfter330PM = () => {
@@ -18,20 +17,25 @@ const isTimeAfter330PM = () => {
 const isTimeAfter328PM = () => {
   return isTimeEqualsNotAfterProps(15,28,false);
 };
+const isTimeAfter128PM = () => {
+  return isTimeEqualsNotAfterProps(13,28,false);
+};
 const isTimeBefore1147PM = () => {
   return !isTimeEqualsNotAfterProps(23,17,false);
 };
 const isTimeAfter1147PM = () => !(isTimeAfter330PM && isTimeBefore1147PM());
-// let pickedExchange = debug ? 'BFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
-// getPickedIndex = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'FINNIFTY', 'BANKNIFTY', 'NIFTY', 'SENSEX', 'BANKEX'][new Date().getDay()] || 'NIFTY';
-let pickedExchange = debug ? 'NFO' : 'NFO';
-getPickedIndex = () => debug ? 'NIFTY' : 'NIFTY';
+const getIsBFO = () => [1, 2, 5, 6].includes(new Date().getDay());
+
+let pickedExchange = debug ? 'BFO' : isTimeAfter330PM() ? 'MCX' : getIsBFO() ? 'BFO' : 'NFO';
+getPickedIndex = () => debug ? 'NIFTY' : getIsBFO() ? 'SENSEX' : 'NIFTY';
+// let pickedExchange = debug ? 'NFO' : 'BFO';
+// getPickedIndex = () => debug ? 'NIFTY' : 'NIFTY';
 const setPickedExchange = value => pickedExchange = value, getPickedExchange = () => pickedExchange;
 const send_notification = async (message, me = false) => console.log(message) || (!debug && message && await bot.sendMessage(me ? chat_id_me : chat_id, me ? message : message.replace(/\) /g, ")\n")).catch(console.error));
 let calcBias = 0;
-let multiplier = 2;
+let multiplier = 1;
 let exitMTM = -1500;
-let gainExitMTM = 350;
+let gainExitMTM = 500;
 let magicNumber = 750;
 let aggressiveMagicNumber = 850;
 let slOrders = '';
@@ -676,7 +680,7 @@ const takeActionCallCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: callPositions[2],
-            quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
+            quantity: Math.max(Math.abs(smallestCallPosition?.netqty) - Math.abs(+smallestCallPosition?.ls), Math.abs(+smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'MKT',
             price: 0,
@@ -688,7 +692,7 @@ const takeActionCallCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: callPositions[2],
-            quantity: (Math.abs(smallestCallPosition?.netqty) - Math.abs(smallestCallPosition?.ls)).toString(),
+            quantity: Math.max(Math.abs(smallestCallPosition?.netqty) - Math.abs(+smallestCallPosition?.ls), Math.abs(+smallestCallPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
             price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)+2), (Number(localSLPrice[1]))),
@@ -734,7 +738,7 @@ const takeActionPutCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: putPositions[2],
-            quantity: (Math.abs(smallestPutPosition?.netqty) - Math.abs(+smallestPutPosition?.ls)).toString(),
+            quantity: Math.max(Math.abs(smallestPutPosition?.netqty) - Math.abs(+smallestPutPosition?.ls), Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'MKT',
             price: 0,
@@ -746,7 +750,7 @@ const takeActionPutCloser = async (api) => {
             product_type: 'M',
             exchange: getPickedExchange(),
             tradingsymbol: putPositions[2],
-            quantity: (Math.abs(smallestPutPosition?.netqty)  - Math.abs(+smallestPutPosition?.ls)).toString(),
+            quantity: Math.max(Math.abs(smallestPutPosition?.netqty) - Math.abs(+smallestPutPosition?.ls), Math.abs(+smallestPutPosition?.ls)).toString(),
             discloseqty: 0,
             price_type: 'SL-LMT',
             price: Math.min(Number(Math.round(Number(localSLPrice[0] || 10) * 4)+2), (Number(localSLPrice[1]))),
@@ -811,7 +815,7 @@ async function getCloserTokenLTP(api, item, level=1) {
 async function processOrders(api, exchange = 'NFO') {
   try {
     if(exchange != 'MCX') {
-      isTimeAfter328PM() && await exitAll(api);
+      isTimeAfter128PM() && await exitAll(api);
     }
     const orders = await api.get_orderbook();
     const filtered_data = Array.isArray(orders) ? orders.filter(item => item.status === 'TRIGGER_PENDING' && (exchange === 'MCX' || item?.instname === 'OPTIDX')): [];
@@ -852,10 +856,21 @@ async function processOrders(api, exchange = 'NFO') {
 
 async function isCrudeOrderAlreadyPlaced(api) {
     // return false;
-    const orders = await api.get_orderbook();
-    const filtered_data = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('Pawan') && item?.status === 'COMPLETE') : [];
-    // console.log(filtered_data[0],filtered_data[1])
-    return !(filtered_data[0] == undefined || filtered_data[0]?.remarks?.includes('PawanExit') || filtered_data[1]?.remarks?.includes('PawanExit'));
+    // const orders = await api.get_orderbook();
+    // const filtered_data = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('Pawan2') && item?.status === 'COMPLETE') : [];
+    // // console.log(filtered_data[0],filtered_data[1])
+    // return !(filtered_data[0] == undefined || filtered_data[0]?.remarks?.includes('Pawan2Exit') || filtered_data[1]?.remarks?.includes('Pawan2Exit'));
+
+    const positions = await api.get_positions();
+    // Check for any open CRUDEOIL position (netqty != 0)
+    const openCrudePositions = Array.isArray(positions)
+        ? positions.filter(item =>
+            item.tsym && item.tsym.toUpperCase().includes('CRUDEOIL') &&
+            Math.abs(Number(item.netqty)) > 0
+        )
+        : [];
+    return openCrudePositions.length > 0;
+
 }
 
 async function crudeStraddlePlaceOrder(api, exchange='MCX') {
@@ -866,7 +881,17 @@ const monthAbbreviation = new Date().toLocaleString('default', { month: 'short' 
 
 let query = `CRUDEOIL`;
 let futureObj = await api.searchscrip(exchange='MCX', searchtext=query)
-let futureToken = futureObj.values[3].token; //258003 //3 as it skips crudeoil, crudeoilm and its future
+
+let futureValues = futureObj.values.filter(
+  v => v.tsym.toUpperCase().includes('CRUDEOIL') && !v.tsym.toUpperCase().includes('CRUDEOILM')
+);
+// console.log(futureValues, 'futureValues');
+if (!futureValues[0]) {
+  console.log('No valid CRUDEOIL contract found!');
+  return null;
+}
+let futureToken = futureValues[0].token; // Use the first CRUDEOIL token
+// let futureToken = futureObj.values[3].token; //258003 //3 as it skips crudeoil, crudeoilm and its future
 
 const Spot = await fetchSpotPrice(api, futureToken, 'MCX');
     if (!Spot) { console.log('Not able to find the spot'); return null; }
@@ -880,15 +905,25 @@ debug && console.log(ATMCEStrike, ATMPEStrike, 'ATMCEStrike')
 //find CE and PE
 query = `CRUDEOIL CE ${ATMCEStrike}`;
 let ATMCESearchObj = await api.searchscrip(exchange='MCX', searchtext=query)
-debug && console.log(ATMCESearchObj.values[0], ATMCESearchObj.values[1], 'ATMCESearchObjs')
-let ATMCEToken = ATMCESearchObj.values[0].token;
-let ATMCESym = ATMCESearchObj.values[0].tsym;
+let ATMCESearchValues = ATMCESearchObj.values.filter(
+  v => v.tsym.toUpperCase().includes('CRUDEOIL') && !v.tsym.toUpperCase().includes('CRUDEOILM')
+);
+let ATMCEToken = ATMCESearchValues[0]?.token;
+let ATMCESym = ATMCESearchValues[0]?.tsym;
+
+// debug && console.log(ATMCESearchObj.values[0], ATMCESearchObj.values[1], 'ATMCESearchObjs')
+// let ATMCEToken = ATMCESearchObj.values[0].token;
+// let ATMCESym = ATMCESearchObj.values[0].tsym;
 
 query = `CRUDEOIL PE ${ATMPEStrike}`;
 let ATMPESearchObj = await api.searchscrip(exchange='MCX', searchtext=query)
-
-let ATMPEToken = ATMPESearchObj.values[0].token;
-let ATMPESym = ATMPESearchObj.values[0].tsym;
+let ATMPESearchValues = ATMPESearchObj.values.filter(
+  v => v.tsym.toUpperCase().includes('CRUDEOIL') && !v.tsym.toUpperCase().includes('CRUDEOILM')
+);
+let ATMPEToken = ATMPESearchValues[0]?.token;
+let ATMPESym = ATMPESearchValues[0]?.tsym;
+// let ATMPEToken = ATMPESearchObj.values[0].token;
+// let ATMPESym = ATMPESearchObj.values[0].tsym;
 debug && console.log(ATMCESym, ' ', ATMPESym) //CRUDEOIL14DEC23C6250   CRUDEOIL14DEC23P6250
 
 const SpotCEObj = await fetchSpotPrice(api, ATMCEToken, 'MCX');
@@ -1019,7 +1054,7 @@ let orderCE = {
     discloseqty: (100*multiplier).toString(),// multiplier
     price_type: 'LMT',
     price: SpotCEObj.bp5 || 0,
-    remarks: 'PawanEntryCrudeCEAPI'
+    remarks: 'Pawan2EntryCrudeCEAPI'
 }
 !debug && await api.place_order(orderCE);
 
@@ -1036,7 +1071,7 @@ let orderPE = {
     discloseqty: (100*multiplier).toString(), // multiplier
     price_type: 'LMT',
     price: SpotPEObj.bp5 || 0,
-    remarks: 'PawanEntryCrudePEAPI'
+    remarks: 'Pawan2EntryCrudePEAPI'
 }
 
 debug && console.log(orderPE)
@@ -1053,7 +1088,7 @@ let orderCESL = {
     price_type: 'SL-LMT',
     price: Number(Math.round(Number(SpotCEObj.lp || 10) * 1.5)-5),
     trigger_price: Number(Math.round(Number(SpotCEObj.lp || 10) * 1.5)-10),
-    remarks: 'PawanSLEntryCEAPI'
+    remarks: 'Pawan2SLEntryCEAPI'
 }
 
 !debug && await api.place_order(orderCESL);
@@ -1068,7 +1103,7 @@ let orderPESL = {
     price_type: 'SL-LMT',
     price: Number(Math.round(Number(SpotPEObj.lp || 10) * 1.5)-5),
     trigger_price: Number(Math.round(Number(SpotPEObj.lp || 10) * 1.5)-10),
-    remarks: 'PawanSLEntryPEAPI'
+    remarks: 'Pawan2SLEntryPEAPI'
 }
 !debug && await api.place_order(orderPESL);
 
@@ -1079,14 +1114,14 @@ return;
 async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
     // calculate MTM every second from open positions - if possible use websocket
     const orders = await api.get_orderbook();
-    const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('Pawan')) : [];
+    const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('Pawan2')) : [];
 
-    const orders_exitedAlready = filtered_data_API[0]?.remarks?.includes('PawanExit') &&  filtered_data_API[1]?.remarks?.includes('PawanExit');
+    const orders_exitedAlready = filtered_data_API[0]?.remarks?.includes('Pawan2Exit') &&  filtered_data_API[1]?.remarks?.includes('Pawan2Exit');
     if (orders_exitedAlready || filtered_data_API.length === 0) { console.log('No open straddle'); return;}
 
-    const filtered_data_SL = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('PawanSLEntry') && item?.status === 'TRIGGER_PENDING'): [];
+    const filtered_data_SL = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('Pawan2SLEntry') && item?.status === 'TRIGGER_PENDING'): [];
     // console.log(filtered_data_SL, 'filtered_data_SL')
-    const filtered_data = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('PawanEntry') && item?.status === 'COMPLETE') : [];
+    const filtered_data = Array.isArray(orders) ? orders.filter(item => item?.remarks?.includes('Pawan2Entry') && item?.status === 'COMPLETE') : [];
     if (filtered_data.length === 0) { console.log('No open straddle'); return null;}
     debug && console.log(filtered_data[0].token, filtered_data[0].avgprc, ' ',filtered_data[1].token, filtered_data[1].avgprc,  'filtered_data')
     // console.log(filtered_data, 'filtered_data')
@@ -1119,7 +1154,7 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
                     discloseqty: (100*multiplier).toString(),// multiplier
                     price_type: 'LMT',
                     price: SpotObj1.sp5,
-                    remarks: 'PawanExit1API'
+                    remarks: 'Pawan2Exit1API'
                 }
 
                 !debug && await api.place_order(order1);
@@ -1133,7 +1168,7 @@ async function crudeStraddlePostOrderPlacement(api, exchange='MCX') {
                     discloseqty: (100*multiplier).toString(), // multiplier
                     price_type: 'LMT',
                     price: SpotObj2.sp5,
-                    remarks: 'PawanExit2API'
+                    remarks: 'Pawan2Exit2API'
                 }
                 !debug && await api.place_order(order2);
                 send_notification(`Exited with ${mtmValue} Rs.`, true)

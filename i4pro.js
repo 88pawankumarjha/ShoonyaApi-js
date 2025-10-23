@@ -7,7 +7,7 @@ const maxLossPerOrderPercent = 0.15;
 const maxLossPerDayPercent = 1.5, maxGainPerDayPercent = 1.5;
 let bookProfitMark = 0.2;
 let limitPerLot = 500000, waitAfterLoss = 25, waitAfterGainInit = 15, waitAfterGain = 10;
-let pnl = '', globalInputCaller = { quantityInLots: 0 };
+let pnl = '', globalInputCaller = { quantityInLots: 1 };
 let soldOptionPrice = 0;
 let SLMinorProfitMark = 0.12;
 let profitInRs = 0, profitInPercent = 0;
@@ -23,7 +23,13 @@ const executeI4Pro = async (api, hasRunFindNearestExpiry) => {
     }
 };
 
-const getQuantityInLots = () => globalInputCaller.quantityInLots = Math.floor(globalInputCaller?.limits / limitPerLot);
+const getQuantityInLots = () => {
+    globalInputCaller.quantityInLots = Math.floor(globalInputCaller?.limits / limitPerLot);
+    // Ensure at least 1 lot
+    if (!globalInputCaller.quantityInLots || globalInputCaller.quantityInLots < 1) {
+        globalInputCaller.quantityInLots = 1;
+    }
+};
 
 const getLTPfromSymbol = async (api, tsym) => {
     try {
@@ -52,7 +58,11 @@ const placeSLOrder = async (api) => {
     try {
         const localSLPrice = await getLTPfromSymbol(api, globalInputCaller.optionInAction);
         const maxLossPerOrder = (globalInputCaller?.limits / 100) * maxLossPerOrderPercent;
-        const calcQuantity = globalInputCaller.quantityInLots * globalInputCaller.LotSize;
+        let calcQuantity = globalInputCaller.quantityInLots * globalInputCaller.LotSize;
+        // Ensure quantity is at least 1 lot if 0
+        if (!calcQuantity || calcQuantity === 0) {
+            calcQuantity = 1 * globalInputCaller.LotSize;
+        }
         const calcSLPrice = Number(localSLPrice[0] || 10) + (maxLossPerOrder / calcQuantity);
 
         const orderSubCESL = {
@@ -70,9 +80,14 @@ const placeSLOrder = async (api) => {
 
 const placeSellOrder = async (api) => {
     try {
+        let sellQuantity = globalInputCaller.quantityInLots * globalInputCaller.LotSize;
+        // Ensure quantity is at least 1 lot if 0
+        if (!sellQuantity || sellQuantity === 0) {
+            sellQuantity = 1 * globalInputCaller.LotSize;
+        }
         const orderSubCE = {
             buy_or_sell: 'S', product_type: 'M', exchange: globalInputCaller.pickedExchange,
-            tradingsymbol: globalInputCaller.optionInAction, quantity: globalInputCaller.quantityInLots * globalInputCaller.LotSize,
+            tradingsymbol: globalInputCaller.optionInAction, quantity: sellQuantity,
             discloseqty: 0, price_type: 'MKT', price: 0, remarks: 'CommonOrderCEEntryAPI'
         };
         globalInputCaller.soldOptionToken = globalInputCaller.atmStrikeToken;
@@ -125,9 +140,9 @@ const exitAll = async (api) => {
         const positionsData = await api.get_positions();
         for (let i = 0; i < positionsData.length; i++) {
             if (parseInt(positionsData[i].netqty) < 0) {
+                await cancelOpenOrders(api);
                 await exitOrder(positionsData[i], api);
                 await delay(1500);
-                await cancelOpenOrders(api);
             }
         }
     } catch (error) {
@@ -177,8 +192,8 @@ const placeOrderSet = async (api) => {
         return
     }
     try {
-        await placeSLOrder(api);
         await placeSellOrder(api);
+        await placeSLOrder(api);
     } catch (error) {
         console.error("Error in placeOrderSet:", error);
     }
@@ -345,4 +360,4 @@ const i4pro = async (api, hasRunFindNearestExpiry) => {
 // TODO:
 // once the LTP has moved to profit then it should shift the SL order to minor profit.
 
-module.exports = i4pro; 
+module.exports = i4pro;

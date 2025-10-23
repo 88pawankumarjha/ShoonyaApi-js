@@ -31,7 +31,15 @@ module.exports.calcVix = async (api) => {
 
 module.exports.calcPnL = async (api, mcxOnly = false) => {
 let positions = await api?.get_positions();
+if (!Array.isArray(positions)) {
+  positions = []; // or handle as needed
+}
+if(!mcxOnly) {positions = positions.filter(option => option.instname == 'OPTIDX')} //instname: 'OPTIDX',
 let limits = await api?.get_limits()
+
+// console.log(positions, '### positions')
+// console.log(limits, '### limits')
+
 
 if(mcxOnly) {positions = positions.filter(option => option.exch == 'MCX')}
 const total_pnl = positions && positions.length > 0 ? positions.reduce((acc, pos) => {
@@ -39,7 +47,7 @@ const total_pnl = positions && positions.length > 0 ? positions.reduce((acc, pos
   const r_pnl = parseFloat(pos?.rpnl);
   return acc + ur_mtm + r_pnl;
 }, 0) : 0;
-return parseFloat((total_pnl/limits?.cash)*100).toFixed(2);
+return parseFloat((total_pnl/limits?.collateral)*100).toFixed(2);
 };
 
 
@@ -79,6 +87,7 @@ module.exports.idxNameOcGap = new Map([
   ['NIFTY', '50'],
   ['SENSEX', '100'],
   ['CRUDEOIL', '50'],
+  ['NATURALGAS', '5'],
 ]);
 //nearest ocGap
 module.exports.idxNameTokenMap = new Map([
@@ -89,6 +98,7 @@ module.exports.idxNameTokenMap = new Map([
   ['NIFTY', '26000'],
   ['SENSEX', '1'],
   ['CRUDEOIL', '0'],
+  ['NATURALGAS', '0'],
 ]);
 
 module.exports.downloadCsv = async (url, destination, axios, fs) => {
