@@ -3,7 +3,7 @@ let calcVWAP;
 function updateCalcVWAPFromFile() {
   try {
     calcVWAP = parseFloat(
-      fs.readFileSync('C:/Users/88paw/OneDrive/Documents/aws/vwapValue.txt', 'utf-8').trim()
+      fs.readFileSync('C:/Users/88paw/OneDrive/Documents/aws/vwapValue2.txt', 'utf-8').trim()
     );
     // console.log('### VWAP value read from file:', calcVWAP);
   } catch (e) {
@@ -16,10 +16,14 @@ setInterval(updateCalcVWAPFromFile, 60000);
 // // Initialization / nearest expiry / getAtmStrike
 // jupyter nbconvert --to script gpt.ipynb
 const debug = false;
-const pnlThreshold = -1; // 0.5% PnL threshold for exit
-const pnlUpThreshold = 0.5; // 0.5% PnL threshold for exit
-const smallAccountQty = [75, 75, 75, 75, 75, 75, 75];
-const bigAccountQty = [150, 150, 150, 150, 150, 150, 150];
+const pnlThreshold = -2.00; // 0.75% PnL threshold for exit
+const pnlUpThreshold = 1.5; // 0.5% PnL threshold for exit
+const smallAccountQty = [65, 65, 65, 65, 65, 65, 65];
+const bigAccountQty = [195, 195, 195, 195, 195, 195, 195];
+const smallAccountDailyQty = 65;
+const bigAccountDailyQty = 195;
+const smallAccountLot = [1, 1, 1, 1, 1, 1, 1];
+const bigAccountLot = [3, 3, 3, 3, 3, 3, 3];
 const indexDayArray = ['NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY']; //sunday to saturday
 let biasCalcFlag = false;
 let pnlMood = 'neutral';
@@ -325,13 +329,19 @@ getEMAQtyForGeneric = () => {
   // [100, 75, 240, 75, 200, 70, 75][new Date().getDay()] : 
   // [400, 525, 1600, 525, 1050, 490, 525][new Date().getDay()]
 
-  return debug ? 75 : 
-  limits?.collateral < 1800000 ? 
+  return debug ? 65 : 
+  limits?.collateral < 700000 ? 
   smallAccountQty[new Date().getDay()] : 
   bigAccountQty[new Date().getDay()]
   // bnf early expiry
   // [100, 300, 300, 300, 800, 250, 75][new Date().getDay()] : 
   // [100, 600, 720, 720, 1700, 500, 75][new Date().getDay()]
+  }
+
+  const getDailyQty = () => {
+    // Returns daily quantity (number). Respects debug and limits collateral threshold.
+    if (debug) return smallAccountDailyQty;
+    return limits?.collateral < 700000 ? smallAccountDailyQty : bigAccountDailyQty;
   }
 
   getFreezeQty = () => {
@@ -1202,14 +1212,16 @@ const ema9_21_3ValuesIndicators = async (params) => {
 
 const emaMonitorATMs = async () => {
   try{
-    let tempAtmStrike = await getAtmStrike()
-    if (tempAtmStrike!= biasProcess.atmStrike){
-      if (longPositionTaken || shortPositionTaken) { await triggerATMChangeActions() }
-      send_notification('ATM changed')
-      resetBiasProcess();
-      await updateITMSymbolfromOC()
-      await dynSubs();
-    }
+
+    //comment out to disable change on ATM
+    // let tempAtmStrike = await getAtmStrike()
+    // if (tempAtmStrike!= biasProcess.atmStrike){
+    //   if (longPositionTaken || shortPositionTaken) { await triggerATMChangeActions() }
+    //   send_notification('ATM changed')
+    //   resetBiasProcess();
+    //   await updateITMSymbolfromOC()
+    //   await dynSubs();
+    // }
 
     // Get current date and time in IST
     const currentDateIST = new Date();
@@ -1405,7 +1417,7 @@ const exitXemaLong = async () => {
     product_type: 'M',
     exchange: globalInput.pickedExchange,
     tradingsymbol: positionProcess.smallestPutPosition?.tsym,
-    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    quantity: getDailyQty().toString(),
     discloseqty: 0,
     price_type: 'LMT',
     price: Math.ceil(+positionProcess.smallestPutPosition?.lp + (+positionProcess.smallestPutPosition?.lp/10)),
@@ -1435,7 +1447,7 @@ const enterXemaLong = async () => {
     product_type: 'M',
     exchange: globalInput.pickedExchange,
     tradingsymbol: tempTradingPutSymbol,
-    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    quantity: getDailyQty().toString(),
     discloseqty: 0,
     price_type: 'LMT',
     price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) : 0.1 : 0.1,
@@ -1456,7 +1468,7 @@ const exitXemaShort = async () => {
     product_type: 'M',
     exchange: globalInput.pickedExchange,
     tradingsymbol: positionProcess.smallestCallPosition?.tsym,
-    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    quantity: getDailyQty().toString(),
     discloseqty: 0,
     price_type: 'LMT',
     price: Math.ceil(+positionProcess.smallestCallPosition?.lp + (+positionProcess.smallestCallPosition?.lp/10)),
@@ -1490,7 +1502,7 @@ const enterXemaShort = async () => {
     product_type: 'M',
     exchange: globalInput.pickedExchange,
     tradingsymbol: tempTradingCallSymbol,
-    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    quantity: getDailyQty().toString(),
     discloseqty: 0,
     price_type: 'LMT',
     price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) : 0.1 : 0.1,
@@ -1513,7 +1525,7 @@ const enterXemaBuyCall = async () => {
     product_type: 'M',
     exchange: globalInput.pickedExchange,
     tradingsymbol: nearestCETsym,
-    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    quantity: getDailyQty().toString(),
     discloseqty: 0,
     price_type: 'LMT',
     price: Math.ceil(+quotesResponse.sp5 +3),
@@ -1532,7 +1544,7 @@ const enterXemaBuyPut = async () => {
     product_type: 'M',
     exchange: globalInput.pickedExchange,
     tradingsymbol: nearestPETsym,
-    quantity: Math.abs(globalInput.LotSize * globalInput.emaLotMultiplier).toString(),
+    quantity: getDailyQty().toString(),
     discloseqty: 0,
     price_type: 'LMT',
     price: Math.ceil(+quotesResponse.sp5 +3),
@@ -1542,9 +1554,20 @@ const enterXemaBuyPut = async () => {
   await my_default_place_order(order);
   send_notification('bought hedge put', true)
 }
+
 async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
   // let biasCalcFlag = isExpiryToday ? biasOutput.bias > 0 : biasOutput.bias <= 0; // if near expiry today, then go with bias calculation
-  let biasCalcFlag = biasProcess.spotObject?.lp > calcVWAP ? true : false;
+  
+  //alternate bias calculation
+  // let biasCalcFlag = biasProcess.spotObject?.lp > calcVWAP ? true : false;
+  // only toggle bias when we have no current position to avoid flipping while in a trade
+  if (typeof currentPositionStatus === 'undefined' || currentPositionStatus === 'No Position') {
+    biasCalcFlag = !biasCalcFlag;
+    console.log('biasCalcFlag toggled (no position).');
+  } else {
+    console.log('biasCalcFlag unchanged (currentPositionStatus: ', currentPositionStatus, ').');
+  }
+
   console.log('biasCalcFlag: ', biasCalcFlag, '\ncalcVWAP: ', calcVWAP, '\ntime: ', new Date().toLocaleTimeString("en-IN", {timeZone: "Asia/Kolkata"}), '\nspotObject.lp: ', biasProcess.spotObject?.lp);
   // biasCalcFlag = false ? biasOutput.bias > 0 : biasOutput.bias <= 0; // if near expiry today, then go with bias calculation
   if(biasCalcFlag){

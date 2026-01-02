@@ -2,8 +2,8 @@
 // jupyter nbconvert --to script gpt.ipynb
 const futureOffset = 0;
 // Add these at the top (or near your config section)
-const maxLossThreshold = -0.75;
-const maxProfitThreshold = 0.5;
+const maxLossThreshold = -2;
+const maxProfitThreshold = 1.5;
 
 const debug = false;
 let inputProp = true; // true for XEma logic
@@ -83,9 +83,14 @@ let globalInput = {
   LotSize: undefined,
   emaLotMultiplier: 1,
   multiplier: 1,
+  // When true, all B (buy) become S (sell) and S become B
+  invertBuySell: false,
 };
 globalInput.token = idxNameTokenMap.get(globalInput.indexName);
 globalInput.ocGap = idxNameOcGap.get(globalInput.indexName);
+
+// Helper to swap buy/sell when `globalInput.invertBuySell` is true
+const swapSide = (side) => (globalInput.invertBuySell ? (side === 'B' ? 'S' : side === 'S' ? 'B' : side) : side);
 let biasProcess = {
   optionChain: undefined,
   ocCallOptions: undefined,
@@ -980,7 +985,7 @@ async function takeAction(goingUp) {
   }
 
   let orderCE = {
-    buy_or_sell: 'B',
+    buy_or_sell: swapSide('B'),
     product_type: 'I',
     exchange: globalInput.pickedExchange,
     tradingsymbol: positionProcess.smallestCallPosition?.tsym,
@@ -993,7 +998,7 @@ async function takeAction(goingUp) {
 
 
   let orderPE = {
-    buy_or_sell: 'B',
+    buy_or_sell: swapSide('B'),
     product_type: 'I',
     exchange: globalInput.pickedExchange,
     tradingsymbol: positionProcess.smallestPutPosition?.tsym,
@@ -1014,7 +1019,7 @@ async function takeAction(goingUp) {
   // console.log(orderSubmissivePosition, 'orderSubmissivePosition')
 
   let orderAggressiveCE = {
-    buy_or_sell: 'S',
+    buy_or_sell: swapSide('S'),
     product_type: 'I',
     exchange: globalInput.pickedExchange,
     tradingsymbol: orderAggressiveCallPosition,
@@ -1026,7 +1031,7 @@ async function takeAction(goingUp) {
   }
 
   let orderSubmissiveCE = {
-    buy_or_sell: 'S',
+    buy_or_sell: swapSide('S'),
     product_type: 'I',
     exchange: globalInput.pickedExchange,
     tradingsymbol: orderSubmissiveCallPosition,
@@ -1038,7 +1043,7 @@ async function takeAction(goingUp) {
   }
 
   let orderAggressivePE = {
-    buy_or_sell: 'S',
+    buy_or_sell: swapSide('S'),
     product_type: 'I',
     exchange: globalInput.pickedExchange,
     tradingsymbol: orderAggressivePutPosition,
@@ -1050,7 +1055,7 @@ async function takeAction(goingUp) {
   }
 
   let orderSubmissivePE = {
-    buy_or_sell: 'S',
+    buy_or_sell: swapSide('S'),
     product_type: 'I',
     exchange: globalInput.pickedExchange,
     tradingsymbol: orderSubmissivePutPosition,
@@ -1300,7 +1305,7 @@ const dynSubs = async () => {
 
 const long = async (symbol, qty) => {
   let orderCE = {
-    buy_or_sell: 'B',
+    buy_or_sell: swapSide('B'),
     product_type: 'M',
     exchange: 'MCX',
     tradingsymbol: symbol || 'NATURALGAS14DEC23P6700',
@@ -1322,7 +1327,7 @@ const long = async (symbol, qty) => {
 }
 const short = async (symbol, qty) => {
   let orderCE = {
-    buy_or_sell: 'S',
+    buy_or_sell: swapSide('S'),
     product_type: 'M',
     exchange: 'MCX',
     tradingsymbol: symbol || 'NATURALGAS14DEC23P6700',
@@ -2062,6 +2067,19 @@ const setNearestCrudeFutureToken = async () => {
   let query = `NATURALGAS`;
   let futureObj = await api.searchscrip(exchange = 'MCX', searchtext = query)
   let futureToken = futureObj.values[0].token; //258003 //3 as it skips NATURALGAS, NATURALGASm and its future
+  // console.log(futureObj.values[0], ' : @@@ Obj for NATURALGAS');
+//   {
+//   exch: 'MCX',
+//   token: '401',
+//   tsym: 'NATURALGAS',
+//   nontrd: '1',
+//   instname: 'COM',
+//   symname: 'NATURALGAS',
+//   seg: 'COM',
+//   pp: '2',
+//   ls: '1250',
+//   ti: '0.10'
+// } 
   // let futureToken = futureObj.values[5].token; //258003 //next month
   globalInput.token = futureToken;
 
@@ -2077,7 +2095,7 @@ runEma = async () => {
     await startWebsocket();
     await updateITMSymbolfromOC();
     limits = await api.get_limits()
-    globalInput.emaLotMultiplier = limits?.collateral < 700000 ? 1 : 2;
+    globalInput.emaLotMultiplier = limits?.collateral < 700000 ? 1 : 3;
     intervalId = setInterval(getEma, 1000);
   } catch (error) {
     console.log(error)
