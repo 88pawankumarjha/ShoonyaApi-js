@@ -1213,15 +1213,15 @@ const ema9_21_3ValuesIndicators = async (params) => {
 const emaMonitorATMs = async () => {
   try{
 
-    //comment out to disable change on ATM
-    // let tempAtmStrike = await getAtmStrike()
-    // if (tempAtmStrike!= biasProcess.atmStrike){
-    //   if (longPositionTaken || shortPositionTaken) { await triggerATMChangeActions() }
-    //   send_notification('ATM changed')
-    //   resetBiasProcess();
-    //   await updateITMSymbolfromOC()
-    //   await dynSubs();
-    // }
+    //commented out to disable change actions on ATM
+    let tempAtmStrike = await getAtmStrike()
+    if (tempAtmStrike!= biasProcess.atmStrike){
+      // if (longPositionTaken || shortPositionTaken) { await triggerATMChangeActions() }
+      send_notification('ATM changed')
+      resetBiasProcess();
+      await updateITMSymbolfromOC()
+      await dynSubs();
+    }
 
     // Get current date and time in IST
     const currentDateIST = new Date();
