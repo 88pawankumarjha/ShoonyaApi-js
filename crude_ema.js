@@ -2053,7 +2053,7 @@ runEma = async () => {
     await startWebsocket();
     await updateITMSymbolfromOC();
     limits = await api.get_limits()
-    globalInput.emaLotMultiplier = limits?.collateral < 1800000 ? 1 : 2;
+    globalInput.emaLotMultiplier = limits?.collateral < 700000 ? 1 : 2;
     intervalId = setInterval(getEma, 1000);
   } catch (error) {
     console.log(error)

@@ -81,8 +81,8 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 2,
-  multiplier: 2,
+  emaLotMultiplier: 1,
+  multiplier: 1,
   // When true, all B (buy) become S (sell) and S become B
   invertBuySell: false,
 };
@@ -2095,7 +2095,7 @@ runEma = async () => {
     await startWebsocket();
     await updateITMSymbolfromOC();
     limits = await api.get_limits()
-    globalInput.emaLotMultiplier = limits?.collateral < 700000 ? 1 : 1;
+    globalInput.emaLotMultiplier = limits?.collateral < 700000 ? 1 : 2;
     intervalId = setInterval(getEma, 1000);
   } catch (error) {
     console.log(error)
