@@ -19,11 +19,11 @@ const debug = false;
 const pnlThreshold = -2.00; // 0.75% PnL threshold for exit
 const pnlUpThreshold = 1.5; // 0.5% PnL threshold for exit
 const smallAccountQty = [65, 65, 65, 65, 65, 65, 65];
-const bigAccountQty = [130, 130, 130, 130, 130, 130, 130];
+const bigAccountQty = [260, 260, 260, 260, 260, 260, 260];
 const smallAccountDailyQty = 65;
-const bigAccountDailyQty = 130;
+const bigAccountDailyQty = 260;
 const smallAccountLot = [1, 1, 1, 1, 1, 1, 1];
-const bigAccountLot = [2, 2, 2, 2, 2, 2, 2];
+const bigAccountLot = [4, 4, 4, 4, 4, 4, 4];
 const indexDayArray = ['NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY', 'NIFTY']; //sunday to saturday
 let biasCalcFlag = false;
 let pnlMood = 'neutral';
@@ -60,7 +60,7 @@ let globalBigInput = {
 }
 //TODO change index
  getPickedIndexHere = () => debug ? 'NIFTY' : indexDayArray[new Date().getDay()] || 'NIFTY';
- getEMAQtyFor2L = () => debug ? 75 : [75, 75, 75, 75, 75, 75, 75][new Date().getDay()] || 100; // qty for margin to sell both sides
+ getEMAQtyFor2L = () => debug ? 65 : [65, 65, 65, 65, 65, 65, 65][new Date().getDay()] || 100; // qty for margin to sell both sides
 // bnf early expiry
 // getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'BANKNIFTY', 'BANKNIFTY', 'NIFTY', 'NIFTY', 'BANKEX'][new Date().getDay()] || 'NIFTY';
 // getEMAQtyFor2L = () => debug ? 100 : [100, 60, 60, 60, 150, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
@@ -326,7 +326,7 @@ let limits;
 getEMAQtyForGeneric = () => {
   // return debug ? 100 : 
   // limits?.collateral < 800000 ? 
-  // [100, 75, 240, 75, 200, 70, 75][new Date().getDay()] : 
+  // [100, 65, 240, 65, 200, 70, 65][new Date().getDay()] : 
   // [400, 525, 1600, 525, 1050, 490, 525][new Date().getDay()]
 
   return debug ? 65 : 
@@ -334,8 +334,8 @@ getEMAQtyForGeneric = () => {
   smallAccountQty[new Date().getDay()] : 
   bigAccountQty[new Date().getDay()]
   // bnf early expiry
-  // [100, 300, 300, 300, 800, 250, 75][new Date().getDay()] : 
-  // [100, 600, 720, 720, 1700, 500, 75][new Date().getDay()]
+  // [100, 300, 300, 300, 800, 250, 65][new Date().getDay()] : 
+  // [100, 600, 720, 720, 1700, 500, 65][new Date().getDay()]
   }
 
   const getDailyQty = () => {
@@ -347,7 +347,7 @@ getEMAQtyForGeneric = () => {
   getFreezeQty = () => {
     return [500, 500, 500, 1800, 1800, 500, 500][new Date().getDay()]
     // bnf early expiry
-    // return [600, 600, 900, 900, 1800, 500, 75][new Date().getDay()]
+    // return [600, 600, 900, 900, 1800, 500, 65][new Date().getDay()]
     }
 
 // Execute the findNearestExpiry function
@@ -1147,8 +1147,8 @@ const ema9_21_3ValuesIndicators = async (params) => {
     //  ]  : first21Items
 
     // Sample financial data (replace this with your data)
-    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 75];
-    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 75];
+    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 65];
+    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 65];
 
     // Calculate 9-period EMA
     let ta = new Indicators();

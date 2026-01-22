@@ -81,8 +81,8 @@ let globalInput = {
   WEEKLY_EXPIRY: undefined,
   MONTHLY_EXPIRY: undefined,
   LotSize: undefined,
-  emaLotMultiplier: 1,
-  multiplier: 1,
+  emaLotMultiplier: 2,
+  multiplier: 2,
   // When true, all B (buy) become S (sell) and S become B
   invertBuySell: false,
 };
