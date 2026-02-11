@@ -1286,6 +1286,23 @@ const emaMonitorATMs = async () => {
     // }
     emaUpFastCall = callemaMedium - callemaSlow > -2;
     emaUpFastPut = putemaMedium - putemaSlow > -2;
+    
+    // Check for large EMA gap (> 20) and exit if gap is significant
+    const callEmaGap = callemaMedium - callemaSlow;
+    const putEmaGap = putemaMedium - putemaSlow;
+    
+    console.log(`[EMA Gap Debug] callEmaGap: ${parseFloat(callEmaGap).toFixed(2)}, putEmaGap: ${parseFloat(putEmaGap).toFixed(2)}, Threshold: ${EMA_GAP_THRESHOLD}`);
+    
+    if (callEmaGap > EMA_GAP_THRESHOLD || putEmaGap > EMA_GAP_THRESHOLD) {
+      console.log(`[EMA Gap Alert] Large gap detected! callEmaGap: ${parseFloat(callEmaGap).toFixed(2)}, putEmaGap: ${parseFloat(putEmaGap).toFixed(2)}`);
+      if (shortPositionTaken || longPositionTaken) {
+        console.log(`[EMA Gap Action] Pausing trading. shortPositionTaken: ${shortPositionTaken}, longPositionTaken: ${longPositionTaken}`);
+        send_notification(`^## Large EMA Gap Detected ##\nCall Gap: ${parseFloat(callEmaGap).toFixed(2)}\nPut Gap: ${parseFloat(putEmaGap).toFixed(2)}\nExiting all positions and waiting 30 minutes`);
+        await exitSellsAndOrStop(false);
+        largeEmaGapExitTime = Date.now();
+      }
+    }
+    
     prevEmaUpFastCall = emaUpFastCall;
     prevEmaUpFastPut = emaUpFastPut;
     return [prevEmaUpFastCall, prevEmaUpFastPut];
@@ -1299,6 +1316,9 @@ const emaMonitorATMs = async () => {
 
 let longPositionTaken = false; // Variable to track long position status
 let shortPositionTaken = false; // Variable to track short position status
+let largeEmaGapExitTime = 0; // Timestamp when large EMA gap exit occurred
+const EMA_GAP_COOLDOWN = 30 * 60 * 1000; // 30 minutes in milliseconds
+const EMA_GAP_THRESHOLD = 20; // Gap threshold between medium and slow EMA
 
 const cancelOpenOrders = async () => {
   const orders = await api.get_orderbook();
@@ -1556,6 +1576,14 @@ const enterXemaBuyPut = async () => {
 }
 
 async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
+  // Check if we're in cooldown period after large EMA gap exit
+  const timeSinceLargeGapExit = Date.now() - largeEmaGapExitTime;
+  if (timeSinceLargeGapExit < EMA_GAP_COOLDOWN && largeEmaGapExitTime > 0) {
+    const remainingCooldown = Math.ceil((EMA_GAP_COOLDOWN - timeSinceLargeGapExit) / 1000 / 60);
+    console.log(`In cooldown period. ${remainingCooldown} minutes remaining before new positions allowed.`);
+    return; // Block all position entry during cooldown
+  }
+  
   // let biasCalcFlag = isExpiryToday ? biasOutput.bias > 0 : biasOutput.bias <= 0; // if near expiry today, then go with bias calculation
   
   //alternate bias calculation
