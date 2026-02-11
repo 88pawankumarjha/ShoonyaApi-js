@@ -1288,8 +1288,8 @@ const emaMonitorATMs = async () => {
     emaUpFastPut = putemaMedium - putemaSlow > -2;
     
     // Check for large EMA gap (> 20) and exit if gap is significant
-    const callEmaGap = callemaMedium - callemaSlow;
-    const putEmaGap = putemaMedium - putemaSlow;
+    const callEmaGap = callemaSlow - callemaMedium;
+    const putEmaGap = putemaSlow - putemaMedium;
     
     console.log(`[EMA Gap Debug] callEmaGap: ${parseFloat(callEmaGap).toFixed(2)}, putEmaGap: ${parseFloat(putEmaGap).toFixed(2)}, Threshold: ${EMA_GAP_THRESHOLD}`);
     
