@@ -937,6 +937,20 @@ let largeEmaGapExitTime = 0; // Timestamp when large EMA gap exit occurred
 const EMA_GAP_COOLDOWN = 30 * 60 * 1000; // 30 minutes in milliseconds
 const EMA_GAP_THRESHOLD = 20; // Gap threshold between medium and slow EMA
 
+// Reusable method to check if in cooldown period after exit
+const isInCooldownPeriod = (functionName = '') => {
+  const timeSinceLargeGapExit = Date.now() - largeEmaGapExitTime;
+  if (timeSinceLargeGapExit < EMA_GAP_COOLDOWN && largeEmaGapExitTime > 0) {
+    const remainingCooldown = Math.ceil((EMA_GAP_COOLDOWN - timeSinceLargeGapExit) / 1000 / 60);
+    const prefix = functionName ? `${functionName}: ` : '';
+    const message = `${prefix}In cooldown period. ${remainingCooldown} minutes remaining before new positions allowed.`;
+    console.log(message);
+    send_notification(`⏳ Cooldown Active\n${message}`);
+    return true;
+  }
+  return false;
+}
+
 const cancelOpenOrders = async () => {
   const orders = await api.get_orderbook();
   const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
@@ -1072,6 +1086,7 @@ const exitXemaLong = async () => {
     send_notification(`pnlTemp1: ${pnlValue} is not less than ${pnlThreshold} nor greater than ${pnlUpThreshold}`);  }
   }
 const enterXemaLong = async () => {
+  if (isInCooldownPeriod('enterXemaLong')) return;
   if (isExiting) return; // Block entry during exit
   let tempTradingPutSymbol = biasProcess.atmPutSymbol;
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingPutSymbol));
@@ -1123,6 +1138,7 @@ const exitXemaShort = async () => {
   }
 }
 const enterXemaShort = async () => {
+  if (isInCooldownPeriod('enterXemaShort')) return;
   if (isExiting) return; // Block entry during exit
 
   let tempTradingCallSymbol = biasProcess.atmCallSymbol;
@@ -1188,13 +1204,9 @@ const enterXemaBuyPut = async () => {
 }
 
 async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
-  // Check if we're in cooldown period after large EMA gap exit
-  const timeSinceLargeGapExit = Date.now() - largeEmaGapExitTime;
-  if (timeSinceLargeGapExit < EMA_GAP_COOLDOWN && largeEmaGapExitTime > 0) {
-    const remainingCooldown = Math.ceil((EMA_GAP_COOLDOWN - timeSinceLargeGapExit) / 1000 / 60);
-    console.log(`In cooldown period. ${remainingCooldown} minutes remaining before new positions allowed.`);
-    return; // Block all position entry during cooldown
-  }
+  // Check if we're in cooldown period after exit
+  if (isInCooldownPeriod()) return;
+  
   if (typeof currentPositionStatus === 'undefined' || currentPositionStatus === 'No Position') {
     biasCalcFlag = !biasCalcFlag;
     console.log('biasCalcFlag toggled (no position).');
