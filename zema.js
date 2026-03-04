@@ -1262,6 +1262,11 @@ const setBiasValue = async () => {
 }
 
 const optionBasedEmaRecurringFunction = async () => {
+  // Block entire EMA logic during cooldown period
+  if (isInCooldownPeriod('optionBasedEmaRecurringFunction')) {
+    return;
+  }
+  
   await setBiasValue();
   let [emaMonitorMediumCallUp, emaMediumMonitorPutUp] = await emaMonitorATMs();
   await takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp)
