@@ -5,7 +5,6 @@ function updateCalcVWAPFromFile() {
     calcVWAP = parseFloat(
       fs.readFileSync('C:/Users/88paw/OneDrive/Documents/aws/vwapValue2.txt', 'utf-8').trim()
     );
-    // console.log('### VWAP value read from file:', calcVWAP);
   } catch (e) {
     console.error('### Could not read VWAP value from file, using default.');
     calcVWAP = 24875; // fallback value
@@ -13,8 +12,7 @@ function updateCalcVWAPFromFile() {
 }
 updateCalcVWAPFromFile();
 setInterval(updateCalcVWAPFromFile, 60000);
-// // Initialization / nearest expiry / getAtmStrike
-// jupyter nbconvert --to script gpt.ipynb
+
 const debug = false;
 const pnlThreshold = -2.00; // 0.75% PnL threshold for exit
 const pnlUpThreshold = 1.5; // 0.5% PnL threshold for exit
@@ -30,13 +28,9 @@ let pnlMood = 'neutral';
 
 const today = new Date();
 let isExpiryToday = today.getDay() === 1 || today.getDay() === 2; //1 for monday and 2 for tuesday
-// let isExpiryToday = false;
+
 function isWeekend() {
-  //todo
   return false; // used to set the positions to ITM
-//   const today = new Date();
-//   const dayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
-//   return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
 }
 
 const axios = require('axios');
@@ -49,7 +43,6 @@ const { parse } = require('papaparse');
 const moment = require('moment');
 const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates, 
   identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, calcPnL, isTimeEqualsNotAfterProps } = require('./utils/customLibrary');
-// let { authparams } = require("./creds");
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
 const bot = new TelegramBot(telegramBotToken, { polling: true });
@@ -61,9 +54,6 @@ let globalBigInput = {
 //TODO change index
  getPickedIndexHere = () => debug ? 'NIFTY' : indexDayArray[new Date().getDay()] || 'NIFTY';
  getEMAQtyFor2L = () => debug ? 65 : [65, 65, 65, 65, 65, 65, 65][new Date().getDay()] || 100; // qty for margin to sell both sides
-// bnf early expiry
-// getPickedIndexHere = () => debug ? 'NIFTY' : ['NIFTY', 'BANKEX', 'BANKNIFTY', 'BANKNIFTY', 'NIFTY', 'NIFTY', 'BANKEX'][new Date().getDay()] || 'NIFTY';
-// getEMAQtyFor2L = () => debug ? 100 : [100, 60, 60, 60, 150, 50, 100][new Date().getDay()] || 100; // qty for margin to sell both sides
 
 let telegramSignals = {
   stopSignal: false,
@@ -188,36 +178,11 @@ let positionProcess = {
   posCallSubStr: undefined,
   posPutSubStr: undefined,
   callsNearbyNeighbours: undefined,
-  putsNearbyNeighbours: undefined, 
-  // putsNearbyNeighbours:  [
-//   { tsym: 'NIFTY14DEC23P20900' },
-//   { tsym: 'NIFTY14DEC23P20950' },
-//   { tsym: 'NIFTY14DEC23P21000' },
-//   { tsym: 'NIFTY14DEC23P21050' },
-//   { tsym: 'NIFTY14DEC23P21100' }
-// ]
+  putsNearbyNeighbours: undefined,
   collectedValuesCall: new Map(),
   collectedValuesPut: new Map(),
-  // CE:  [ '247.60', '206.60', '170.05', '137.90', '110.40' ]
-  // PE:  [ '57.20', '74.85', '95.70', '121.05', '151.25' ]
-// for ATM 20950:
-// CE:  [
-//   'NIFTY14DEC23C20800 247.60',
-//   'NIFTY14DEC23C20850 206.60',
-//   'NIFTY14DEC23C20900 170.05',
-//   'NIFTY14DEC23C20950 137.90',
-//   'NIFTY14DEC23C21000 110.40'
-// ]
-// PE:  [
-//   'NIFTY14DEC23P20900 57.20',
-//   'NIFTY14DEC23P20950 74.85',
-//   'NIFTY14DEC23P21000 95.70',
-//   'NIFTY14DEC23P21050 121.05',
-//   'NIFTY14DEC23P21100 151.25'
-// ]
 }
 
-// Function to download the ZIP file
 function downloadFile(url, destination) {
   return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(destination);
@@ -235,16 +200,13 @@ function downloadFile(url, destination) {
   });
 }
 
-// Function to unzip the downloaded file in the current working directory
 function unzipFile(zipFilePath) {
   const zip = new AdmZip(zipFilePath);
   zip.extractAllTo('./', true);
-  //console.log('Unzipped in the current working directory.');
 }
 
 async function findNearestExpiry() {
   let csvUrl, zipFilePath, csvFilePath;
-//   const exchangeType = globalInput.indexName.includes('EX') ? 'BFO' : 'NFO';
   const exchangeType = 'NFO';
   csvUrl = `https://api.shoonya.com/${exchangeType}_symbols.txt.zip`;
   const zipFileUrl = csvUrl;
@@ -253,9 +215,6 @@ async function findNearestExpiry() {
   zipFilePath = `./${exchangeType}_symbols.zip`;
   csvFilePath = `./${exchangeType}_symbols.txt`;
   try {
-    // Download and extract the CSV file
-    // await downloadCsv(csvUrl, zipFilePath, axios, fs);
-    // await fs.createReadStream(zipFilePath).pipe(unzipper.Extract({ path: '.' }));
 
     downloadFile(zipFileUrl, downloadedFileName)
     .then(() => {
@@ -265,28 +224,11 @@ async function findNearestExpiry() {
         console.error('Error:', error);
     });
     await delay(1000);
-    // Read CSV data into a JavaScript object
     const csvData = fs.readFileSync(csvFilePath, 'utf-8');
     const { data: symbolDf } = parse(csvData, { header: true });
     
     globalBigInput.filteredIndexCSV = filterAndMapDates(moment, symbolDf.filter((row) => ['OPTIDX', 'FUTIDX'].includes(row.Instrument) && row.TradingSymbol.startsWith(globalInput.indexName) && !row.TradingSymbol.startsWith('NIFTYNXT50') && !row.TradingSymbol.startsWith('SENSEX50') && !row.TradingSymbol.startsWith('ZYDUSLIFE')));
 
-    // console.log(globalBigInput.filteredIndexCSV);
-    // [
-    //  {
-    //   Exchange: 'NFO',
-    //   Token: '72903',
-    //   LotSize: '50',
-    //   Symbol: 'NIFTY',
-    //   TradingSymbol: 'NIFTY29FEB24P21750',
-    //   Expiry: '2024-02-29',
-    //   Instrument: 'OPTIDX',
-    //   OptionType: 'PE',
-    //   StrikePrice: '21750',
-    //   TickSize: '0.05',
-    //   '': ''
-    // },
-    //BFO,833613,15,BKXFUT,BANKEX24FEBFUT,26-FEB-2024,FUTIDX,XX,0,0.05,
     const expiryList = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => row.Instrument === 'OPTIDX').map((row) => row.Expiry))];
     const expiryFutList = globalBigInput.filteredIndexCSV
       .filter((row) => row.Instrument === 'FUTIDX')
@@ -294,9 +236,6 @@ async function findNearestExpiry() {
     expiryList.sort();
     expiryFutList.sort((a, b) => moment(a.Expiry).diff(moment(b.Expiry)));
     
-    // globalInput.inputOptTsym = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => (row.Instrument === 'OPTIDX' && row.Expiry === expiryList[0])).map((row) => row.TradingSymbol))][0];
-    // globalInput.WEEKLY_EXPIRY = expiryList[0];
-    // take next expiry for wed n thursday
     globalInput.inputOptTsym = [...new Set(globalBigInput.filteredIndexCSV.filter((row) => (row.Instrument === 'OPTIDX' && row.Expiry === expiryList[isExpiryToday? 1: 0])).map((row) => row.TradingSymbol))][0];
     globalInput.WEEKLY_EXPIRY = expiryList[isExpiryToday? 1: 0];
     globalInput.MONTHLY_EXPIRY = expiryFutList[0].Expiry;
@@ -305,16 +244,7 @@ async function findNearestExpiry() {
     globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty/globalInput.LotSize);
   } catch (error) {
     console.error('Error:', error.message);
-  } 
-  // finally {
-    // Clean up: Delete downloaded files
-    // if (fs.existsSync(zipFilePath)) {
-    //   fs.unlinkSync(zipFilePath);
-    // }
-    // if (fs.existsSync(csvFilePath)) {
-    //   fs.unlinkSync(csvFilePath);
-    // }
-  // }
+  }
 };
 
 
@@ -384,11 +314,7 @@ const getAtmStrike = async () => {
 async function send_callback_notification() {
 try {
 const keyboard = {inline_keyboard: [[
-// { text: '🐌', callback_data: 'slower' },
-// { text: '🚀', callback_data: 'faster' },
-// { text: '💹', callback_data: 'toggleExchange' },
-{ text: '⏸', callback_data: 'isPlayingSignal' },
-// { text: '🛑', callback_data: 'exit' }
+{ text: '⏸', callback_data: 'isPlayingSignal' }
 ]]};
 !debug && bot.sendMessage(chat_id_me, 'Choose server settings', { reply_markup: keyboard });
 } catch (error) { console.error(error);
@@ -398,25 +324,11 @@ send_notification(error + ' error occured', true)
   bot.on('callback_query', (callbackQuery) => {
 const chatId = callbackQuery.message.chat.id;
 const data = callbackQuery.data;
-const exchange = globalInput.pickedExchange;
-// if (data === 'slower') setCustomInterval(true);
-// else if (data === 'faster') setCustomInterval(false);
-// else if (data === 'stop') stopSignal = !stopSignal;
-
-// telegramSignals = {
-//   stopSignal: false,
-//   exitSignal: false,
-//   slower: false,
-//   faster: false,
-// }
 if (data === 'isPlayingSignal') {
 if(telegramSignals.isPlaying){pauseEma()}
 else {resumeEma()}
 }
-    if (data === 'exit') telegramSignals.exitSignal = true;
 if (data === 'stop') telegramSignals.stopSignal = !telegramSignals.stopSignal;
-else if (data === 'toggleExchange') globalInput.pickedExchange = (globalInput.pickedExchange === 'NFO' ? 'NFO' : globalInput.pickedExchange === 'BFO' ? 'NFO' : 'NFO');
-// bot.sendMessage(chatId, `Exchange: ${globalInput.pickedExchange}, Paused: ${telegramSignals.stopSignal} - pause, exit, slower, faster are not implemented`);
 bot.sendMessage(chatId, `EMA isPlaying: ${telegramSignals.isPlaying}`);
 });
 
@@ -469,46 +381,6 @@ const resetPuts = () => {
     positionProcess.putsNearbyNeighbours=undefined,
     positionProcess.collectedValuesPut=new Map()
 };
-// const data = [
-//     {
-//         tsym: 'NIFTY07DEC23P20850',
-//         lp: '1.55',
-//         netqty: '-800',
-//         s_prdt_ali: 'MIS'
-//     },
-//     {
-//         tsym: 'NIFTY07DEC23P20851',
-//         lp: '1.53',
-//         netqty: '-800',
-//         s_prdt_ali: 'MIS'
-//     },
-//     {
-//         tsym: 'NIFTY07DEC23C20950',
-//         lp: '2.60',
-//         netqty: '-800',
-//         s_prdt_ali: 'MIS'
-//     },
-//     {
-//         tsym: 'NIFTY07DEC23C21000',
-//         lp: '2.59',
-//         netqty: '-800',
-//         s_prdt_ali: 'MIS'
-//     },
-//     // Add more data as needed
-// ];
-
-// let orderCE = {
-//     buy_or_sell: 'B',
-//     product_type: 'M',
-//     exchange: 'NFO',
-//     tradingsymbol: positionProcess.smallestCallPosition,
-//     quantity: positionsData.netqty.toString(),
-//     discloseqty: positionsData.netqty.toString(),
-//     price_type: 'LMT',
-//     price: SpotCEObj.bp5 || 0,
-//     remarks: 'WSExitAPI'
-// }
-// !debug && await api.place_order(orderCE);
 
 exitHedgeOrder = async (positionsData) => {
   let order = {
@@ -546,8 +418,7 @@ exitHedges = async () => {
 
 updatePositions = async () => {
     api.get_positions()
-        .then((data) => { 
-            debug && console.log(data, ' : positions data');
+        .then((data) => {
             if(isWeekend()) {
                 positionProcess.smallestCallPosition = biasProcess.itmCallSymbol;
                 positionProcess.smallestPutPosition = biasProcess.itmPutSymbol;
@@ -569,20 +440,6 @@ updatePositions = async () => {
             } else {
                 console.error('positions data is not an array.');
             }
-            // [
-            //     {
-            //       tsym: 'NIFTY07DEC23P20850',
-            //       lp: '1.55',
-            //       netqty: '-800',
-            //       s_prdt_ali: 'MIS'
-            //     },
-            //     {
-            //       tsym: 'NIFTY07DEC23C20950',
-            //       lp: '2.60',
-            //       netqty: '-800',
-            //       s_prdt_ali: 'MIS'
-            //     }
-            //   ]
         });
         return true;
 }
@@ -669,13 +526,6 @@ function receiveQuote(data) {
     const subStrTemp2 = `${globalInput.pickedExchange}|${String(positionProcess.soldToken).trim()}`;
     const receivedKey = `${data.e}|${String(data.tk).trim()}`;
 
-    // if (receivedKey === subStrTemp2) {
-    //     // console.log('Received quote for subStrTemp:', data, 'lp:', data.lp);
-    //     if (data.lp === undefined || data.lp === null || data.lp === '') {
-    //         console.log('Quote received for', receivedKey, 'but lp is missing:', data);
-    //     }
-    //   }
-
     // Only set latestQuote if lp is defined and not null/empty string
     const quoteObj = latestQuotes[subStrTemp2];
     if (
@@ -735,26 +585,14 @@ function receiveOrders(data) {
 }
 
 function open(data) {
-    // console.log(`NSE|${globalInput.token}`)
     
     const initialInstruments = [`${globalInput.indexName.includes('EX') ? 'NSE' : 'NSE'}|${globalInput.token}`, 'NSE|26017']; 
 
-    //vix:
-    // {
-    //     t: 'tf',
-    //     e: 'NSE',
-    //     tk: '26017',
-    //     lp: '12.77',
-    //     pc: '-7.06',
-    //     ft: '1701931151'
-    //   } latestQuotes['NSE|26017']
     subscribeToInstruments(initialInstruments);
-    // console.log("Subscribing to :: ", initialInstruments);
 }
 
 function subscribeToInstruments(instruments) {
     instruments.forEach(instrument => {
-      // console.log(instrument, ' :subscribing to instrument')
         api.subscribe(instrument);
     });
 }
@@ -835,146 +673,12 @@ async function updateITMSymbolfromOC() {
     await delay(1000)
     // Get the Nifty option chain
     biasProcess.optionChain = await getOptionChain();
-    // console.log(biasProcess.optionChain)
-    // post https://api.shoonya.com/NorenWClientTP/GetOptionChain jData={"uid":"FA63911",
-    // "exch":"BFO","tsym":"BANKEX24JAN57700PE","strprc":"50700","cnt":"15"}&jKey=c49727e66cb3d1eca0c2c048a7a3e0804dc9aacf45848b7835f6c93cc9bb0d92
-    // {
-    //   stat: 'Ok',
-    //   values: [
-    //     {
-    //       exch: 'BFO',
-    //       token: '1153140',
-    //       tsym: 'BANKEX24JAN50700CE',
-    //       optt: 'CE',
-    //       pp: '2',
-    //       ls: '15',
-    //       ti: '0.05',
-    //       strprc: '50700.00'
-    //     },
-    //     {
-    //       exch: 'BFO',
-    //       token: '1152365',
-    //       tsym: 'BANKEX24JAN50800CE',
-    //       optt: 'CE',
-    //       pp: '2',
-    //       ls: '15',
-    //       ti: '0.05',
-    //       strprc: '50800.00'
-    //     },
-    // ... 
-    // ... 
-    // {
-    //   exch: 'BFO',
-    //   token: '1137016',
-    //   tsym: 'BANKEX24JAN49300CE',
-    //   optt: 'CE',
-    //   pp: '2',
-    //   ls: '15',
-    //   ti: '0.05',
-    //   strprc: '49300.00'
-    // },
-    // {
-    //   exch: 'BFO',
-    //   token: '1136711',
-    //   tsym: 'BANKEX24JAN49200CE',
-    //   optt: 'CE',
-    //   pp: '2',
-    //   ls: '15',
-    //   ti: '0.05',
-    //   strprc: '49200.00'
-    // },
-    // {
-    //   exch: 'BFO',
-    //   token: '1153390',
-    //   tsym: 'BANKEX24JAN50700PE',
-    //   optt: 'PE',
-    //   pp: '2',
-    //   ls: '15',
-    //   ti: '0.05',
-    //   strprc: '50700.00'
-    // },
-    // {
-    //   exch: 'BFO',
-    //   token: '1152588',
-    //   tsym: 'BANKEX24JAN50800PE',
-    //   optt: 'PE',
-    //   pp: '2',
-    //   ls: '15',
-    //   ti: '0.05',
-    //   strprc: '50800.00'
-    // },
-    // ... 
-    // ... 
-//     {
-//       exch: 'BFO',
-//       token: '1137242',
-//       tsym: 'BANKEX24JAN49300PE',
-//       optt: 'PE',
-//       pp: '2',
-//       ls: '15',
-//       ti: '0.05',
-//       strprc: '49300.00'
-//     },
-//     {
-//       exch: 'BFO',
-//       token: '1136922',
-//       tsym: 'BANKEX24JAN49200PE',
-//       optt: 'PE',
-//       pp: '2',
-//       ls: '15',
-//       ti: '0.05',
-//       strprc: '49200.00'
-//     }
-//   ]
-// }
     await delay(1000)
     if (biasProcess.optionChain) {
         // Find the ITM symbol
         await delay(1000)
         updateITMSymbolAndStrike();
         await delay(1000)
-        // let quoteResp = await api.get_quotes(globalInput.pickedExchange, biasProcess.ocCallOptions[15].token)
-        
-        // {
-        //   '835288': '11.35',
-        //   '1136711': '1591.10',
-        //   '1136748': '823.45',
-        //   '1136770': '1399.35',
-        //   '1136806': '606.90',
-        //   '1136828': '1212.75',
-        //   '1136887': '453.50',
-        //   '1136903': '853.75',
-        //   '1137016': '1494.70',
-        //   '1137066': '1305.30',
-        //   '1137137': '1122.05',
-        //   '1137444': '907.85',
-        //   '1137493': '658.15',
-        //   '1137542': '484.55',
-        //   '1137607': '393.40',
-        //   '1137624': '1039.05',
-        //   '1152365': '306.40',
-        //   '1152724': '210.05',
-        //   '1153140': '342.75',
-        //   '1153214': '269.15',
-        //   '1153994': '140.45',
-        //   '1154243': '180.25',
-        //   '1154316': '109.60',
-        //   '1154790': '57.25',
-        //   '1154944': '73.95',
-        //   '1154987': '46.95',
-        //   '1157331': '31.55',
-        //   '1157442': '22.55',
-        //   '1158334': '14.25',
-        //   '1158879': '13.20'
-        // } optionChainDataMap
-
-        // const targetPrice = 200;
-        
-        // nearestCE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, targetPrice)
-        // nearestPE = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, targetPrice)
-
-        // console.log(nearestCE); // 1152724
-        // console.log(nearestPE); // 1153390
         
         debug && console.log(biasProcess, ' :biasProcess')
     }
@@ -1006,8 +710,6 @@ async function checkAlert() {
         let up = parseFloat(pValue2Var) < parseFloat(cValue1Var)
         let trendingUp = parseFloat(pValue1Var) > parseFloat(cExtra3Var)
         let trendingDown = parseFloat(cValue1Var) > parseFloat(pExtra3Var);
-//      vix high or early morning then move away
-//      vix low or not early morning then move closer
         if((up && biasOutput.bias > 0) || (!up && biasOutput.bias < 0) || trendingUp || trendingDown ){
             await takeAction(up)
         }
@@ -1053,8 +755,7 @@ function updatePositionsNeighboursAndSubs(autoSubs=true) {
     };
     if (positionProcess.smallestCallPosition) positionProcess.callsNearbyNeighbours = updateNeighbours(biasProcess.ocCallOptions, positionProcess.smallestCallPosition, positionProcess.callsNearbyNeighbours, 'CE');
     if (positionProcess.smallestPutPosition) positionProcess.putsNearbyNeighbours = updateNeighbours(biasProcess.ocPutOptions, positionProcess.smallestPutPosition, positionProcess.putsNearbyNeighbours, 'PE');
-
-    // console.log(positionProcess, ' : positionProcess')
+    
     // subscribe
     function dynamicallyAddSubscriptions() {
         const addSubscriptions = (options) => {
@@ -1074,22 +775,12 @@ function updatePositionsNeighboursAndSubs(autoSubs=true) {
 }
 
 const dynSubs = async () => {
-// Dynamically add a subscription after 10 seconds
 biasProcess.callSubStr = biasProcess.itmCallSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.itmCallSymbol)}` : '';
 biasProcess.putSubStr = biasProcess.itmPutSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.itmPutSymbol)}` : '';
 dynamicallyAddSubscription(biasProcess.callSubStr);
 dynamicallyAddSubscription(biasProcess.putSubStr);
 await delay(2000)
 return;
-}
-
-function getTokenByTradingSymbol(tradingSymbol) {
-  const option = biasProcess.optionChain?.values.find(option => option?.tsym === tradingSymbol);
-  if (option) {
-    return option?.token;
-  } else {
-    return null; // TradingSymbol not found
-  }
 }
 
 const ema9_21_3ValuesIndicators = async (params) => {
@@ -1128,28 +819,6 @@ const ema9_21_3ValuesIndicators = async (params) => {
     //last 50 items
     const last80Items = intcPrices.slice(0,80).reverse();
 
-    // console.log(first21Items)
-    //     [
-    //       22112,  22121.2,
-    //    22119.45,    22122,
-    //    22125.15,  22132.5,
-    //    22132.25, 22126.65,
-    //     22130.1
-    //  ]  : first9Items
-    //  [
-    //       22112,  22121.2, 22119.45,
-    //       22122, 22125.15,  22132.5,
-    //    22132.25, 22126.65,  22130.1,
-    //    22131.75,    22130,    22123,
-    //     22122.5,  22121.9,  22130.4,
-    //    22125.65,    22123,  22122.9,
-    //    22120.35,  22120.2,    22120
-    //  ]  : first21Items
-
-    // Sample financial data (replace this with your data)
-    // const closePrices9 = [42, 45, 48, 50, 55, 60, 65, 70, 65];
-    // const closePrices = [10, 15, 12, 18, 20, 22, 25, 28, 30, 32, 35, 40, 42, 45, 48, 50, 55, 60, 65, 70, 65];
-
     // Calculate 9-period EMA
     let ta = new Indicators();
     let ema3Values = await ta.ema(last80Items, 8);
@@ -1164,51 +833,6 @@ const ema9_21_3ValuesIndicators = async (params) => {
     throw error; // Rethrow the error to be caught in the calling function
   }
 }
-//
-  // [
-  //   {
-  //     stat: 'Ok',
-  //     time: '16-01-2024 11:06:00',
-  //     ssboe: '1705383360',
-  //     into: '22116.85',
-  //     inth: '22120.95',
-  //     intl: '22112.25',
-  //     intc: '22115.75',
-  //     intvwap: '0.00',
-  //     intv: '0',
-  //     intoi: '0',
-  //     v: '0',
-  //     oi: '0'
-  //   },
-  //   {
-  //     stat: 'Ok',
-  //     time: '16-01-2024 11:03:00',
-  //     ssboe: '1705383180',
-  //     into: '22113.40',
-  //     inth: '22117.05',
-  //     intl: '22110.40',
-  //     intc: '22115.60',
-  //     intvwap: '0.00',
-  //     intv: '0',
-  //     intoi: '0',
-  //     v: '0',
-  //     oi: '0'
-  //   },
-  //   {
-  //     stat: 'Ok',
-  //     time: '16-01-2024 11:00:00',
-  //     ssboe: '1705383000',
-  //     into: '22113.80',
-  //     inth: '22116.70',
-  //     intl: '22110.10',
-  //     intc: '22111.75',
-  //     intvwap: '0.00',
-  //     intv: '0',
-  //     intoi: '0',
-  //     v: '0',
-  //     oi: '0'
-  //   }
-  // ]  : reply
 
 const emaMonitorATMs = async () => {
   try{
@@ -1275,15 +899,8 @@ const emaMonitorATMs = async () => {
                       positionProcess.trailPrice > 0)
                   ? `S @${positionProcess.soldPrice} T @${+positionProcess.trailPrice}\nL @${latestQuote2}\n`
                   : `STL not available\nS @${positionProcess.soldPrice} T @${+positionProcess.trailPrice}\nL @${latestQuote2}\n`;
-    // console.log('positionProcess ', positionProcess)
-    // console.log('globalInput.pickedExchange + '|' + positionProcess.soldToken: ', globalInput.pickedExchange + '|' + positionProcess.soldToken)
-    // console.log('latestQuotes ', latestQuotes[globalInput.pickedExchange + '|' + positionProcess.soldToken])
-    // if position is taken only then send notification
-    // if (positionProcess.soldToken && positionProcess.soldToken !== '' ) {
-      send_notification(`${strTemp}ces: ${parseFloat(callemaSlow).toFixed(2)} pes: ${parseFloat(putemaSlow).toFixed(2)}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}`);
-    // } else {
-    //   console.log('No position taken, not sending notification'); 
-    // }
+    send_notification(`${strTemp}ces: ${parseFloat(callemaSlow).toFixed(2)} pes: ${parseFloat(putemaSlow).toFixed(2)}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}`);
+   
     emaUpFastCall = callemaMedium - callemaSlow > -2;
     emaUpFastPut = putemaMedium - putemaSlow > -2;
     
@@ -1366,14 +983,24 @@ const exitSellsAndOrStop = async (stop = false) => {
 
   // Exit positions
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
+  let positionsExited = false;
   if (positionProcess.smallestPutPosition?.tsym) {
       await exitXemaLong();
       longPositionTaken = false;
+      positionsExited = true;
   }
   if (positionProcess.smallestCallPosition?.tsym) {
       await exitXemaShort();
       shortPositionTaken = false;
+      positionsExited = true;
   }
+  
+  // Start 30-minute cooldown after exit
+  if (positionsExited) {
+      largeEmaGapExitTime = Date.now();
+      send_notification(`Positions exited. Waiting 30 minutes before next trade.`);
+  }
+  
   if (stop) {
       send_notification('exiting all and stopping');
       setTimeout(function() {
@@ -1418,17 +1045,6 @@ const my_default_place_order = async (order) => {
   }
 }
 
-// const checkIfOrderNoIsCompletedOrNot = async (orderno) => {
-//   //check order status
-//   api.singleorderhistory(orderno)
-//   await delay(2000);
-// }
-// const customPlaceOrder = async (order) => {
-//   const ordernoToCheck = await my_default_place_order(order)
-//   setTimeout(function() {
-//   const isCompleted = checkIfOrderNoIsCompletedOrNot(orderno);
-//   }, 2000);
-// } 
 //buy Put
 const exitXemaLong = async () => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
@@ -1458,8 +1074,6 @@ const exitXemaLong = async () => {
 const enterXemaLong = async () => {
   if (isExiting) return; // Block entry during exit
   let tempTradingPutSymbol = biasProcess.atmPutSymbol;
-  // if(isTimeEqualsNotAfterProps(14,40,false)) {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
-  // if(globalInput.pickedExchange === 'BFO') {tempTradingPutSymbol = biasProcess.otmPutSymbol;}
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingPutSymbol));
 
   order = {
@@ -1512,8 +1126,6 @@ const enterXemaShort = async () => {
   if (isExiting) return; // Block entry during exit
 
   let tempTradingCallSymbol = biasProcess.atmCallSymbol;
-  // if(isTimeEqualsNotAfterProps(14,40,false)) {tempTradingPutSymbol = biasProcess.itmCallSymbol;}
-  //if(globalInput.pickedExchange === 'BFO') {tempTradingCallSymbol = biasProcess.otmCallSymbol;}
 
   const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingCallSymbol));
 
@@ -1583,12 +1195,6 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
     console.log(`In cooldown period. ${remainingCooldown} minutes remaining before new positions allowed.`);
     return; // Block all position entry during cooldown
   }
-  
-  // let biasCalcFlag = isExpiryToday ? biasOutput.bias > 0 : biasOutput.bias <= 0; // if near expiry today, then go with bias calculation
-  
-  //alternate bias calculation
-  // let biasCalcFlag = biasProcess.spotObject?.lp > calcVWAP ? true : false;
-  // only toggle bias when we have no current position to avoid flipping while in a trade
   if (typeof currentPositionStatus === 'undefined' || currentPositionStatus === 'No Position') {
     biasCalcFlag = !biasCalcFlag;
     console.log('biasCalcFlag toggled (no position).');
@@ -1658,16 +1264,6 @@ const checkForOpenOrders = async () => {
     await triggerATMChangeActions()
     send_notification('open order handled')
   }
-  // if(openOrderTimeCounter == 2){
-  //   await cancelOpenOrders();
-  //   await triggerATMChangeActions()
-  //   send_notification('open order handled')
-  //   openOrderTimeCounter = 0;
-  // }
-  // const orders = await api.get_orderbook();
-  // const filtered_data_API = Array.isArray(orders) ? orders.filter(item => item?.status === 'OPEN') : [];
-  // if (filtered_data_API[0]?.norenordno) {openOrderTimeCounter = openOrderTimeCounter + 1}
-  // else {openOrderTimeCounter = 0;}
 }
 
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
@@ -1720,51 +1316,6 @@ const runEma = async () => {
 
     globalInput.emaLotMultiplierQty = getEMAQtyForGeneric();
     globalInput.emaLotMultiplier = Math.floor(globalInput.emaLotMultiplierQty/globalInput.LotSize);
-    
-    // console.log(limits?.collateral, ' limits')
-    // console.log(globalInput.emaLotMultiplierQty, ' globalInput.emaLotMultiplierQty')
-    // console.log(globalInput.emaLotMultiplier, ' globalInput.emaLotMultiplier')
-    //TODO uncomment
-
-    //no need of hedges - 27-05-2025
-    // if(positionProcess.hedgeCall === undefined || positionProcess.hedgeCall?.length === 0) {await enterXemaBuyCall()};
-    // if(positionProcess.hedgePut === undefined || positionProcess.hedgePut?.length === 0) {await enterXemaBuyPut()};
-    
-
-
-  //   request_time: '23:28:00 31-01-2024',
-  //   stat: 'Ok',
-  //   prfname: 'SHOONYA1',
-  //   cash: '206923.34',
-  //   payin: '0.00',
-  //   payout: '0.00',
-  //   brkcollamt: '0.00',
-  //   unclearedcash: '0.00',
-  //   aux_daycash: '0.00',
-  //   aux_brkcollamt: '0.00',
-  //   aux_unclearedcash: '0.00',
-  //   daycash: '0.00',
-  //   turnoverlmt: '999999999999.00',
-  //   pendordvallmt: '999999999999.00',
-  //   remarks_amt: '0.00',
-  //   turnover: '786041727.25',
-  //   marginused: '20470.00',
-  //   peak_mar: '189634.50',
-  //   margincurper: '9.13',
-  //   premium: '17310.25',
-  //   brokerage: '1579.78',
-  //   premium_d_i: '-4095.00',
-  //   premium_d_m: '935.25',
-  //   premium_c_m: '20470.00',
-  //   brkage_d_i: '68.69',
-  //   brkage_d_m: '887.15',
-  //   brkage_c_m: '623.94',
-  //   blk_amt: '0.00',
-  //   mr_der_u: '9.35',
-  //   mr_com_u: '204.70',
-  //   mr_der_a: '155452.29'
-  // }  limits
-// process.exit(0)
             
     if (telegramSignals.isPlaying) {
       intervalIdForEMA = setInterval(getEma, delayForEMA);
