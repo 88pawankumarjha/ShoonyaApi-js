@@ -1076,6 +1076,10 @@ const exitXemaLong = async () => {
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   if(positionProcess.smallestPutPosition?.tsym) {await my_default_place_order(order)}
   longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
+  // Set cooldown period when exiting position
+  if(positionProcess.smallestPutPosition?.tsym) {
+    largeEmaGapExitTime = Date.now();
+  }
   resetTrailPrice();
   await delay(1000);
   pnlTemp1 = await calcPnL(api);
@@ -1126,6 +1130,10 @@ const exitXemaShort = async () => {
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   if(positionProcess.smallestCallPosition?.tsym) {await my_default_place_order(order)}
   shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
+  // Set cooldown period when exiting position
+  if(positionProcess.smallestCallPosition?.tsym) {
+    largeEmaGapExitTime = Date.now();
+  }
   resetTrailPrice();
   await delay(1000);
 
