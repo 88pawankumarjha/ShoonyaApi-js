@@ -934,8 +934,8 @@ const emaMonitorATMs = async () => {
 let longPositionTaken = false; // Variable to track long position status
 let shortPositionTaken = false; // Variable to track short position status
 let largeEmaGapExitTime = 0; // Timestamp when large EMA gap exit occurred
-const EMA_GAP_COOLDOWN = 30 * 60 * 1000; // 30 minutes in milliseconds
-const EMA_GAP_THRESHOLD = 20; // Gap threshold between medium and slow EMA
+const EMA_GAP_COOLDOWN = 20 * 60 * 1000; // 30 minutes in milliseconds
+const EMA_GAP_THRESHOLD = 30; // Gap threshold between medium and slow EMA
 
 // Reusable method to check if in cooldown period after exit
 const isInCooldownPeriod = (functionName = '') => {
@@ -1252,9 +1252,9 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
   pnl = await calcPnL(api);
   //if pnl is greater than 0.25% then send notification good
   
-  if (pnl > 0.25) {
+  if (pnl > 0.33) {
     pnlMood = 'good';
-  } else if (pnl < -0.25) {
+  } else if (pnl < -0.33) {
     pnlMood = 'bad';
   } else {
     pnlMood = 'neutral';
