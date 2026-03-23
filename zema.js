@@ -14,8 +14,8 @@ updateCalcVWAPFromFile();
 setInterval(updateCalcVWAPFromFile, 60000);
 
 const debug = false;
-const pnlThreshold = -2.00; // 0.75% PnL threshold for exit
-const pnlUpThreshold = 1.5; // 0.5% PnL threshold for exit
+const pnlThreshold = -0.75; // 0.75% PnL threshold for exit
+const pnlUpThreshold = 0.5; // 0.5% PnL threshold for exit
 const smallAccountQty = [65, 65, 65, 65, 65, 65, 65];
 const bigAccountQty = [195, 195, 195, 195, 195, 195, 195];
 const smallAccountDailyQty = 65;
