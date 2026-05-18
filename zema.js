@@ -416,8 +416,8 @@ exitHedgeOrder = async (positionsData) => {
         tradingsymbol: positionsData.tsym.toString(),
         quantity: positionsData.netqty.toString(),
         discloseqty: 0,
-        price_type: 'MKT',
-        price: 0,
+        price_type: 'LMT',
+        price: +positionsData.lp ? Math.max(Math.floor(+positionsData.lp - (+positionsData.lp / 10)), 0.1) : 0.1,
         remarks: 'ExitHedgeAPI'
     }
     // console.log('exitHedgeOrder ignored: ', order);
@@ -1126,7 +1126,6 @@ const exitXemaLong = async () => {
     price: Math.ceil(+positionProcess.smallestPutPosition?.lp + (+positionProcess.smallestPutPosition?.lp/10)),
     remarks: 'API'
   }
-  if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   let exitOrderAccepted = false;
   if(positionProcess.smallestPutPosition?.tsym) {
     try {
@@ -1168,7 +1167,6 @@ const enterXemaLong = async () => {
     price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) : 0.1 : 0.1,
     remarks: 'API'
   }
-  if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   try {
     await my_default_place_order(order);
     // send_notification('entering Long', true)
@@ -1195,7 +1193,6 @@ const exitXemaShort = async () => {
     price: Math.ceil(+positionProcess.smallestCallPosition?.lp + (+positionProcess.smallestCallPosition?.lp/10)),
     remarks: 'API'
   }
-  if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   let exitOrderAccepted = false;
   if(positionProcess.smallestCallPosition?.tsym) {
     try {
@@ -1241,7 +1238,6 @@ const enterXemaShort = async () => {
     price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) : 0.1 : 0.1,
     remarks: 'API'
   }
-  if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   try {
     await my_default_place_order(order);
     // send_notification('entering Short', true)
@@ -1270,7 +1266,6 @@ const enterXemaBuyCall = async () => {
     price: Math.ceil(+quotesResponse.sp5 +3),
     remarks: 'API'
   }
-  if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   await my_default_place_order(order);
   send_notification('bought hedge call', true)
 }
@@ -1289,7 +1284,6 @@ const enterXemaBuyPut = async () => {
     price: Math.ceil(+quotesResponse.sp5 +3),
     remarks: 'API'
   }
-  if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
   await my_default_place_order(order);
   send_notification('bought hedge put', true)
 }
