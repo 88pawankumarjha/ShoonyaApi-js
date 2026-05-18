@@ -8,6 +8,7 @@
   },
   "scripts": {
     "oauth:token": "node scripts/shoonya_oauth_token.js",
+    "probe:ws": "node scripts/probe_shoonya_ws.js",
     "start": "jest && node app.js",
     "test": "jest"
   },
