@@ -47,7 +47,7 @@ Daily flow:
 1. Open the Shoonya authorize URL on mobile.
 2. Login and authorize.
 3. On the final Shoonya page, open the `Shoonya Code` bookmark.
-4. Copy the generated `SHOONYA_AUTH_CODE=...` value.
+4. Copy the generated raw code value.
 5. On EC2, save it and generate today's token:
 
 ```bash
