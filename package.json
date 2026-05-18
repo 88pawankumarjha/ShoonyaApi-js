@@ -8,6 +8,7 @@
   },
   "scripts": {
     "oauth:listen": "node scripts/shoonya_oauth_listen.js",
+    "oauth:save-code": "node scripts/shoonya_save_auth_code.js",
     "oauth:token": "node scripts/shoonya_oauth_token.js",
     "probe:ws": "node scripts/probe_shoonya_ws.js",
     "start": "jest && node app.js",
