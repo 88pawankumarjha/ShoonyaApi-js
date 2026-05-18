@@ -147,6 +147,10 @@ let intervalId;
 
 let latestQuotes = {};
 let latestOrders = {};
+const restQuoteSubscriptions = new Set();
+const REST_QUOTE_POLL_MS = Number(process.env.SHOONYA_REST_QUOTE_POLL_MS || 3000);
+let restQuotePoller;
+let restQuotePollInProgress = false;
 
 let positionProcess = {
   smallestCallPosition: undefined, // [{tsym: 'NIFTY07DEC23P20850', lp: '1.55', netqty: '-800', s_prdt_ali: 'MIS'}]
@@ -565,6 +569,96 @@ function receiveQuote(data) {
   // }
 }
 
+function normalizeInstrument(instrument) {
+  if (!instrument || typeof instrument !== 'string' || !instrument.includes('|')) {
+    return null;
+  }
+
+  const [exchange, token] = instrument.split('|');
+  if (!exchange || !token || token === 'null' || token === 'undefined') {
+    return null;
+  }
+
+  return { exchange, token, key: `${exchange}|${token}` };
+}
+
+function trackRestQuote(instrument) {
+  const normalized = normalizeInstrument(instrument);
+  if (!normalized) {
+    return;
+  }
+  restQuoteSubscriptions.add(normalized.key);
+}
+
+function hasQuote(instrument) {
+  return Boolean(instrument && Number.isFinite(Number(latestQuotes[instrument]?.lp)));
+}
+
+function requiredQuotesReady() {
+  const missing = [];
+  const spotInstrument = `${globalInput.pickedExchange}|${globalInput.token}`;
+  const atmCallToken = biasProcess.atmCallSymbol ? getTokenByTradingSymbol(biasProcess.atmCallSymbol) : '';
+  const atmPutToken = biasProcess.atmPutSymbol ? getTokenByTradingSymbol(biasProcess.atmPutSymbol) : '';
+  const atmCallInstrument = atmCallToken ? `${globalInput.pickedExchange}|${atmCallToken}` : '';
+  const atmPutInstrument = atmPutToken ? `${globalInput.pickedExchange}|${atmPutToken}` : '';
+
+  [spotInstrument, atmCallInstrument, atmPutInstrument].filter(Boolean).forEach((instrument) => {
+    if (!hasQuote(instrument)) {
+      missing.push(instrument);
+    }
+  });
+
+  return { ready: missing.length === 0, missing };
+}
+
+async function refreshRestQuotes() {
+  if (restQuotePollInProgress || restQuoteSubscriptions.size === 0) {
+    return;
+  }
+
+  restQuotePollInProgress = true;
+  try {
+    const instruments = [...restQuoteSubscriptions];
+    await Promise.all(instruments.map(async (instrument) => {
+      const normalized = normalizeInstrument(instrument);
+      if (!normalized) {
+        return;
+      }
+
+      try {
+        const quote = await api.get_quotes(normalized.exchange, normalized.token);
+        if (quote?.stat === 'Not_Ok') {
+          console.error(`REST quote failed for ${normalized.key}:`, JSON.stringify(apiResponseSummary(quote)));
+          return;
+        }
+
+        const lp = quote?.lp ?? quote?.c;
+        if (lp === undefined) {
+          return;
+        }
+
+        latestQuotes[normalized.key] = {
+          ...quote,
+          e: quote.e || quote.exch || normalized.exchange,
+          tk: quote.tk || quote.token || normalized.token,
+          lp,
+        };
+      } catch (error) {
+        console.error(`REST quote failed for ${normalized.key}:`, error.message || JSON.stringify(apiResponseSummary(error)));
+      }
+    }));
+  } finally {
+    restQuotePollInProgress = false;
+  }
+}
+
+function startRestQuotePolling() {
+  if (restQuotePoller) {
+    return;
+  }
+  restQuotePoller = setInterval(refreshRestQuotes, REST_QUOTE_POLL_MS);
+}
+
 const exitAll = async () => {
   //changes for seller or buyer
   if(positionTaken) {
@@ -618,14 +712,24 @@ function open(data) {
 function subscribeToInstruments(instruments) {
   instruments.forEach(instrument => {
     // console.log(instrument, ' :subscribing to instrument')
-    api.subscribe(instrument);
+    trackRestQuote(instrument);
+    if (websocketReady) {
+      api.subscribe(instrument);
+    }
   });
 }
 
 function dynamicallyAddSubscription(newInstrument) {
+  if (!newInstrument) {
+    return;
+  }
+
+  trackRestQuote(newInstrument);
   if (!latestQuotes[newInstrument]) {
-    console.log("Subscribing to new :: ", newInstrument);
-    api.subscribe(newInstrument);
+    console.log(websocketReady ? "Subscribing to new :: " : "Tracking quote via REST :: ", newInstrument);
+    if (websocketReady) {
+      api.subscribe(newInstrument);
+    }
   }
 }
 
@@ -637,11 +741,18 @@ params = {
 async function startWebsocket() {
   await delay(1000);
   websocketReady = false;
-  websocket = api.start_websocket(params);
+  try {
+    websocket = api.start_websocket(params);
+  } catch (error) {
+    console.log('Websocket start failed, REST polling will be used:', error.message || JSON.stringify(apiResponseSummary(error)));
+    return false;
+  }
   await delay(5000);
   if (!websocketReady) {
-    throw new Error('Shoonya websocket did not authenticate. Regenerate today token and verify UID/account fields.');
+    console.log('Shoonya websocket did not authenticate; REST polling will be used.');
+    return false;
   }
+  return true;
 }
 
 async function getOptionChain() {
@@ -1242,7 +1353,7 @@ myRecurringFunction = async () => {
 
 
     // Check a condition to determine whether to stop the recurring function
-    if (websocket_closed) {
+    if (websocket_closed && !restQuotePoller) {
       clearInterval(intervalId);
       // console.log(latestOrders, 'latestOrders')
       console.log('Recurring function stopped.');
@@ -1922,6 +2033,13 @@ emaRecurringFunction = async () => {
     atmPutSubStr = biasProcess.atmPutSymbol ? `${globalInput.pickedExchange}|${getTokenByTradingSymbol(biasProcess.atmPutSymbol)}` : '';
     dynamicallyAddSubscription(atmCallSubStr);
     dynamicallyAddSubscription(atmPutSubStr);
+    await refreshRestQuotes();
+
+    const quoteStatus = requiredQuotesReady();
+    if (!quoteStatus.ready) {
+      console.log('Skipping NAT EMA tick; missing quotes:', quoteStatus.missing.join(', '));
+      return;
+    }
 
 
     // console.log(`${biasProcess.atmCallSymbol}:`, latestQuotes[atmCallSubStr] ? latestQuotes[atmCallSubStr]?.lp : "N/A", "Order:", latestOrders[atmCallSubStr]);
@@ -2048,7 +2166,7 @@ emaRecurringFunction = async () => {
 
 
     // Check a condition to determine whether to stop the recurring function
-    if (websocket_closed) {
+    if (websocket_closed && !restQuotePoller) {
       clearInterval(intervalId);
       // console.log(latestOrders, 'latestOrders')
       // console.log('Recurring function stopped.');
@@ -2138,8 +2256,16 @@ runEma = async () => {
     await executeLogin();
     await setNearestCrudeFutureToken();
     await send_callback_notification();
-    await startWebsocket();
+    subscribeToInstruments([`${globalInput.pickedExchange}|${globalInput.token}`, 'NSE|26017']);
+    const websocketAuthenticated = await startWebsocket();
+    startRestQuotePolling();
+    if (!websocketAuthenticated) {
+      console.log('Running nat_ema2 with REST quote polling fallback.');
+    }
+    await refreshRestQuotes();
     await updateITMSymbolfromOC();
+    await dynSubs();
+    await refreshRestQuotes();
     limits = await api.get_limits()
     globalInput.emaLotMultiplier = limits?.collateral < 700000 ? 1 : 1;
     intervalId = setInterval(getEma, 1000);
