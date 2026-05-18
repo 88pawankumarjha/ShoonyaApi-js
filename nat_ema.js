@@ -142,6 +142,7 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 //websocket
 let websocket;
 let websocket_closed = false;
+let websocketReady = false;
 let intervalId;
 
 let latestQuotes = {};
@@ -222,14 +223,8 @@ async function findNearestExpiry() {
     // await downloadCsv(csvUrl, zipFilePath, axios, fs);
     // await fs.createReadStream(zipFilePath).pipe(unzipper.Extract({ path: '.' }));
 
-    downloadFile(zipFileUrl, downloadedFileName)
-      .then(() => {
-        unzipFile(downloadedFileName);
-      })
-      .catch(error => {
-        console.error('Error:', error);
-      });
-    await delay(1000);
+    await downloadFile(zipFileUrl, downloadedFileName);
+    unzipFile(downloadedFileName);
     // Read CSV data into a JavaScript object
     const csvData = fs.readFileSync(csvFilePath, 'utf-8');
     const { data: symbolDf } = parse(csvData, { header: true });
@@ -296,7 +291,7 @@ runFindNearestExpiry = async () => {
 }
 
 // Execute the findNearestExpiry function
-runFindNearestExpiry();
+const expiryLoadedPromise = runFindNearestExpiry();
 
 const Api = require("./lib/RestApi");
 let api = new Api({});
@@ -313,7 +308,16 @@ const getAtmStrike = async () => {
   // console.log('biasProcess.spotObject', biasProcess.spotObject)
   // process.exit(0)
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
-  return Math.round((Number(biasProcess.spotObject?.lp) + futureOffset) / globalInput.ocGap) * globalInput.ocGap
+  let spotLp = Number(biasProcess.spotObject?.lp);
+  if (!Number.isFinite(spotLp)) {
+    console.log('Spot websocket quote unavailable, fetching spot using REST.');
+    const spot = await fetchSpotPrice(api, globalInput.token, globalInput.pickedExchange);
+    spotLp = Number(spot?.lp);
+  }
+  if (!Number.isFinite(spotLp) || !Number(globalInput.ocGap)) {
+    throw new Error(`Unable to calculate ATM strike. spot=${spotLp}, ocGap=${globalInput.ocGap}`);
+  }
+  return Math.round((spotLp + futureOffset) / globalInput.ocGap) * globalInput.ocGap
 }
 
 // telegram callbackQuery
@@ -587,6 +591,14 @@ function receiveOrders(data) {
 function open(data) {
   // console.log(`NSE|${globalInput.token}`)
   console.log('ws open ack:', JSON.stringify(apiResponseSummary(data)));
+  if (data?.s && data.s !== 'OK') {
+    websocketReady = false;
+    websocket_closed = true;
+    buffer_notification(`Shoonya websocket auth failed: ${JSON.stringify(apiResponseSummary(data))}`, true);
+    return;
+  }
+  websocketReady = true;
+  websocket_closed = false;
 
   const initialInstruments = [`${globalInput.indexName.includes('NATURALGAS') ? 'MCX' : 'MCX'}|${globalInput.token}`, 'NSE|26017'];
 
@@ -624,17 +636,24 @@ params = {
 };
 async function startWebsocket() {
   await delay(1000);
+  websocketReady = false;
   websocket = api.start_websocket(params);
   await delay(5000);
+  if (!websocketReady) {
+    throw new Error('Shoonya websocket did not authenticate. Regenerate today token and verify UID/account fields.');
+  }
 }
 
 async function getOptionChain() {
   try {
     biasProcess.atmStrike = await getAtmStrike();
     await delay(2000)
-    const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 15);
+    if (!Number.isFinite(Number(biasProcess.atmStrike))) {
+      throw new Error(`Invalid ATM strike for option chain: ${biasProcess.atmStrike}`);
+    }
+    const optionChainResponse = await api.get_option_chain(globalInput.pickedExchange, globalInput.inputOptTsym, biasProcess.atmStrike, 25);
     // console.log(optionChainResponse, 'optionChainResponse')
-    if (optionChainResponse.stat === 'Ok') {
+    if (optionChainResponse.stat === 'Ok' && Array.isArray(optionChainResponse.values)) {
       debug && console.log(optionChainResponse, 'optionChainResponse')
       return optionChainResponse;
     } else {
@@ -658,6 +677,10 @@ function updateITMSymbolAndStrike(optionType) {
   // Assign ITM symbols and strike prices
   // console.log(biasProcess.ocCallOptions, 'callOptions')
   // console.log(biasProcess.ocPutOptions, 'putOptions')
+
+  if (biasProcess.ocCallOptions.length < 16 || biasProcess.ocPutOptions.length < 17) {
+    throw new Error(`Option chain has insufficient CE/PE entries. CE=${biasProcess.ocCallOptions.length}, PE=${biasProcess.ocPutOptions.length}, atm=${biasProcess.atmStrike}, input=${globalInput.inputOptTsym}`);
+  }
 
   biasProcess.itmCallSymbol = biasProcess.ocCallOptions[14].tsym;
   biasProcess.itmCallStrikePrice = biasProcess.ocCallOptions[14].strprc;
@@ -686,6 +709,8 @@ async function updateITMSymbolfromOC() {
     updateITMSymbolAndStrike();
     await delay(1000)
     debug && console.log(biasProcess, ' :biasProcess')
+  } else {
+    throw new Error('Option chain unavailable for NAT EMA startup.');
   }
 }
 
@@ -2109,6 +2134,7 @@ const setNearestCrudeFutureToken = async () => {
 
 runEma = async () => {
   try {
+    await expiryLoadedPromise;
     await executeLogin();
     await setNearestCrudeFutureToken();
     await send_callback_notification();
