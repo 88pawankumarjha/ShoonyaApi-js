@@ -443,37 +443,42 @@ exitHedges = async () => {
 }
 
 updatePositions = async () => {
-    api.get_positions()
-        .then((data) => {
-            if(isWeekend()) {
-                positionProcess.smallestCallPosition = biasProcess.itmCallSymbol;
-                positionProcess.smallestPutPosition = biasProcess.itmPutSymbol;
-            }
-            // Check if data is an array
-            else if (Array.isArray(data)) {
-                // Separate calls and puts for NFO - these are sold options with smallest LTP
-                const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
-                const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
-                // Separate calls and puts for NFO - these are sold options with smallest LTP
-                positionProcess.hedgeCall = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
-                positionProcess.hedgePut = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
-                positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
-                positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
-                // send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
-                console.log('positionProcess.smallestCallPosition: '+positionProcess.smallestCallPosition?.tsym)
-                console.log('positionProcess.smallestPutPosition: '+positionProcess.smallestPutPosition?.tsym)
-                debug && console.log(positionProcess, ' : positionProcess');    
-            } else if (isNoPositionsResponse(data)) {
-                resetCalls();
-                resetPuts();
-                positionProcess.hedgeCall = [];
-                positionProcess.hedgePut = [];
-                console.log('No open positions returned by API:', JSON.stringify(apiResponseSummary(data)));
-            } else {
-                console.error('positions data is not an array:', JSON.stringify(apiResponseSummary(data)));
-            }
-        });
-        return true;
+    try {
+        const data = await api.get_positions();
+
+        if(isWeekend()) {
+            positionProcess.smallestCallPosition = biasProcess.itmCallSymbol;
+            positionProcess.smallestPutPosition = biasProcess.itmPutSymbol;
+        }
+        // Check if data is an array
+        else if (Array.isArray(data)) {
+            // Separate calls and puts for NFO - these are sold options with smallest LTP
+            const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
+            const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
+            // Separate calls and puts for NFO - these are sold options with smallest LTP
+            positionProcess.hedgeCall = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
+            positionProcess.hedgePut = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
+            positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
+            positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
+            // send_notification('MtoM: '+data?.urmtom + ", rPnL: "+ +data?.rpnl)
+            console.log('positionProcess.smallestCallPosition: '+positionProcess.smallestCallPosition?.tsym)
+            console.log('positionProcess.smallestPutPosition: '+positionProcess.smallestPutPosition?.tsym)
+            debug && console.log(positionProcess, ' : positionProcess');
+        } else if (isNoPositionsResponse(data)) {
+            resetCalls();
+            resetPuts();
+            positionProcess.hedgeCall = [];
+            positionProcess.hedgePut = [];
+            console.log('No open positions returned by API:', JSON.stringify(apiResponseSummary(data)));
+        } else {
+            console.error('positions data is not an array:', JSON.stringify(apiResponseSummary(data)));
+        }
+
+        return data;
+    } catch (error) {
+        console.error('get_positions failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+        return null;
+    }
 }
 
 let isQueueBusy = false;
@@ -483,23 +488,27 @@ updateTwoSmallestPositionsAndNeighboursSubs = async (autoSubs = true) => {
     // If the queue is busy, add the function call to the queue
     if (isQueueBusy) {
         debug && console.log('updateTwoSmallestPositionsAndNeighboursSubs is already in progress.');
-        queue.push(true);
-        return;
+        return new Promise((resolve, reject) => {
+            queue.push({ autoSubs, resolve, reject });
+        });
     }
 
     isQueueBusy = true;
 
     try {
         await delay(2000);
-        await updatePositions();
+        const positions = await updatePositions();
         updatePositionsNeighboursAndSubs(autoSubs);
+        return positions;
     } finally {
         isQueueBusy = false;
         // Process the next function call in the queue if any
         if (queue.length > 0) {
             const nextItem = queue.shift(); // Remove the item from the queue
             // console.log('Processing next item in the updateTwoSmallestPositionsAndNeighboursSubs queue.');
-            updateTwoSmallestPositionsAndNeighboursSubs(autoSubs);
+            updateTwoSmallestPositionsAndNeighboursSubs(nextItem.autoSubs)
+                .then(nextItem.resolve)
+                .catch(nextItem.reject);
         }
     }
 }
@@ -1026,6 +1035,12 @@ const exitSellsAndOrStop = async (stop = false) => {
   }
 
   lastExecutionTime = currentTime;
+
+  try {
+      await cancelOpenOrders();
+  } catch (error) {
+      console.error('cancelOpenOrders failed before exit:', error.message || JSON.stringify(apiResponseSummary(error)));
+  }
 
   // Exit positions
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
