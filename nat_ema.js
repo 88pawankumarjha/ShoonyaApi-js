@@ -399,6 +399,26 @@ const resetPuts = () => {
     positionProcess.putsNearbyNeighbours = undefined,
     positionProcess.collectedValuesPut = new Map()
 };
+
+const apiResponseSummary = (response) => {
+  if (!response || typeof response !== 'object') {
+    return response;
+  }
+
+  const summary = {};
+  ['stat', 'emsg', 'message', 'status', 'request_time', 'norenordno', 'result', 't', 's'].forEach((key) => {
+    if (response[key] !== undefined) {
+      summary[key] = response[key];
+    }
+  });
+  if (response.data && typeof response.data === 'object') {
+    summary.data = apiResponseSummary(response.data);
+  }
+  return Object.keys(summary).length ? summary : response;
+};
+
+const isNoPositionsResponse = (response) => response && response.stat === 'Not_Ok' &&
+  /no data|no position|no record/i.test(response.emsg || response.message || '');
 // const data = [
 //     {
 //         tsym: 'NIFTY07DEC23P20850',
@@ -441,41 +461,36 @@ const resetPuts = () => {
 // !debug && await api.place_order(orderCE);
 
 
-updatePositions = async => {
-  api.get_positions()
-    .then((data) => {
-      debug && console.log(data, ' : positions data');
-      if (isWeekend()) {
-        positionProcess.smallestCallPosition = biasProcess.itmCallSymbol;
-        positionProcess.smallestPutPosition = biasProcess.itmPutSymbol;
-      }
-      // Check if data is an array
-      else if (Array.isArray(data)) {
-        // Separate calls and puts for NFO - these are sold options with smallest LTP
-        const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
-        const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
-        positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
-        positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
-        debug && console.log(positionProcess, ' : positionProcess');
-      } else {
-        console.error('positions data is not an array.');
-      }
-      // [
-      //     {
-      //       tsym: 'NIFTY07DEC23P20850',
-      //       lp: '1.55',
-      //       netqty: '-800',
-      //       s_prdt_ali: 'MIS'
-      //     },
-      //     {
-      //       tsym: 'NIFTY07DEC23C20950',
-      //       lp: '2.60',
-      //       netqty: '-800',
-      //       s_prdt_ali: 'MIS'
-      //     }
-      //   ]
-    });
-  return true;
+updatePositions = async () => {
+  try {
+    const data = await api.get_positions();
+    debug && console.log(data, ' : positions data');
+
+    if (isWeekend()) {
+      positionProcess.smallestCallPosition = biasProcess.itmCallSymbol;
+      positionProcess.smallestPutPosition = biasProcess.itmPutSymbol;
+    }
+    // Check if data is an array
+    else if (Array.isArray(data)) {
+      // Separate calls and puts for NFO - these are sold options with smallest LTP
+      const calls = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'C');
+      const puts = data.filter(option => parseInt(option.netqty) < 0 && identify_option_type(option.tsym) == 'P');
+      positionProcess.smallestCallPosition = calls.length > 0 ? calls.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), calls[0]) : resetCalls();
+      positionProcess.smallestPutPosition = puts.length > 0 ? puts.reduce((min, option) => (parseFloat(option?.lp) < parseFloat(min?.lp) ? option : min), puts[0]) : resetPuts();
+      debug && console.log(positionProcess, ' : positionProcess');
+    } else if (isNoPositionsResponse(data)) {
+      resetCalls();
+      resetPuts();
+      console.log('No open positions returned by API:', JSON.stringify(apiResponseSummary(data)));
+    } else {
+      console.error('positions data is not an array:', JSON.stringify(apiResponseSummary(data)));
+    }
+
+    return data;
+  } catch (error) {
+    console.error('get_positions failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    return null;
+  }
 }
 
 let isQueueBusy = false;
@@ -485,23 +500,27 @@ updateTwoSmallestPositionsAndNeighboursSubs = async () => {
   // If the queue is busy, add the function call to the queue
   if (isQueueBusy) {
     debug && console.log('updateTwoSmallestPositionsAndNeighboursSubs is already in progress.');
-    queue.push(true);
-    return;
+    return new Promise((resolve, reject) => {
+      queue.push({ resolve, reject });
+    });
   }
 
   isQueueBusy = true;
 
   try {
     await delay(2000);
-    await updatePositions();
+    const positions = await updatePositions();
     updatePositionsNeighboursAndSubs();
+    return positions;
   } finally {
     isQueueBusy = false;
     // Process the next function call in the queue if any
     if (queue.length > 0) {
       const nextItem = queue.shift(); // Remove the item from the queue
       // console.log('Processing next item in the updateTwoSmallestPositionsAndNeighboursSubs queue.');
-      updateTwoSmallestPositionsAndNeighboursSubs();
+      updateTwoSmallestPositionsAndNeighboursSubs()
+        .then(nextItem.resolve)
+        .catch(nextItem.reject);
     }
   }
 }
@@ -567,6 +586,7 @@ function receiveOrders(data) {
 
 function open(data) {
   // console.log(`NSE|${globalInput.token}`)
+  console.log('ws open ack:', JSON.stringify(apiResponseSummary(data)));
 
   const initialInstruments = [`${globalInput.indexName.includes('NATURALGAS') ? 'MCX' : 'MCX'}|${globalInput.token}`, 'NSE|26017'];
 
