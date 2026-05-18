@@ -382,6 +382,32 @@ const resetPuts = () => {
     positionProcess.collectedValuesPut=new Map()
 };
 
+const apiResponseSummary = (response) => {
+    if (!response || typeof response !== 'object') {
+        return response;
+    }
+
+    const summary = {};
+    ['stat', 'emsg', 'message', 'status', 'request_time', 'norenordno', 'result'].forEach((key) => {
+        if (response[key] !== undefined) {
+            summary[key] = response[key];
+        }
+    });
+    if (response.data && typeof response.data === 'object') {
+        summary.data = apiResponseSummary(response.data);
+    }
+    return Object.keys(summary).length ? summary : response;
+};
+
+const isOrderAccepted = (response) => response && (
+    response.stat === 'Ok' ||
+    response.norenordno ||
+    response.result
+);
+
+const isNoPositionsResponse = (response) => response && response.stat === 'Not_Ok' &&
+    /no data|no position|no record/i.test(response.emsg || response.message || '');
+
 exitHedgeOrder = async (positionsData) => {
   let order = {
         buy_or_sell: 'S',
@@ -437,8 +463,14 @@ updatePositions = async () => {
                 console.log('positionProcess.smallestCallPosition: '+positionProcess.smallestCallPosition?.tsym)
                 console.log('positionProcess.smallestPutPosition: '+positionProcess.smallestPutPosition?.tsym)
                 debug && console.log(positionProcess, ' : positionProcess');    
+            } else if (isNoPositionsResponse(data)) {
+                resetCalls();
+                resetPuts();
+                positionProcess.hedgeCall = [];
+                positionProcess.hedgePut = [];
+                console.log('No open positions returned by API:', JSON.stringify(apiResponseSummary(data)));
             } else {
-                console.error('positions data is not an array.');
+                console.error('positions data is not an array:', JSON.stringify(apiResponseSummary(data)));
             }
         });
         return true;
@@ -1045,18 +1077,39 @@ const triggerATMChangeActions = async () => {
   await exitSellsAndOrStop(false);
 }
 const my_default_place_order = async (order) => {
-  let freeze_qty = getFreezeQty();
-  let initialQty = order.quantity;
+  const freeze_qty = Number(getFreezeQty());
+  let remainingQty = Number(order.quantity);
+  const responses = [];
 
-  while (order.quantity > freeze_qty) {
-    order.quantity = freeze_qty;
-    await api.place_order(order);
-    order.quantity = initialQty - freeze_qty;
+  if (!Number.isFinite(remainingQty) || remainingQty <= 0) {
+    throw new Error(`Invalid order quantity: ${order.quantity}`);
   }
-  
-  if (order.quantity > 0) {
-    await api.place_order(order);
+
+  while (remainingQty > 0) {
+    const chunkQty = Math.min(remainingQty, freeze_qty);
+    const chunkOrder = { ...order, quantity: chunkQty.toString() };
+    const response = await api.place_order(chunkOrder);
+    const summary = apiResponseSummary(response);
+
+    console.log('place_order response:', JSON.stringify({
+      ...summary,
+      trantype: chunkOrder.buy_or_sell,
+      exch: chunkOrder.exchange,
+      tsym: chunkOrder.tradingsymbol,
+      qty: chunkOrder.quantity,
+      prctyp: chunkOrder.price_type,
+      prc: chunkOrder.price
+    }));
+
+    if (!isOrderAccepted(response)) {
+      throw new Error(`Shoonya order not accepted: ${JSON.stringify(summary)}`);
+    }
+
+    responses.push(response);
+    remainingQty -= chunkQty;
   }
+
+  return responses;
 }
 
 //buy Put
@@ -1074,8 +1127,17 @@ const exitXemaLong = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestPutPosition?.tsym) {await my_default_place_order(order)}
-  longPositionTaken = positionProcess.smallestPutPosition?.tsym ? false:longPositionTaken;
+  let exitOrderAccepted = false;
+  if(positionProcess.smallestPutPosition?.tsym) {
+    try {
+      await my_default_place_order(order);
+      exitOrderAccepted = true;
+    } catch (error) {
+      console.error('exitXemaLong order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+      send_notification(`exitXemaLong order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+    }
+  }
+  longPositionTaken = exitOrderAccepted ? false:longPositionTaken;
   // Set cooldown period when exiting position
   if(positionProcess.smallestPutPosition?.tsym) {
     largeEmaGapExitTime = Date.now();
@@ -1107,9 +1169,15 @@ const enterXemaLong = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  await my_default_place_order(order);
-  // send_notification('entering Long', true)
-  longPositionTaken = true;
+  try {
+    await my_default_place_order(order);
+    // send_notification('entering Long', true)
+    longPositionTaken = true;
+  } catch (error) {
+    longPositionTaken = false;
+    console.error('enterXemaLong order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    send_notification(`enterXemaLong order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+  }
   await delay(1000);
 }
 
@@ -1128,8 +1196,17 @@ const exitXemaShort = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  if(positionProcess.smallestCallPosition?.tsym) {await my_default_place_order(order)}
-  shortPositionTaken = positionProcess.smallestCallPosition?.tsym ? false:shortPositionTaken;
+  let exitOrderAccepted = false;
+  if(positionProcess.smallestCallPosition?.tsym) {
+    try {
+      await my_default_place_order(order);
+      exitOrderAccepted = true;
+    } catch (error) {
+      console.error('exitXemaShort order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+      send_notification(`exitXemaShort order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+    }
+  }
+  shortPositionTaken = exitOrderAccepted ? false:shortPositionTaken;
   // Set cooldown period when exiting position
   if(positionProcess.smallestCallPosition?.tsym) {
     largeEmaGapExitTime = Date.now();
@@ -1165,9 +1242,15 @@ const enterXemaShort = async () => {
     remarks: 'API'
   }
   if(globalInput.pickedExchange != 'BFO' ) {order.price_type = 'MKT', order.price = 0}
-  await my_default_place_order(order);
-  // send_notification('entering Short', true)
-  shortPositionTaken = true;
+  try {
+    await my_default_place_order(order);
+    // send_notification('entering Short', true)
+    shortPositionTaken = true;
+  } catch (error) {
+    shortPositionTaken = false;
+    console.error('enterXemaShort order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    send_notification(`enterXemaShort order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+  }
   await delay(1000);
 }
 
