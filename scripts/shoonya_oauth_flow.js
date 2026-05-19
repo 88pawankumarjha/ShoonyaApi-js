@@ -49,6 +49,25 @@ function requireEnv(name) {
   return value.trim();
 }
 
+function convertToIST(timestamp) {
+  // Convert Unix timestamp (seconds) to milliseconds
+  const date = new Date(parseInt(timestamp) * 1000);
+  
+  // Format as IST (UTC+5:30)
+  const options = {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  };
+  
+  return date.toLocaleString('en-IN', options);
+}
+
 async function main() {
   const input = process.argv.slice(2).join(" ").trim();
 
@@ -93,11 +112,16 @@ async function main() {
     fs.writeFileSync(outputPath, JSON.stringify(response, null, 2), { mode: 0o600 });
 
     console.log("✓ OAuth token generated and saved to .shoonya-oauth-token.json");
+    
+    // Convert expires_in timestamp to IST
+    const expiresAt = response.expires_in ? convertToIST(response.expires_in) : "Unknown";
+    
     console.log(JSON.stringify({
       stat: response.stat,
       user: response.USERID,
       account: response.actid,
-      expires_in: response.expires_in,
+      expires_at: expiresAt,
+      expires_in_timestamp: response.expires_in,
       request_time: response.request_time,
     }, null, 2));
   } catch (error) {
