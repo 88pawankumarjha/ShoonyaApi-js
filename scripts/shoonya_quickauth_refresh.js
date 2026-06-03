@@ -129,6 +129,10 @@ async function main() {
     process.exit(1);
   }
 
+  if (verify) {
+    await verifyReadOnly(api);
+  }
+
   const outputPath = sessionOutputPath();
   const output = {
     ...response,
@@ -144,10 +148,6 @@ async function main() {
     auth_type: output.auth_type,
     generated_at: output.generated_at,
   }, null, 2));
-
-  if (verify) {
-    await verifyReadOnly(api);
-  }
 }
 
 main().catch((error) => {
