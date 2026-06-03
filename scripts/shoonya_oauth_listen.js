@@ -4,46 +4,18 @@
 require("dotenv").config();
 
 const { spawn } = require("child_process");
-const fs = require("fs");
 const http = require("http");
-const path = require("path");
 
-const ENV_PATH = path.resolve(process.cwd(), ".env");
 const PORT = Number(process.env.SHOONYA_OAUTH_LISTEN_PORT || 8787);
 const HOST = process.env.SHOONYA_OAUTH_LISTEN_HOST || "0.0.0.0";
 const CALLBACK_PATH = process.env.SHOONYA_OAUTH_CALLBACK_PATH || "/callback";
+const AUTO_CLOSE = process.env.SHOONYA_OAUTH_AUTO_CLOSE !== "false";
 
-function readEnvFile() {
-  if (!fs.existsSync(ENV_PATH)) {
-    return "";
-  }
-  return fs.readFileSync(ENV_PATH, "utf8");
-}
-
-function upsertEnvValue(content, key, value) {
-  const line = `${key}=${value}`;
-  const pattern = new RegExp(`^${key}=.*$`, "m");
-  if (pattern.test(content)) {
-    return content.replace(pattern, line);
-  }
-  const separator = content && !content.endsWith("\n") ? "\n" : "";
-  return `${content}${separator}${line}\n`;
-}
-
-function saveAuthCode(code) {
-  const current = readEnvFile();
-  const updated = upsertEnvValue(current, "SHOONYA_AUTH_CODE", code);
-  fs.writeFileSync(ENV_PATH, updated, { mode: 0o600 });
-}
-
-function runTokenExchange(code) {
+function runOAuthFlow(code) {
   return new Promise((resolve, reject) => {
-    const child = spawn("npm", ["run", "oauth:token"], {
+    const child = spawn("npm", ["run", "oauth:flow", "--", code], {
       cwd: process.cwd(),
-      env: {
-        ...process.env,
-        SHOONYA_AUTH_CODE: code,
-      },
+      env: process.env,
       stdio: "inherit",
     });
 
@@ -53,9 +25,36 @@ function runTokenExchange(code) {
         resolve();
         return;
       }
-      reject(new Error(`oauth:token failed with exit code ${status}`));
+      reject(new Error(`oauth:flow failed with exit code ${status}`));
     });
   });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function getBaseUrl(req) {
+  if (process.env.SHOONYA_OAUTH_PUBLIC_BASE_URL) {
+    return process.env.SHOONYA_OAUTH_PUBLIC_BASE_URL.replace(/\/+$/, "");
+  }
+  const proto = req.headers["x-forwarded-proto"] || "http";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || `localhost:${PORT}`;
+  return `${proto}://${host}`.replace(/\/+$/, "");
+}
+
+function getAuthorizeUrl() {
+  const loginUrl = process.env.SHOONYA_OAUTH_LOGIN_URL || "https://trade.shoonya.com/OAuthlogin";
+  const clientId = encodeURIComponent(process.env.SHOONYA_CLIENT_ID || "YOUR_CLIENT_ID");
+  return `${loginUrl.replace(/\/+$/, "")}/authorize/oauth?client_id=${clientId}`;
+}
+
+function createBookmarklet(callbackUrl) {
+  return `javascript:(()=>{const urls=[location.href,document.referrer,...performance.getEntriesByType('navigation').map(e=>e.name),...performance.getEntriesByType('resource').map(e=>e.name)];let code='';for(const item of urls){try{const url=new URL(item,location.href);code=url.searchParams.get('code')||url.searchParams.get('request_token')||code;if(code)break}catch(_){}}if(!code){prompt('Shoonya code not found. Copy the address-bar URL and run npm run oauth:save-code -- "<URL>"');return;}location.href=${JSON.stringify(callbackUrl)}+'?code='+encodeURIComponent(code);})();`;
 }
 
 function sendHtml(res, statusCode, title, body) {
@@ -64,17 +63,50 @@ function sendHtml(res, statusCode, title, body) {
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title}</title>
+    <title>${escapeHtml(title)}</title>
   </head>
-  <body style="font-family: system-ui, sans-serif; padding: 24px; line-height: 1.4;">
-    <h2>${title}</h2>
-    <p>${body}</p>
+  <body style="font-family: system-ui, sans-serif; padding: 24px; line-height: 1.45; max-width: 720px; margin: 0 auto;">
+    <h2>${escapeHtml(title)}</h2>
+    ${body}
   </body>
 </html>`);
 }
 
+function sendHomePage(req, res) {
+  const baseUrl = getBaseUrl(req);
+  const callbackUrl = `${baseUrl}${CALLBACK_PATH}`;
+  const bookmarklet = createBookmarklet(callbackUrl);
+  const bookmarkletUrl = `${baseUrl}/bookmarklet.txt`;
+  const authorizeUrl = getAuthorizeUrl();
+
+  sendHtml(res, 200, "Shoonya mobile OAuth", `
+    <p>This page removes the daily terminal copy/paste step. Login still has to be completed manually in Shoonya.</p>
+    <h3>One-time phone setup</h3>
+    <ol>
+      <li>Create or edit a phone browser bookmark named <strong>Shoonya Auto Token</strong>.</li>
+      <li>Set the bookmark URL to the bookmarklet below.</li>
+    </ol>
+    <p><a href="${escapeHtml(bookmarkletUrl)}">Open bookmarklet text</a></p>
+    <textarea readonly style="box-sizing: border-box; width: 100%; min-height: 160px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;">${escapeHtml(bookmarklet)}</textarea>
+    <h3>Daily flow</h3>
+    <ol>
+      <li><a href="${escapeHtml(authorizeUrl)}">Open Shoonya login</a></li>
+      <li>Login and authorize.</li>
+      <li>On the final Shoonya page, open the <strong>Shoonya Auto Token</strong> bookmark.</li>
+    </ol>
+    <p>The bookmark will send the code to <code>${escapeHtml(callbackUrl)}</code>, update <code>.env</code>, and run <code>npm run oauth:flow</code>.</p>
+  `);
+}
+
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+  if (requestUrl.pathname === "/bookmarklet.txt") {
+    const callbackUrl = `${getBaseUrl(req)}${CALLBACK_PATH}`;
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end(`${createBookmarklet(callbackUrl)}\n`);
+    return;
+  }
 
   if (requestUrl.pathname !== CALLBACK_PATH && requestUrl.pathname !== "/") {
     sendHtml(res, 404, "Not found", "Use the configured Shoonya OAuth callback URL.");
@@ -83,25 +115,26 @@ const server = http.createServer(async (req, res) => {
 
   const code = requestUrl.searchParams.get("code") || requestUrl.searchParams.get("request_token");
   if (!code) {
-    sendHtml(res, 200, "Waiting for Shoonya code", "Authorize Shoonya from mobile. This page will capture the OAuth code after redirect.");
+    sendHomePage(req, res);
     return;
   }
 
   try {
-    saveAuthCode(code);
-    console.log(`Saved Shoonya auth code to ${ENV_PATH}`);
-    await runTokenExchange(code);
-    sendHtml(res, 200, "Shoonya token ready", "OAuth code was captured and today's token file was generated. You can close this page.");
-    setTimeout(() => server.close(), 500);
+    await runOAuthFlow(code);
+    sendHtml(res, 200, "Shoonya token ready", "<p>OAuth code was captured and today's token file was generated. You can close this page.</p>");
+    if (AUTO_CLOSE) {
+      setTimeout(() => server.close(), 500);
+    }
   } catch (error) {
     console.error(error.message);
-    sendHtml(res, 500, "Shoonya token failed", "OAuth code was captured, but token generation failed. Check the EC2 terminal logs.");
+    sendHtml(res, 500, "Shoonya token failed", "<p>OAuth code was captured, but token generation failed. Check the EC2 terminal logs.</p>");
   }
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Shoonya OAuth listener running on http://${HOST}:${PORT}${CALLBACK_PATH}`);
-  console.log(`Set Shoonya redirect URL to http://<EC2_PUBLIC_IP>:${PORT}${CALLBACK_PATH}`);
-  const clientId = encodeURIComponent(process.env.SHOONYA_CLIENT_ID || "YOUR_CLIENT_ID");
-  console.log(`Open on mobile: https://trade.shoonya.com/OAuthlogin/authorize/oauth?client_id=${clientId}`);
+  const defaultBaseUrl = process.env.SHOONYA_OAUTH_PUBLIC_BASE_URL || `http://<EC2_PUBLIC_IP>:${PORT}`;
+  console.log(`Shoonya OAuth mobile helper running on http://${HOST}:${PORT}/`);
+  console.log(`Open this on mobile: ${defaultBaseUrl}/`);
+  console.log(`Callback endpoint: ${defaultBaseUrl}${CALLBACK_PATH}`);
+  console.log(`Shoonya login URL: ${getAuthorizeUrl()}`);
 });
