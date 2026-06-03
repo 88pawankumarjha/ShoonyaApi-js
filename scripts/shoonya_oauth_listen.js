@@ -65,7 +65,7 @@ function extractAuthCode(input) {
 
   try {
     const url = new URL(value);
-    return url.searchParams.get("code") || url.searchParams.get("request_token") || value;
+    return url.searchParams.get("code") || url.searchParams.get("request_token") || "";
   } catch (_) {
     const match = value.match(/[?&](?:code|request_token)=([^&#\s]+)/);
     return match ? decodeURIComponent(match[1]) : value;
@@ -158,7 +158,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (!code) {
-    sendHomePage(req, res);
+    if (req.method === "POST" && requestUrl.pathname === CALLBACK_PATH) {
+      sendHtml(res, 400, "Shoonya code not found", `
+        <p>The submitted text did not contain <code>code=...</code> or <code>request_token=...</code>.</p>
+        <p>Copy the address-bar URL from the final Shoonya page after authorization, not the login URL.</p>
+        <p><a href="/">Go back</a></p>
+      `);
+    } else {
+      sendHomePage(req, res);
+    }
     return;
   }
 
