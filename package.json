@@ -11,6 +11,7 @@
     "oauth:save-code": "node scripts/shoonya_save_auth_code.js",
     "oauth:token": "node scripts/shoonya_oauth_token.js",
     "oauth:flow": "node scripts/shoonya_oauth_flow.js",
+    "auth:refresh": "node scripts/shoonya_quickauth_refresh.js",
     "probe:ws": "node scripts/probe_shoonya_ws.js",
     "start": "jest && node app.js",
     "test": "jest"

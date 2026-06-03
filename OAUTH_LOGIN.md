@@ -110,3 +110,31 @@ For API calls, use the returned `access_token` as:
 ```text
 Authorization: Bearer <access_token>
 ```
+
+## Fully automated QuickAuth refresh
+
+If the account/app still allows Shoonya QuickAuth, the daily browser OAuth step
+can be skipped. The EC2 instance can generate the current TOTP and refresh the
+session file directly.
+
+Credentials can come from the ignored local `creds.js` file or from EC2-only
+environment variables:
+
+```bash
+SHOONYA_USERID=
+SHOONYA_PASSWORD=
+SHOONYA_VENDOR_CODE=
+SHOONYA_API_SECRET=
+SHOONYA_IMEI=
+SHOONYA_TOTP_SECRET=
+```
+
+Refresh the session and run read-only verification:
+
+```bash
+cd ~/2
+npm run auth:refresh -- --verify
+```
+
+On success, `.shoonya-oauth-token.json` is replaced with a QuickAuth
+`susertoken` session file. The trading app can read that file on fresh startup.
