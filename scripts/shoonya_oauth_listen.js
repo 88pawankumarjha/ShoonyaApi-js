@@ -57,6 +57,21 @@ function createBookmarklet(callbackUrl) {
   return `javascript:(()=>{const urls=[location.href,document.referrer,...performance.getEntriesByType('navigation').map(e=>e.name),...performance.getEntriesByType('resource').map(e=>e.name)];let code='';for(const item of urls){try{const url=new URL(item,location.href);code=url.searchParams.get('code')||url.searchParams.get('request_token')||code;if(code)break}catch(_){}}if(!code){prompt('Shoonya code not found. Copy the address-bar URL and run npm run oauth:save-code -- "<URL>"');return;}location.href=${JSON.stringify(callbackUrl)}+'?code='+encodeURIComponent(code);})();`;
 }
 
+function extractAuthCode(input) {
+  const value = String(input || "").trim();
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const url = new URL(value);
+    return url.searchParams.get("code") || url.searchParams.get("request_token") || value;
+  } catch (_) {
+    const match = value.match(/[?&](?:code|request_token)=([^&#\s]+)/);
+    return match ? decodeURIComponent(match[1]) : value;
+  }
+}
+
 function sendHtml(res, statusCode, title, body) {
   res.writeHead(statusCode, { "Content-Type": "text/html; charset=utf-8" });
   res.end(`<!doctype html>
@@ -95,7 +110,29 @@ function sendHomePage(req, res) {
       <li>On the final Shoonya page, open the <strong>Shoonya Auto Token</strong> bookmark.</li>
     </ol>
     <p>The bookmark will send the code to <code>${escapeHtml(callbackUrl)}</code>, update <code>.env</code>, and run <code>npm run oauth:flow</code>.</p>
+    <h3>Fallback</h3>
+    <p>If the bookmark says it cannot find the code, copy the final Shoonya page URL, paste it below, and submit.</p>
+    <form method="post" action="${escapeHtml(callbackUrl)}">
+      <textarea name="url" rows="4" style="box-sizing: border-box; width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;" placeholder="Paste final Shoonya URL or raw code"></textarea>
+      <button type="submit" style="margin-top: 12px; padding: 10px 14px;">Generate token</button>
+    </form>
   `);
+}
+
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 10000) {
+        reject(new Error("Request body is too large"));
+        req.destroy();
+      }
+    });
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -113,7 +150,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const code = requestUrl.searchParams.get("code") || requestUrl.searchParams.get("request_token");
+  let code = requestUrl.searchParams.get("code") || requestUrl.searchParams.get("request_token");
+  if (!code && req.method === "POST" && requestUrl.pathname === CALLBACK_PATH) {
+    const body = await readRequestBody(req);
+    const params = new URLSearchParams(body);
+    code = extractAuthCode(params.get("url") || params.get("code") || body);
+  }
+
   if (!code) {
     sendHomePage(req, res);
     return;
