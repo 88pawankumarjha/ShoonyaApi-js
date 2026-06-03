@@ -30,7 +30,7 @@ function envAuthParams() {
     userid: firstValue(process.env.SHOONYA_USERID, process.env.SHOONYA_UID),
     password: process.env.SHOONYA_PASSWORD,
     vendor_code: process.env.SHOONYA_VENDOR_CODE,
-    api_secret: firstValue(process.env.SHOONYA_API_SECRET, process.env.SHOONYA_SECRET_CODE),
+    api_secret: process.env.SHOONYA_API_SECRET,
     imei: process.env.SHOONYA_IMEI,
   };
 }

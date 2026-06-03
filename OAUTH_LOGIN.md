@@ -129,6 +129,9 @@ SHOONYA_IMEI=
 SHOONYA_TOTP_SECRET=
 ```
 
+`SHOONYA_API_SECRET` is the QuickAuth API key/secret from the Shoonya
+developer/API setup. Do not assume it is the OAuth `SHOONYA_SECRET_CODE`.
+
 Refresh the session and run read-only verification:
 
 ```bash
