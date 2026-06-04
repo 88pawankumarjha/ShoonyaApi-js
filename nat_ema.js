@@ -425,6 +425,30 @@ const apiResponseSummary = (response) => {
   return Object.keys(summary).length ? summary : response;
 };
 
+const toFiniteNumber = (value) => {
+  const rawValue = Array.isArray(value) && value.length === 1 ? value[0] : value;
+  const numericValue = Number(rawValue);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const extractIntcPrices = (reply, params, minCandles = 1) => {
+  const series = Array.isArray(reply) ? reply : Array.isArray(reply?.values) ? reply.values : null;
+  const context = `${params?.exchange || 'unknown'}|${params?.token || 'unknown'}`;
+
+  if (!series) {
+    console.error(`TPSeries unavailable for ${context}:`, JSON.stringify(apiResponseSummary(reply)));
+    return null;
+  }
+
+  const intcPrices = series.map(item => Number(item?.intc)).filter(Number.isFinite);
+  if (intcPrices.length < minCandles) {
+    console.error(`TPSeries returned ${intcPrices.length} usable candles for ${context}, need ${minCandles}.`);
+    return null;
+  }
+
+  return intcPrices;
+};
+
 const isNoPositionsResponse = (response) => response && response.stat === 'Not_Ok' &&
   /no data|no position|no record/i.test(response.emsg || response.message || '');
 // const data = [
@@ -1799,7 +1823,10 @@ const ema9and21ValuesIndicators = async (params) => {
 
     // console.log(reply[0], ' : reply'); 
     // Extract 'intc' prices into a new array
-    const intcPrices = reply.map(item => parseFloat(item.intc));
+    const intcPrices = extractIntcPrices(reply, params, 48);
+    if (!intcPrices) {
+      return [null, null];
+    }
 
     //last 50 items
     const first9Items = intcPrices.slice(0, 80).reverse();
@@ -1849,7 +1876,10 @@ const emaXValuesIndicators = async (params, emaSpeed = 8) => {
 
     // console.log(reply[0], ' : reply'); 
     // Extract 'intc' prices into a new array
-    const intcPrices = reply.map(item => parseFloat(item.intc));
+    const intcPrices = extractIntcPrices(reply, params, emaSpeed);
+    if (!intcPrices) {
+      return null;
+    }
 
     //last 50 items
     const lastXItems = intcPrices.slice(0, 200).reverse();
@@ -1882,7 +1912,7 @@ const emaXValuesIndicators = async (params, emaSpeed = 8) => {
     let ta = new Indicators();
     let emaXValues = await ta.ema(lastXItems, emaSpeed);
     //send last item from the array
-    return [emaXValues[emaXValues.length - 1]];
+    return emaXValues[emaXValues.length - 1];
   }
   catch (error) {
     console.error('Error:', error);
@@ -1896,7 +1926,10 @@ const ema9and21Values = async (params) => {
 
     // console.log(reply[0], ' : reply'); 
     // Extract 'intc' prices into a new array
-    const intcPrices = reply.map(item => parseFloat(item.intc));
+    const intcPrices = extractIntcPrices(reply, params, 21);
+    if (!intcPrices) {
+      return [null, null];
+    }
 
     // Get the last 9 items
     const first9Items = intcPrices.slice(0, 9);
@@ -2135,13 +2168,21 @@ emaRecurringFunction = async () => {
       // console.log(callema9, callema21, ' : callema9, callema21')
       if (inputProp) {
         // const XEmaResponse = await emaXValuesIndicators(params); //call
-        let fastEMA = await emaXValuesIndicators(params, 26);
-        let slowEMA = await emaXValuesIndicators(params, 96);
+        let fastEMA = toFiniteNumber(await emaXValuesIndicators(params, 26));
+        let slowEMA = toFiniteNumber(await emaXValuesIndicators(params, 96));
+        if (fastEMA === null || slowEMA === null) {
+          console.log(`Skipping EMA tick: invalid TPSeries data for ${params.exchange}|${params.token}.`);
+          return;
+        }
         // console.log(fastEMA, slowEMA, ' : fastEMA, slowEMA');
         buffer_notification('NATURALGAS: ltp ' + +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + '\nfastEMA ' + parseFloat(fastEMA).toFixed(2) + '\nslowEMA ' + parseFloat(slowEMA).toFixed(2))
         await XEma(fastEMA, slowEMA);
       } else {
         const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
+        if (toFiniteNumber(callema9) === null || toFiniteNumber(callema21) === null) {
+          console.log(`Skipping EMA tick: invalid TPSeries data for ${params.exchange}|${params.token}.`);
+          return;
+        }
         // const [putema9, putema21] = await ema9and21Values(params2); //put
 
         buffer_notification('NATURALGAS: ltp ' + +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + ', ema9 ' + parseFloat(callema9).toFixed(2) + ', ema21 ' + parseFloat(callema21).toFixed(2))
@@ -2229,8 +2270,14 @@ const setNearestCrudeFutureToken = async () => {
 
   let query = `NATURALGAS`;
   let futureObj = await api.searchscrip(exchange = 'MCX', searchtext = query)
-  let futureToken = futureObj.values[0].token; //258003 //3 as it skips NATURALGAS, NATURALGASm and its future
-  // console.log(futureObj.values[0], ' : @@@ Obj for NATURALGAS');
+  const future = futureObj?.values?.find(item => item?.instname === 'FUTCOM' && item?.token);
+  if (!future) {
+    throw new Error(`Unable to find NATURALGAS FUTCOM token: ${JSON.stringify(apiResponseSummary(futureObj))}`);
+  }
+
+  let futureToken = future.token; // Use the nearest tradable futures contract, not the spot/index token.
+  console.log(`Using NATURALGAS futures token ${futureToken}${future.tsym ? ` (${future.tsym})` : ''}.`);
+  // console.log(future, ' : @@@ Obj for NATURALGAS');
 //   {
 //   exch: 'MCX',
 //   token: '401',
