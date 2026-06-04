@@ -5,6 +5,7 @@ const futureOffset = 0;
 const maxLossThreshold = -2;
 const maxProfitThreshold = 1.5;
 const trailingLossPerLot = 3000;
+const profitBookingPremiumMoveRatio = 0.5;
 const eveningExitMinutesIST = (18 * 60) + 30;
 const eveningReentryMinutesIST = (21 * 60) + 30;
 const trailingMonitorIntervalSeconds = 5;
@@ -826,8 +827,17 @@ const monitorTrailingLoss = async () => {
 
       if (side === 'short') {
         state.bestLtp = Math.min(state.bestLtp, ltp);
+        state.profitTargetLtp = entryPrice * (1 - profitBookingPremiumMoveRatio);
         state.stopLtp = Math.min(entryPrice + stopDistance, state.bestLtp + stopDistance);
         state.openPnl = (entryPrice - ltp) * absQty;
+        if (entryPrice > 0 && ltp <= state.profitTargetLtp) {
+          const exitConfirmed = await placeExitOrderForPosition(
+            position,
+            'Profit target 50 pct decay hit'
+          );
+          exited = exitConfirmed || exited;
+          continue;
+        }
         if (ltp >= state.stopLtp) {
           const lots = absQty / lotSize;
           const maxLoss = trailingLossPerLot * lots;
@@ -843,8 +853,17 @@ const monitorTrailingLoss = async () => {
         }
       } else {
         state.bestLtp = Math.max(state.bestLtp, ltp);
+        state.profitTargetLtp = entryPrice * (1 + profitBookingPremiumMoveRatio);
         state.stopLtp = Math.max(entryPrice - stopDistance, state.bestLtp - stopDistance);
         state.openPnl = (ltp - entryPrice) * absQty;
+        if (entryPrice > 0 && ltp >= state.profitTargetLtp) {
+          const exitConfirmed = await placeExitOrderForPosition(
+            position,
+            'Profit target 50 pct gain hit'
+          );
+          exited = exitConfirmed || exited;
+          continue;
+        }
         if (ltp <= state.stopLtp) {
           const lots = absQty / lotSize;
           const maxLoss = trailingLossPerLot * lots;
