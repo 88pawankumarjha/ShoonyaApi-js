@@ -557,8 +557,18 @@ const isOpenStrategyPosition = (position) => position?.exch === 'MCX' &&
   Number(position?.netqty) !== 0;
 
 const getPositionLtp = (position) => {
+  const positionLtp = toFiniteNumber(position?.lp);
+  if (positionLtp !== null) {
+    return positionLtp;
+  }
+
   const quoteKey = position?.token ? `${position.exch}|${position.token}` : '';
-  return toFiniteNumber(latestQuotes[quoteKey]?.lp ?? position?.lp);
+  const quote = latestQuotes[quoteKey];
+  if (quote?.tsym && quote.tsym !== position?.tsym) {
+    console.error(`Ignoring mismatched quote for ${positionKey(position)}: ${quote.tsym}`);
+    return null;
+  }
+  return toFiniteNumber(quote?.lp);
 };
 
 const getPositionEntryPrice = (position) => {
@@ -598,6 +608,55 @@ const resetLocalPositionState = (symbol) => {
   }
 };
 
+const syncPositionStateFromLive = async () => {
+  const positions = await getOpenStrategyPositions();
+  clearClosedTrailingStops(positions);
+  if (positions.length === 0) {
+    resetLocalPositionState();
+    return [];
+  }
+
+  const primaryPosition = positions[0];
+  positionTaken = true;
+  positionTakenInSymbol = primaryPosition.tsym;
+  positionDirection = identify_option_type(primaryPosition.tsym) === 'P' ? 'long' : 'short';
+  return positions;
+};
+
+const isPositionStillOpen = async (position) => {
+  const key = positionKey(position);
+  const positions = await getOpenStrategyPositions();
+  clearClosedTrailingStops(positions);
+  return positions.some(openPosition => positionKey(openPosition) === key);
+};
+
+const getOrderStatus = async (orderno) => {
+  if (!orderno) {
+    return null;
+  }
+  const orderBook = await api.get_orderbook();
+  if (!Array.isArray(orderBook)) {
+    return null;
+  }
+  return orderBook.find(order => order.norenordno === orderno) || null;
+};
+
+const waitForExitConfirmation = async (position, orderno) => {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await delay(2000);
+    const orderStatus = await getOrderStatus(orderno);
+    if (orderStatus?.status === 'REJECTED') {
+      console.error(`Exit order rejected for ${positionKey(position)}: ${orderStatus.rejreason || ''}`);
+      return false;
+    }
+    if (!(await isPositionStillOpen(position))) {
+      return true;
+    }
+  }
+  console.error(`Exit order not confirmed for ${positionKey(position)} after waiting.`);
+  return false;
+};
+
 const placeExitOrderForPosition = async (position, reason) => {
   const key = positionKey(position);
   if (exitOrdersInProgress.has(key)) {
@@ -628,17 +687,33 @@ const placeExitOrderForPosition = async (position, reason) => {
   };
 
   exitOrdersInProgress.add(key);
-  const response = await api.place_order(order);
-  console.log(response, `:${reason} exit order`, position.tsym, absQty, buyOrSell, exitPrice.toFixed(2));
-  buffer_notification(`${reason}: exiting ${position.tsym} ${buyOrSell} ${absQty} @ ${exitPrice.toFixed(2)}`, true);
-  if (response?.stat !== 'Ok') {
+  try {
+    const response = await api.place_order(order);
+    console.log(response, `:${reason} exit order`, position.tsym, absQty, buyOrSell, exitPrice.toFixed(2));
+    buffer_notification(`${reason}: exiting ${position.tsym} ${buyOrSell} ${absQty} @ ${exitPrice.toFixed(2)}`, true);
+    if (response?.stat !== 'Ok') {
+      exitOrdersInProgress.delete(key);
+      console.error(`Exit order failed for ${key}:`, JSON.stringify(apiResponseSummary(response)));
+      return false;
+    }
+
+    const confirmed = await waitForExitConfirmation(position, response.norenordno);
+    if (confirmed) {
+      resetLocalPositionState(position.tsym);
+      trailingStopState.delete(key);
+      exitOrdersInProgress.delete(key);
+      return true;
+    }
+
     exitOrdersInProgress.delete(key);
-    console.error(`Exit order failed for ${key}:`, JSON.stringify(apiResponseSummary(response)));
+    await syncPositionStateFromLive();
+    return false;
+  } catch (error) {
+    exitOrdersInProgress.delete(key);
+    console.error(`Exit order exception for ${key}:`, error.message || JSON.stringify(apiResponseSummary(error)));
+    await syncPositionStateFromLive();
     return false;
   }
-
-  resetLocalPositionState(position.tsym);
-  return true;
 };
 
 const exitOpenStrategyPositions = async (reason) => {
@@ -648,10 +723,11 @@ const exitOpenStrategyPositions = async (reason) => {
     return false;
   }
 
+  let exitedAny = false;
   for (const position of positions) {
-    await placeExitOrderForPosition(position, reason);
+    exitedAny = await placeExitOrderForPosition(position, reason) || exitedAny;
   }
-  return true;
+  return exitedAny;
 };
 
 let trailingMonitorInProgress = false;
@@ -1709,9 +1785,11 @@ const long = async (symbol, qty) => {
     orderCERespObj = await api.place_order(orderCE);
     console.log(orderCERespObj, ' :orderCERespObj')
     console.log(symbol, qty, ' :symbol qty long')
+    return orderCERespObj;
   }
   catch (error) {
     console.log(error)
+    return null;
   }
 
 }
@@ -1731,9 +1809,11 @@ const short = async (symbol, qty) => {
     orderPERespObj = await api.place_order(orderCE);
     console.log(orderPERespObj, ' :orderPERespOb')
     console.log(symbol, qty, ' :symbol qty short')
+    return orderPERespObj;
   }
   catch (error) {
     console.log(error)
+    return null;
   }
 
 }
@@ -1804,36 +1884,41 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
 let positionDirection = '';
 async function XEma(fastEMA, slowEMA) {
   const diff = fastEMA - slowEMA;
+  await syncPositionStateFromLive();
 
   if (!positionTaken) {
     // Sell PUT when diff > 0.3
     if (diff > 0.3) {
       buffer_notification(`SELL PUT: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} > 0.3`);
-      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier);
-      positionTakenInSymbol = biasProcess.atmPutSymbol;
-      positionTaken = true;
-      positionDirection = 'long';
+      const response = await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier);
+      if (response?.stat === 'Ok') {
+        positionTakenInSymbol = biasProcess.atmPutSymbol;
+        positionTaken = true;
+        positionDirection = 'long';
+      }
     }
     // Sell CALL when diff < -0.3
-    if (diff < -0.3) {
+    else if (diff < -0.3) {
       buffer_notification(`SELL CALL: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} < -0.3`);
-      await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier);
-      positionTakenInSymbol = biasProcess.atmCallSymbol;
-      positionTaken = true;
-      positionDirection = 'short';
+      const response = await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier);
+      if (response?.stat === 'Ok') {
+        positionTakenInSymbol = biasProcess.atmCallSymbol;
+        positionTaken = true;
+        positionDirection = 'short';
+      }
     }
   } else if (positionTaken) {
     // Buy PUT when diff <= 0.3
     if (positionDirection == 'long' && (diff <= 0.3)) {
       buffer_notification(`BUY PUT: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} <= 0.3`);
-      await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier);
-      positionTaken = false;
+      await exitOpenStrategyPositions('EMA PUT exit');
+      await syncPositionStateFromLive();
     }
     // Buy CALL when diff >= -0.3
     else if (positionDirection == 'short' && (diff >= -0.3)) {
       buffer_notification(`BUY CALL: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} >= -0.3`);
-      await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier);
-      positionTaken = false;
+      await exitOpenStrategyPositions('EMA CALL exit');
+      await syncPositionStateFromLive();
     }
   }
   if (positionTaken) {
