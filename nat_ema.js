@@ -4,6 +4,10 @@ const futureOffset = 0;
 // Add these at the top (or near your config section)
 const maxLossThreshold = -2;
 const maxProfitThreshold = 1.5;
+const trailingLossPerLot = 3000;
+const eveningExitMinutesIST = (18 * 60) + 30;
+const eveningReentryMinutesIST = (21 * 60) + 30;
+const trailingMonitorIntervalSeconds = 5;
 
 const debug = false;
 let inputProp = true; // true for XEma logic
@@ -26,7 +30,7 @@ const AdmZip = require('adm-zip');
 
 const { parse } = require('papaparse');
 const moment = require('moment');
-const { isTimeEqualsNotAfterProps, idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates,
+const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates,
   identify_option_type, fetchSpotPrice, getStrike, calcPnL } = require('./utils/customLibrary');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
@@ -449,6 +453,23 @@ const extractIntcPrices = (reply, params, minCandles = 1) => {
   return intcPrices;
 };
 
+const getCurrentISTMinutes = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+  const hours = Number(parts.find(part => part.type === 'hour')?.value);
+  const minutes = Number(parts.find(part => part.type === 'minute')?.value);
+  return (hours * 60) + minutes;
+};
+
+const isEveningNoEntryWindow = () => {
+  const minutes = getCurrentISTMinutes();
+  return minutes >= eveningExitMinutesIST && minutes < eveningReentryMinutesIST;
+};
+
 const isNoPositionsResponse = (response) => response && response.stat === 'Not_Ok' &&
   /no data|no position|no record/i.test(response.emsg || response.message || '');
 // const data = [
@@ -524,6 +545,186 @@ updatePositions = async () => {
     return null;
   }
 }
+
+const trailingStopState = new Map();
+const exitOrdersInProgress = new Set();
+let eveningExitInProgress = false;
+
+const positionKey = (position) => `${position?.exch || ''}|${position?.tsym || ''}|${position?.prd || 'M'}`;
+
+const isOpenStrategyPosition = (position) => position?.exch === 'MCX' &&
+  position?.tsym?.includes(globalInput.indexName) &&
+  Number(position?.netqty) !== 0;
+
+const getPositionLtp = (position) => {
+  const quoteKey = position?.token ? `${position.exch}|${position.token}` : '';
+  return toFiniteNumber(latestQuotes[quoteKey]?.lp ?? position?.lp);
+};
+
+const getPositionEntryPrice = (position) => {
+  const netQty = Number(position?.netqty);
+  if (netQty < 0) {
+    return toFiniteNumber(position?.netavgprc ?? position?.daysellavgprc);
+  }
+  return toFiniteNumber(position?.netavgprc ?? position?.daybuyavgprc);
+};
+
+const getOpenStrategyPositions = async () => {
+  const positions = await api.get_positions();
+  if (Array.isArray(positions)) {
+    return positions.filter(isOpenStrategyPosition);
+  }
+  if (!isNoPositionsResponse(positions)) {
+    console.error('Unable to read positions:', JSON.stringify(apiResponseSummary(positions)));
+  }
+  return [];
+};
+
+const clearClosedTrailingStops = (openPositions) => {
+  const openKeys = new Set(openPositions.map(positionKey));
+  [...trailingStopState.keys()].forEach((key) => {
+    if (!openKeys.has(key)) {
+      trailingStopState.delete(key);
+      exitOrdersInProgress.delete(key);
+    }
+  });
+};
+
+const resetLocalPositionState = (symbol) => {
+  if (!symbol || positionTakenInSymbol === symbol) {
+    positionTaken = false;
+    positionTakenInSymbol = '';
+    positionDirection = '';
+  }
+};
+
+const placeExitOrderForPosition = async (position, reason) => {
+  const key = positionKey(position);
+  if (exitOrdersInProgress.has(key)) {
+    return false;
+  }
+
+  const netQty = Number(position?.netqty);
+  const absQty = Math.abs(netQty);
+  const ltp = getPositionLtp(position);
+  if (!Number.isFinite(netQty) || absQty === 0 || ltp === null) {
+    console.error(`Cannot exit ${key}: invalid qty/ltp.`, JSON.stringify(apiResponseSummary(position)));
+    return false;
+  }
+
+  const buyOrSell = netQty < 0 ? 'B' : 'S';
+  const exitPrice = buyOrSell === 'B' ? ltp + 1 : Math.max(0, ltp - 0.3);
+  const remarks = reason.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 30) || 'NatEmaExit';
+  const order = {
+    buy_or_sell: buyOrSell,
+    product_type: position.prd || 'M',
+    exchange: position.exch,
+    tradingsymbol: position.tsym,
+    quantity: absQty.toString(),
+    discloseqty: '0',
+    price_type: 'LMT',
+    price: exitPrice.toFixed(2),
+    remarks,
+  };
+
+  exitOrdersInProgress.add(key);
+  const response = await api.place_order(order);
+  console.log(response, `:${reason} exit order`, position.tsym, absQty, buyOrSell, exitPrice.toFixed(2));
+  buffer_notification(`${reason}: exiting ${position.tsym} ${buyOrSell} ${absQty} @ ${exitPrice.toFixed(2)}`, true);
+  if (response?.stat !== 'Ok') {
+    exitOrdersInProgress.delete(key);
+    console.error(`Exit order failed for ${key}:`, JSON.stringify(apiResponseSummary(response)));
+    return false;
+  }
+
+  resetLocalPositionState(position.tsym);
+  return true;
+};
+
+const exitOpenStrategyPositions = async (reason) => {
+  const positions = await getOpenStrategyPositions();
+  clearClosedTrailingStops(positions);
+  if (positions.length === 0) {
+    return false;
+  }
+
+  for (const position of positions) {
+    await placeExitOrderForPosition(position, reason);
+  }
+  return true;
+};
+
+let trailingMonitorInProgress = false;
+const monitorTrailingLoss = async () => {
+  if (trailingMonitorInProgress) {
+    return false;
+  }
+
+  trailingMonitorInProgress = true;
+  try {
+    const positions = await getOpenStrategyPositions();
+    clearClosedTrailingStops(positions);
+    let exited = false;
+
+    for (const position of positions) {
+      const key = positionKey(position);
+      if (exitOrdersInProgress.has(key)) {
+        continue;
+      }
+
+      const netQty = Number(position.netqty);
+      const absQty = Math.abs(netQty);
+      const lotSize = Number(globalInput.LotSize) || 1250;
+      const entryPrice = getPositionEntryPrice(position);
+      const ltp = getPositionLtp(position);
+      if (!Number.isFinite(netQty) || !Number.isFinite(absQty) || entryPrice === null || ltp === null) {
+        console.error(`Skipping trailing loss check for ${key}: invalid position data.`);
+        continue;
+      }
+
+      const side = netQty < 0 ? 'short' : 'long';
+      const stopDistance = trailingLossPerLot / lotSize;
+      const existing = trailingStopState.get(key);
+      const state = existing && existing.side === side && existing.entryPrice === entryPrice
+        ? existing
+        : { side, entryPrice, bestLtp: entryPrice };
+
+      if (side === 'short') {
+        state.bestLtp = Math.min(state.bestLtp, ltp);
+        state.stopLtp = Math.min(entryPrice + stopDistance, state.bestLtp + stopDistance);
+        state.openPnl = (entryPrice - ltp) * absQty;
+        if (ltp >= state.stopLtp) {
+          const lots = absQty / lotSize;
+          const maxLoss = trailingLossPerLot * lots;
+          exited = await placeExitOrderForPosition(
+            position,
+            `Trailing loss hit max Rs ${maxLoss.toFixed(0)}`
+          ) || exited;
+          continue;
+        }
+      } else {
+        state.bestLtp = Math.max(state.bestLtp, ltp);
+        state.stopLtp = Math.max(entryPrice - stopDistance, state.bestLtp - stopDistance);
+        state.openPnl = (ltp - entryPrice) * absQty;
+        if (ltp <= state.stopLtp) {
+          const lots = absQty / lotSize;
+          const maxLoss = trailingLossPerLot * lots;
+          exited = await placeExitOrderForPosition(
+            position,
+            `Trailing loss hit max Rs ${maxLoss.toFixed(0)}`
+          ) || exited;
+          continue;
+        }
+      }
+
+      trailingStopState.set(key, state);
+    }
+
+    return exited;
+  } finally {
+    trailingMonitorInProgress = false;
+  }
+};
 
 let isQueueBusy = false;
 const queue = [];
@@ -684,10 +885,7 @@ function startRestQuotePolling() {
 }
 
 const exitAll = async () => {
-  //changes for seller or buyer
-  if(positionTaken) {
-    await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-  }
+  await exitOpenStrategyPositions('Exit all strategy positions');
   process.exit(0)
 }
 
@@ -806,26 +1004,38 @@ function updateITMSymbolAndStrike(optionType) {
   // Filter options by type (CE for Call, PE for Put)
   biasProcess.ocCallOptions = biasProcess.optionChain.values.filter(option => option.optt === 'CE');
   biasProcess.ocPutOptions = biasProcess.optionChain.values.filter(option => option.optt === 'PE');
-  // Sort options by tsym for both Call and Put
-  biasProcess.ocCallOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
-  biasProcess.ocPutOptions.sort((a, b) => a.tsym.localeCompare(b.tsym));
+  // Sort options by numeric strike so ATM selection is based on price, not symbol text.
+  biasProcess.ocCallOptions.sort((a, b) => Number(a.strprc) - Number(b.strprc));
+  biasProcess.ocPutOptions.sort((a, b) => Number(a.strprc) - Number(b.strprc));
   // Assign ITM symbols and strike prices
   // console.log(biasProcess.ocCallOptions, 'callOptions')
   // console.log(biasProcess.ocPutOptions, 'putOptions')
 
-  if (biasProcess.ocCallOptions.length < 16 || biasProcess.ocPutOptions.length < 17) {
+  if (biasProcess.ocCallOptions.length === 0 || biasProcess.ocPutOptions.length === 0) {
     throw new Error(`Option chain has insufficient CE/PE entries. CE=${biasProcess.ocCallOptions.length}, PE=${biasProcess.ocPutOptions.length}, atm=${biasProcess.atmStrike}, input=${globalInput.inputOptTsym}`);
   }
 
-  biasProcess.itmCallSymbol = biasProcess.ocCallOptions[14].tsym;
-  biasProcess.itmCallStrikePrice = biasProcess.ocCallOptions[14].strprc;
-  biasProcess.itmPutSymbol = biasProcess.ocPutOptions[16].tsym;
-  biasProcess.itmPutStrikePrice = biasProcess.ocPutOptions[16].strprc;
+  const atmStrike = Number(biasProcess.atmStrike);
+  const callAtmIndex = biasProcess.ocCallOptions.reduce((bestIndex, option, index, options) =>
+    Math.abs(Number(option.strprc) - atmStrike) < Math.abs(Number(options[bestIndex].strprc) - atmStrike) ? index : bestIndex, 0);
+  const putAtmIndex = biasProcess.ocPutOptions.reduce((bestIndex, option, index, options) =>
+    Math.abs(Number(option.strprc) - atmStrike) < Math.abs(Number(options[bestIndex].strprc) - atmStrike) ? index : bestIndex, 0);
 
-  biasProcess.atmCallSymbol = biasProcess.ocCallOptions[15].tsym;
-  biasProcess.atmCallStrikePrice = biasProcess.ocCallOptions[15].strprc;
-  biasProcess.atmPutSymbol = biasProcess.ocPutOptions[15].tsym;
-  biasProcess.atmPutStrikePrice = biasProcess.ocPutOptions[15].strprc;
+  const itmCall = biasProcess.ocCallOptions[Math.max(0, callAtmIndex - 1)];
+  const itmPut = biasProcess.ocPutOptions[Math.min(biasProcess.ocPutOptions.length - 1, putAtmIndex + 1)];
+  const atmCall = biasProcess.ocCallOptions[callAtmIndex];
+  const atmPut = biasProcess.ocPutOptions[putAtmIndex];
+
+  biasProcess.itmCallSymbol = itmCall.tsym;
+  biasProcess.itmCallStrikePrice = itmCall.strprc;
+  biasProcess.itmPutSymbol = itmPut.tsym;
+  biasProcess.itmPutStrikePrice = itmPut.strprc;
+
+  biasProcess.atmCallSymbol = atmCall.tsym;
+  biasProcess.atmCallStrikePrice = atmCall.strprc;
+  biasProcess.atmPutSymbol = atmPut.tsym;
+  biasProcess.atmPutStrikePrice = atmPut.strprc;
+  console.log(`ATM selected for ${biasProcess.atmStrike}: ${biasProcess.atmCallSymbol}, ${biasProcess.atmPutSymbol}`);
 
   // console.log(biasProcess, 'bp')
 
@@ -2234,13 +2444,41 @@ let lastPnl;
 getEma = async () => {
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
+  if (isEveningNoEntryWindow()) {
+    if (seconds % trailingMonitorIntervalSeconds === 0 && !eveningExitInProgress) {
+      eveningExitInProgress = true;
+      try {
+        const exited = await exitOpenStrategyPositions('18:30 IST no-entry window');
+        if (exited) {
+          buffer_notification('18:30 IST no-entry window: exited open NATURALGAS positions. Re-entry blocked until 21:30 IST.', true);
+        }
+      } catch (error) {
+        console.error('Error enforcing evening no-entry window:', error.message || JSON.stringify(apiResponseSummary(error)));
+      } finally {
+        eveningExitInProgress = false;
+      }
+    }
+    return;
+  }
+
+  if (seconds % trailingMonitorIntervalSeconds === 0) {
+    try {
+      const exited = await monitorTrailingLoss();
+      if (exited) {
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking trailing loss:', error.message || JSON.stringify(apiResponseSummary(error)));
+    }
+  }
+
   // --- Max loss check ---
   try {
     if (seconds === 50) {
       const pnl = await calcPnL(api, true);
       if (pnl < maxLossThreshold || pnl > maxProfitThreshold) {
         buffer_notification(`PnL threshold reached: ${pnl}. Exiting all positions.`);
-        if (positionTaken) await exitAll();
+        await exitOpenStrategyPositions('PnL threshold reached');
         return;
       }
     }
@@ -2248,12 +2486,6 @@ getEma = async () => {
   } catch (e) {
     console.error('Error checking PnL:', e);
   }
-  //exit in the night and stop process.
-  if (isTimeEqualsNotAfterProps(23, 17, false)) {
-    exitAll();
-  }
-
-
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
     try {
