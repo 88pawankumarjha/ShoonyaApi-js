@@ -3,6 +3,7 @@ node_modules
 .env.*
 !.env.example
 .shoonya-oauth-token.json
+.nat-ema-reentry-cooldown.json
 creds.js
 creds*.js
 credsMed.js

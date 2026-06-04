@@ -8,6 +8,8 @@ const trailingLossPerLot = 3000;
 const eveningExitMinutesIST = (18 * 60) + 30;
 const eveningReentryMinutesIST = (21 * 60) + 30;
 const trailingMonitorIntervalSeconds = 5;
+const reentryCooldownMs = 30 * 60 * 1000;
+const reentryCooldownFile = '.nat-ema-reentry-cooldown.json';
 
 const debug = false;
 let inputProp = true; // true for XEma logic
@@ -470,6 +472,63 @@ const isEveningNoEntryWindow = () => {
   return minutes >= eveningExitMinutesIST && minutes < eveningReentryMinutesIST;
 };
 
+let reentryBlockedUntil = 0;
+
+const formatISTTime = (timestamp) => new Date(timestamp).toLocaleTimeString('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  hour12: false,
+});
+
+const loadReentryCooldown = () => {
+  try {
+    if (!fs.existsSync(reentryCooldownFile)) {
+      return 0;
+    }
+    const data = JSON.parse(fs.readFileSync(reentryCooldownFile, 'utf8'));
+    return Number.isFinite(Number(data.blockedUntil)) ? Number(data.blockedUntil) : 0;
+  } catch (error) {
+    console.error('Unable to read NAT EMA re-entry cooldown:', error.message);
+    return 0;
+  }
+};
+
+const clearReentryCooldown = () => {
+  reentryBlockedUntil = 0;
+  try {
+    if (fs.existsSync(reentryCooldownFile)) {
+      fs.unlinkSync(reentryCooldownFile);
+    }
+  } catch (error) {
+    console.error('Unable to clear NAT EMA re-entry cooldown:', error.message);
+  }
+};
+
+const startReentryCooldown = (reason) => {
+  reentryBlockedUntil = Date.now() + reentryCooldownMs;
+  const payload = {
+    blockedUntil: reentryBlockedUntil,
+    reason,
+    createdAt: new Date().toISOString(),
+  };
+  try {
+    fs.writeFileSync(reentryCooldownFile, JSON.stringify(payload, null, 2));
+  } catch (error) {
+    console.error('Unable to persist NAT EMA re-entry cooldown:', error.message);
+  }
+  const message = `NAT EMA re-entry blocked until ${formatISTTime(reentryBlockedUntil)} IST after ${reason}.`;
+  console.log(message);
+  buffer_notification(message, true);
+};
+
+const isReentryCooldownActive = () => {
+  reentryBlockedUntil = Math.max(reentryBlockedUntil, loadReentryCooldown());
+  if (!reentryBlockedUntil || Date.now() >= reentryBlockedUntil) {
+    clearReentryCooldown();
+    return false;
+  }
+  return true;
+};
+
 const isNoPositionsResponse = (response) => response && response.stat === 'Not_Ok' &&
   /no data|no position|no record/i.test(response.emsg || response.message || '');
 // const data = [
@@ -772,10 +831,14 @@ const monitorTrailingLoss = async () => {
         if (ltp >= state.stopLtp) {
           const lots = absQty / lotSize;
           const maxLoss = trailingLossPerLot * lots;
-          exited = await placeExitOrderForPosition(
+          const exitConfirmed = await placeExitOrderForPosition(
             position,
             `Trailing loss hit max Rs ${maxLoss.toFixed(0)}`
-          ) || exited;
+          );
+          if (exitConfirmed) {
+            startReentryCooldown(`trailing loss exit for ${position.tsym}`);
+          }
+          exited = exitConfirmed || exited;
           continue;
         }
       } else {
@@ -785,10 +848,14 @@ const monitorTrailingLoss = async () => {
         if (ltp <= state.stopLtp) {
           const lots = absQty / lotSize;
           const maxLoss = trailingLossPerLot * lots;
-          exited = await placeExitOrderForPosition(
+          const exitConfirmed = await placeExitOrderForPosition(
             position,
             `Trailing loss hit max Rs ${maxLoss.toFixed(0)}`
-          ) || exited;
+          );
+          if (exitConfirmed) {
+            startReentryCooldown(`trailing loss exit for ${position.tsym}`);
+          }
+          exited = exitConfirmed || exited;
           continue;
         }
       }
@@ -1887,6 +1954,11 @@ async function XEma(fastEMA, slowEMA) {
   await syncPositionStateFromLive();
 
   if (!positionTaken) {
+    if (isReentryCooldownActive()) {
+      console.log(`Skipping NAT EMA entry; re-entry cooldown active until ${formatISTTime(reentryBlockedUntil)} IST.`);
+      return;
+    }
+
     // Sell PUT when diff > 0.3
     if (diff > 0.3) {
       buffer_notification(`SELL PUT: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} > 0.3`);
