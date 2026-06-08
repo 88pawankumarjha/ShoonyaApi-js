@@ -21,7 +21,9 @@ const trailingSLPerLotRs = 800;
 const trailingSLActivationDecay = 0.20;
 const riskMonitorIntervalSeconds = 5;
 const riskRestQuoteRefreshMs = 60 * 1000;
+const riskLiveQuoteMaxAgeMs = 10 * 1000;
 const riskMissingLtpWarningMs = 60 * 1000;
+const riskOrderbookRefreshMs = 15 * 1000;
 const smallAccountQty = [65, 65, 65, 65, 65, 65, 65];
 const bigAccountQty = [195, 195, 195, 195, 195, 195, 195];
 const smallAccountDailyQty = 65;
@@ -418,6 +420,8 @@ const shortOptionRiskState = new Map();
 const riskExitOrdersInProgress = new Set();
 const riskRestQuoteFetchedAt = new Map();
 const riskMissingLtpWarnedAt = new Map();
+let riskOrderbookCache = [];
+let riskOrderbookFetchedAt = 0;
 
 const toFiniteNumber = (value) => {
     const rawValue = Array.isArray(value) && value.length === 1 ? value[0] : value;
@@ -431,7 +435,97 @@ const isOpenShortOptionPosition = (position) => position?.exch === globalInput.p
     Number(position?.netqty) < 0 &&
     ['C', 'P'].includes(identify_option_type(position?.tsym || ''));
 
-const getPositionEntryPrice = (position) => toFiniteNumber(position?.netavgprc ?? position?.daysellavgprc);
+const getCompletedOrderFillQty = (order) => toFiniteNumber(order?.fillshares ?? order?.flqty ?? order?.qty);
+
+const getCompletedOrderFillPrice = (order) => toFiniteNumber(order?.avgprc ?? order?.flprc ?? order?.prc);
+
+const getOrderTimeMs = (order) => {
+    const candidates = [
+        { value: order?.norentm, format: 'HH:mm:ss DD-MM-YYYY' },
+        { value: order?.exch_tm, format: 'DD-MM-YYYY HH:mm:ss' },
+    ];
+    for (const candidate of candidates) {
+        const parsed = moment(candidate.value, candidate.format, true);
+        if (parsed.isValid()) {
+            return parsed.valueOf();
+        }
+    }
+    return 0;
+};
+
+const getRiskOrderbook = async () => {
+    if (Date.now() - riskOrderbookFetchedAt < riskOrderbookRefreshMs && riskOrderbookCache.length > 0) {
+        return riskOrderbookCache;
+    }
+
+    const orders = await api.get_orderbook();
+    if (Array.isArray(orders)) {
+        riskOrderbookCache = orders;
+        riskOrderbookFetchedAt = Date.now();
+        return riskOrderbookCache;
+    }
+
+    console.error('Risk monitor could not read orderbook:', JSON.stringify(apiResponseSummary(orders)));
+    return [];
+};
+
+const getActiveShortEntryFromOrderbook = async (position) => {
+    const absQty = Math.abs(Number(position?.netqty));
+    if (!Number.isFinite(absQty) || absQty <= 0 || !position?.tsym) {
+        return null;
+    }
+
+    const orders = await getRiskOrderbook();
+    const matchingOrders = orders
+        .filter((order) => order?.status === 'COMPLETE' &&
+            order?.tsym === position.tsym &&
+            (order?.exch || position.exch || globalInput.pickedExchange) === (position.exch || globalInput.pickedExchange))
+        .sort((a, b) => getOrderTimeMs(a) - getOrderTimeMs(b));
+
+    const openShortLots = [];
+    for (const order of matchingOrders) {
+        const qty = getCompletedOrderFillQty(order);
+        const price = getCompletedOrderFillPrice(order);
+        if (qty === null || qty <= 0 || price === null) {
+            continue;
+        }
+
+        if (order.trantype === 'S') {
+            openShortLots.push({ qty, price });
+            continue;
+        }
+
+        if (order.trantype === 'B') {
+            let remainingBuyQty = qty;
+            while (remainingBuyQty > 0 && openShortLots.length > 0) {
+                const lot = openShortLots[0];
+                const coveredQty = Math.min(lot.qty, remainingBuyQty);
+                lot.qty -= coveredQty;
+                remainingBuyQty -= coveredQty;
+                if (lot.qty <= 0) {
+                    openShortLots.shift();
+                }
+            }
+        }
+    }
+
+    const openQty = openShortLots.reduce((total, lot) => total + lot.qty, 0);
+    if (openQty <= 0 || openQty < absQty) {
+        return null;
+    }
+
+    const openValue = openShortLots.reduce((total, lot) => total + (lot.qty * lot.price), 0);
+    return openValue / openQty;
+};
+
+const getPositionEntryPrice = async (position, existingState) => {
+    if (existingState?.entryPrice) {
+        return existingState.entryPrice;
+    }
+
+    const orderbookEntryPrice = await getActiveShortEntryFromOrderbook(position);
+    return orderbookEntryPrice ?? toFiniteNumber(position?.netavgprc ?? position?.daysellavgprc);
+};
 
 const getPositionToken = (position) => position?.token || getTokenByTradingSymbol(position?.tsym);
 
@@ -461,6 +555,19 @@ const getFreshQuoteLtp = async (position, token, quoteKey) => {
     return null;
 };
 
+const getCachedQuoteLtp = (quoteKey, maxAgeMs = riskLiveQuoteMaxAgeMs) => {
+    if (!quoteKey) {
+        return null;
+    }
+
+    const quoteAgeMs = Date.now() - (latestQuotesTimestamps[quoteKey] || 0);
+    if (quoteAgeMs > maxAgeMs) {
+        return null;
+    }
+
+    return toFiniteNumber(latestQuotes[quoteKey]?.lp);
+};
+
 const getPositionLtp = async (position, forceRest = false) => {
     const token = getPositionToken(position);
     const quoteKey = token ? `${position?.exch || globalInput.pickedExchange}|${token}` : '';
@@ -472,19 +579,22 @@ const getPositionLtp = async (position, forceRest = false) => {
         }
     }
 
+    const cachedLtp = getCachedQuoteLtp(quoteKey);
+    if (cachedLtp !== null) {
+        return cachedLtp;
+    }
+
+    const freshLtp = await getFreshQuoteLtp(position, token, quoteKey);
+    if (freshLtp !== null) {
+        return freshLtp;
+    }
+
     const positionLtp = toFiniteNumber(position?.lp);
     if (positionLtp !== null) {
         return positionLtp;
     }
 
-    const quote = quoteKey ? latestQuotes[quoteKey] : null;
-    const quoteAgeMs = Date.now() - (latestQuotesTimestamps[quoteKey] || 0);
-    const cachedLtp = quoteAgeMs <= riskRestQuoteRefreshMs ? toFiniteNumber(quote?.lp) : null;
-    if (cachedLtp !== null) {
-        return cachedLtp;
-    }
-
-    return await getFreshQuoteLtp(position, token, quoteKey);
+    return null;
 };
 
 const getPerLotRiskConfig = () => {
@@ -515,6 +625,15 @@ const getRiskStateForSymbol = (symbol) => {
         .find(([key]) => key.includes(`|${symbol}|`))?.[1] || null;
 };
 
+const formatRiskStopLabel = (riskState) => {
+    const activeStopLtp = toFiniteNumber(riskState?.activeStopLtp);
+    if (activeStopLtp === null) {
+        return null;
+    }
+    const stopType = riskState.trailingActive ? 'TSL' : 'HSL';
+    return `${activeStopLtp.toFixed(2)} ${stopType}`;
+};
+
 const shouldRefreshRiskQuote = (position) => {
     const token = getPositionToken(position);
     if (!token) {
@@ -531,7 +650,7 @@ const warnMissingRiskLtp = (position) => {
         return;
     }
     riskMissingLtpWarnedAt.set(key, Date.now());
-    const message = `Risk monitor missing LTP for ${position?.tsym}; checked position lp, websocket cache, and REST quote.`;
+    const message = `Risk monitor missing LTP for ${position?.tsym}; checked websocket cache, REST quote, and position lp.`;
     console.error(message);
     send_notification(message, true);
 };
@@ -567,7 +686,9 @@ const exitShortOptionPositionForRisk = async (position, reason, state) => {
     try {
         await cancelOpenOrders();
         await my_default_place_order(order);
-        const riskText = `entry=${state.entryPrice.toFixed(2)}, ltp=${ltp.toFixed(2)}, stop=${state.activeStopLtp.toFixed(2)}`;
+        const triggerLtp = toFiniteNumber(state.triggerLtp ?? state.lastLtp);
+        const triggerText = triggerLtp === null ? 'NA' : triggerLtp.toFixed(2);
+        const riskText = `entry=${state.entryPrice.toFixed(2)}, triggerLtp=${triggerText}, exitLtp=${ltp.toFixed(2)}, stop=${state.activeStopLtp.toFixed(2)}`;
         send_notification(`${reason}: exiting ${position.tsym} ${absQty} @ ${exitPrice} (${riskText})`, true);
         if (identify_option_type(position.tsym) === 'P') {
             longPositionTaken = false;
@@ -613,9 +734,11 @@ const monitorPerPositionRisk = async () => {
             continue;
         }
 
-        const entryPrice = getPositionEntryPrice(position);
-        const ltp = await getPositionLtp(position, shouldRefreshRiskQuote(position));
         const absQty = Math.abs(Number(position.netqty));
+        const existing = shortOptionRiskState.get(key);
+        const reusableExistingState = existing && existing.openQty === absQty ? existing : null;
+        const entryPrice = await getPositionEntryPrice(position, reusableExistingState);
+        const ltp = await getPositionLtp(position, shouldRefreshRiskQuote(position));
         const { lotSize, maxLossPerLotDistance, trailingDistance } = getPerLotRiskConfig();
         if (entryPrice === null || ltp === null || !Number.isFinite(absQty) || absQty <= 0) {
             console.error(`Skipping risk monitor for ${key}: invalid position data.`);
@@ -625,12 +748,10 @@ const monitorPerPositionRisk = async () => {
             continue;
         }
 
-        const existing = shortOptionRiskState.get(key);
-        const state = existing && existing.entryPrice === entryPrice
-            ? existing
-            : { entryPrice, bestLtp: entryPrice, trailingActive: false };
+        const state = reusableExistingState || { entryPrice, bestLtp: entryPrice, trailingActive: false };
 
         state.bestLtp = Math.min(state.bestLtp, ltp);
+        state.openQty = absQty;
         state.lotSize = lotSize;
         state.lots = absQty / lotSize;
         state.lastLtp = ltp;
@@ -658,6 +779,7 @@ const monitorPerPositionRisk = async () => {
         }
 
         if (ltp >= state.activeStopLtp) {
+            state.triggerLtp = ltp;
             const reason = state.trailingActive ? 'Trailing SL hit' : 'Hard max loss hit';
             return await exitShortOptionPositionForRisk(position, reason, state);
         }
@@ -1170,24 +1292,25 @@ const emaMonitorATMs = async () => {
 
     const [callemaMedium, callemaSlow, callemaFast] = await ema9_21_3ValuesIndicators(paramsCall);
     const [putemaMedium, putemaSlow, putemaFast] = await ema9_21_3ValuesIndicators(paramsPut);
+    const riskExitedForNotification = await monitorPerPositionRisk();
+    if (riskExitedForNotification) {
+      return [prevEmaUpFastCall, prevEmaUpFastPut];
+    }
     const subStrTemp = `${globalInput.pickedExchange}|${positionProcess.soldToken}`
     // console.log('subStrTemp : ', subStrTemp) // subStrTemp :  NFO|61726
-    const latestQuote2 = latestQuotes[subStrTemp]?.lp;
+    const latestQuote2 = toFiniteNumber(latestQuotes[subStrTemp]?.lp);
     const riskState = getRiskStateForSymbol(positionProcess.soldTsym);
-    if (riskState?.activeStopLtp) {
+    const riskStopLabel = formatRiskStopLabel(riskState);
+    if (riskStopLabel) {
       positionProcess.trailPrice = riskState.activeStopLtp.toFixed(2);
     }
-    
-    const isDefined = (value) => value !== undefined && value !== null;
-
-    
-    const strTemp = (isDefined(positionProcess.soldPrice) && 
-                      isDefined(positionProcess.trailPrice) &&
-                      isDefined(latestQuote2) &&
-                      positionProcess.soldPrice > 0 && 
-                      positionProcess.trailPrice > 0)
-                  ? `S @${positionProcess.soldPrice} T @${+positionProcess.trailPrice}\nL @${latestQuote2}\n`
-                  : `STL not available\nS @${positionProcess.soldPrice} T @${+positionProcess.trailPrice}\nL @${latestQuote2}\n`;
+    const soldDisplay = toFiniteNumber(riskState?.entryPrice ?? positionProcess.soldPrice);
+    const ltpDisplay = toFiniteNumber(riskState?.lastLtp ?? latestQuote2);
+    const soldText = soldDisplay === null ? 'NA' : soldDisplay.toFixed(2);
+    const ltpText = ltpDisplay === null ? 'NA' : ltpDisplay.toFixed(2);
+    const strTemp = riskStopLabel
+                  ? `S @${soldText} T @${riskStopLabel}\nL @${ltpText}\n`
+                  : `Risk SL pending\nS @${soldText} T @pending\nL @${ltpText}\n`;
     send_notification(`${strTemp}ces: ${parseFloat(callemaSlow).toFixed(2)} pes: ${parseFloat(putemaSlow).toFixed(2)}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}`);
    
     emaUpFastCall = callemaMedium - callemaSlow > -2;
