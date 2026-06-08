@@ -537,6 +537,11 @@ const getFreshQuoteLtp = async (position, token, quoteKey) => {
     try {
         const quote = await api.get_quotes(position?.exch || globalInput.pickedExchange, token);
         const ltp = toFiniteNumber(quote?.lp);
+        const quoteSymbol = quote?.tsym || quote?.tradingSymbol;
+        if (quoteSymbol && position?.tsym && quoteSymbol !== position.tsym) {
+            console.error(`REST quote symbol mismatch for ${positionKey(position)}: expected ${position.tsym}, got ${quoteSymbol}`);
+            return null;
+        }
         if (ltp !== null) {
             latestQuotes[quoteKey] = {
                 ...quote,
@@ -686,9 +691,11 @@ const exitShortOptionPositionForRisk = async (position, reason, state) => {
     try {
         await cancelOpenOrders();
         await my_default_place_order(order);
+        await delay(1000);
+        const pnlAfterExit = await calcPnL(api);
         const triggerLtp = toFiniteNumber(state.triggerLtp ?? state.lastLtp);
         const triggerText = triggerLtp === null ? 'NA' : triggerLtp.toFixed(2);
-        const riskText = `entry=${state.entryPrice.toFixed(2)}, triggerLtp=${triggerText}, exitLtp=${ltp.toFixed(2)}, stop=${state.activeStopLtp.toFixed(2)}`;
+        const riskText = `entry=${state.entryPrice.toFixed(2)}, triggerLtp=${triggerText}, exitLtp=${ltp.toFixed(2)}, stop=${state.activeStopLtp.toFixed(2)}, pnl=${pnlAfterExit}`;
         send_notification(`${reason}: exiting ${position.tsym} ${absQty} @ ${exitPrice} (${riskText})`, true);
         if (identify_option_type(position.tsym) === 'P') {
             longPositionTaken = false;
@@ -738,7 +745,7 @@ const monitorPerPositionRisk = async () => {
         const existing = shortOptionRiskState.get(key);
         const reusableExistingState = existing && existing.openQty === absQty ? existing : null;
         const entryPrice = await getPositionEntryPrice(position, reusableExistingState);
-        const ltp = await getPositionLtp(position, shouldRefreshRiskQuote(position));
+        const ltp = await getPositionLtp(position, true);
         const { lotSize, maxLossPerLotDistance, trailingDistance } = getPerLotRiskConfig();
         if (entryPrice === null || ltp === null || !Number.isFinite(absQty) || absQty <= 0) {
             console.error(`Skipping risk monitor for ${key}: invalid position data.`);
@@ -759,9 +766,9 @@ const monitorPerPositionRisk = async () => {
         state.maxLossPerLotDistance = maxLossPerLotDistance;
         state.trailingDistance = trailingDistance;
         state.hardStopLtp = entryPrice + maxLossPerLotDistance;
-        state.trailingActivationLtp = entryPrice * (1 - trailingSLActivationDecay);
+        state.trailingActivationLtp = entryPrice;
 
-        if (state.bestLtp <= state.trailingActivationLtp) {
+        if (state.bestLtp < state.trailingActivationLtp) {
             state.trailingActive = true;
         }
 
@@ -1308,9 +1315,12 @@ const emaMonitorATMs = async () => {
     const ltpDisplay = toFiniteNumber(riskState?.lastLtp ?? latestQuote2);
     const soldText = soldDisplay === null ? 'NA' : soldDisplay.toFixed(2);
     const ltpText = ltpDisplay === null ? 'NA' : ltpDisplay.toFixed(2);
+    const hasTrackedRiskPosition = riskState || soldDisplay > 0 || Boolean(positionProcess.soldTsym);
     const strTemp = riskStopLabel
                   ? `S @${soldText} T @${riskStopLabel}\nL @${ltpText}\n`
-                  : `Risk SL pending\nS @${soldText} T @pending\nL @${ltpText}\n`;
+                  : hasTrackedRiskPosition
+                    ? `Risk SL pending\nS @${soldText} T @pending\nL @${ltpText}\n`
+                    : '';
     send_notification(`${strTemp}ces: ${parseFloat(callemaSlow).toFixed(2)} pes: ${parseFloat(putemaSlow).toFixed(2)}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}`);
    
     emaUpFastCall = callemaMedium - callemaSlow > -2;
