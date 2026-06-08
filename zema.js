@@ -16,6 +16,12 @@ setInterval(updateCalcVWAPFromFile, 60000);
 const debug = false;
 const pnlThreshold = -0.75; // 0.75% PnL threshold for exit
 const pnlUpThreshold = 0.5; // 0.5% PnL threshold for exit
+const hardMaxLossPerLotRs = 2000;
+const trailingSLPerLotRs = 800;
+const trailingSLActivationDecay = 0.20;
+const riskMonitorIntervalSeconds = 5;
+const riskRestQuoteRefreshMs = 60 * 1000;
+const riskMissingLtpWarningMs = 60 * 1000;
 const smallAccountQty = [65, 65, 65, 65, 65, 65, 65];
 const bigAccountQty = [195, 195, 195, 195, 195, 195, 195];
 const smallAccountDailyQty = 65;
@@ -408,6 +414,258 @@ const isOrderAccepted = (response) => response && (
 const isNoPositionsResponse = (response) => response && response.stat === 'Not_Ok' &&
     /no data|no position|no record/i.test(response.emsg || response.message || '');
 
+const shortOptionRiskState = new Map();
+const riskExitOrdersInProgress = new Set();
+const riskRestQuoteFetchedAt = new Map();
+const riskMissingLtpWarnedAt = new Map();
+
+const toFiniteNumber = (value) => {
+    const rawValue = Array.isArray(value) && value.length === 1 ? value[0] : value;
+    const numericValue = Number(rawValue);
+    return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const positionKey = (position) => `${position?.exch || globalInput.pickedExchange}|${position?.tsym || ''}|${position?.prd || 'M'}`;
+
+const isOpenShortOptionPosition = (position) => position?.exch === globalInput.pickedExchange &&
+    Number(position?.netqty) < 0 &&
+    ['C', 'P'].includes(identify_option_type(position?.tsym || ''));
+
+const getPositionEntryPrice = (position) => toFiniteNumber(position?.netavgprc ?? position?.daysellavgprc);
+
+const getPositionToken = (position) => position?.token || getTokenByTradingSymbol(position?.tsym);
+
+const getFreshQuoteLtp = async (position, token, quoteKey) => {
+    if (!token) {
+        return null;
+    }
+
+    try {
+        const quote = await api.get_quotes(position?.exch || globalInput.pickedExchange, token);
+        const ltp = toFiniteNumber(quote?.lp);
+        if (ltp !== null) {
+            latestQuotes[quoteKey] = {
+                ...quote,
+                e: quote?.e || quote?.exch || position?.exch || globalInput.pickedExchange,
+                tk: quote?.tk || quote?.token || token,
+                tsym: quote?.tsym || position?.tsym,
+            };
+            latestQuotesTimestamps[quoteKey] = Date.now();
+            riskRestQuoteFetchedAt.set(quoteKey, Date.now());
+            return ltp;
+        }
+    } catch (error) {
+        console.error(`REST quote fetch failed for ${positionKey(position)}:`, error.message || JSON.stringify(apiResponseSummary(error)));
+    }
+
+    return null;
+};
+
+const getPositionLtp = async (position, forceRest = false) => {
+    const token = getPositionToken(position);
+    const quoteKey = token ? `${position?.exch || globalInput.pickedExchange}|${token}` : '';
+
+    if (forceRest) {
+        const freshLtp = await getFreshQuoteLtp(position, token, quoteKey);
+        if (freshLtp !== null) {
+            return freshLtp;
+        }
+    }
+
+    const positionLtp = toFiniteNumber(position?.lp);
+    if (positionLtp !== null) {
+        return positionLtp;
+    }
+
+    const quote = quoteKey ? latestQuotes[quoteKey] : null;
+    const quoteAgeMs = Date.now() - (latestQuotesTimestamps[quoteKey] || 0);
+    const cachedLtp = quoteAgeMs <= riskRestQuoteRefreshMs ? toFiniteNumber(quote?.lp) : null;
+    if (cachedLtp !== null) {
+        return cachedLtp;
+    }
+
+    return await getFreshQuoteLtp(position, token, quoteKey);
+};
+
+const getPerLotRiskConfig = () => {
+    const lotSize = Number(globalInput.LotSize) || Number(getDailyQty()) || smallAccountDailyQty;
+    return {
+        lotSize,
+        maxLossPerLotDistance: hardMaxLossPerLotRs / lotSize,
+        trailingDistance: trailingSLPerLotRs / lotSize,
+    };
+};
+
+const clearClosedRiskStates = (openPositions) => {
+    const openKeys = new Set(openPositions.map(positionKey));
+    [...shortOptionRiskState.keys()].forEach((key) => {
+        if (!openKeys.has(key)) {
+            shortOptionRiskState.delete(key);
+            riskExitOrdersInProgress.delete(key);
+            riskMissingLtpWarnedAt.delete(key);
+        }
+    });
+};
+
+const getRiskStateForSymbol = (symbol) => {
+    if (!symbol) {
+        return null;
+    }
+    return [...shortOptionRiskState.entries()]
+        .find(([key]) => key.includes(`|${symbol}|`))?.[1] || null;
+};
+
+const shouldRefreshRiskQuote = (position) => {
+    const token = getPositionToken(position);
+    if (!token) {
+        return false;
+    }
+    const quoteKey = `${position?.exch || globalInput.pickedExchange}|${token}`;
+    return Date.now() - (riskRestQuoteFetchedAt.get(quoteKey) || 0) >= riskRestQuoteRefreshMs;
+};
+
+const warnMissingRiskLtp = (position) => {
+    const key = positionKey(position);
+    const lastWarnedAt = riskMissingLtpWarnedAt.get(key) || 0;
+    if (Date.now() - lastWarnedAt < riskMissingLtpWarningMs) {
+        return;
+    }
+    riskMissingLtpWarnedAt.set(key, Date.now());
+    const message = `Risk monitor missing LTP for ${position?.tsym}; checked position lp, websocket cache, and REST quote.`;
+    console.error(message);
+    send_notification(message, true);
+};
+
+const exitShortOptionPositionForRisk = async (position, reason, state) => {
+    const key = positionKey(position);
+    if (riskExitOrdersInProgress.has(key)) {
+        return false;
+    }
+
+    const absQty = Math.abs(Number(position?.netqty));
+    const ltp = await getPositionLtp(position, true);
+    if (!Number.isFinite(absQty) || absQty <= 0 || ltp === null) {
+        console.error(`Cannot risk-exit ${key}: invalid qty/ltp.`, JSON.stringify(apiResponseSummary(position)));
+        return false;
+    }
+
+    const exitPrice = Math.ceil(ltp + (ltp / 10));
+    const order = {
+        buy_or_sell: 'B',
+        product_type: position.prd || 'M',
+        exchange: position.exch || globalInput.pickedExchange,
+        tradingsymbol: position.tsym,
+        quantity: absQty.toString(),
+        discloseqty: 0,
+        price_type: 'LMT',
+        price: exitPrice,
+        remarks: 'RiskExitAPI',
+    };
+
+    riskExitOrdersInProgress.add(key);
+    isExiting = true;
+    try {
+        await cancelOpenOrders();
+        await my_default_place_order(order);
+        const riskText = `entry=${state.entryPrice.toFixed(2)}, ltp=${ltp.toFixed(2)}, stop=${state.activeStopLtp.toFixed(2)}`;
+        send_notification(`${reason}: exiting ${position.tsym} ${absQty} @ ${exitPrice} (${riskText})`, true);
+        if (identify_option_type(position.tsym) === 'P') {
+            longPositionTaken = false;
+        } else if (identify_option_type(position.tsym) === 'C') {
+            shortPositionTaken = false;
+        }
+        shortOptionRiskState.delete(key);
+        largeEmaGapExitTime = Date.now();
+        resetTrailPrice();
+        await updateTwoSmallestPositionsAndNeighboursSubs(false);
+        return true;
+    } catch (error) {
+        console.error(`Risk exit failed for ${key}:`, error.message || JSON.stringify(apiResponseSummary(error)));
+        send_notification(`Risk exit failed for ${position.tsym}: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+        return false;
+    } finally {
+        riskExitOrdersInProgress.delete(key);
+        isExiting = false;
+    }
+};
+
+const monitorPerPositionRisk = async () => {
+    if (isExiting) {
+        return false;
+    }
+
+    const positions = await api.get_positions();
+    if (!Array.isArray(positions)) {
+        if (isNoPositionsResponse(positions)) {
+            clearClosedRiskStates([]);
+        } else {
+            console.error('Risk monitor could not read positions:', JSON.stringify(apiResponseSummary(positions)));
+        }
+        return false;
+    }
+
+    const shortPositions = positions.filter(isOpenShortOptionPosition);
+    clearClosedRiskStates(shortPositions);
+
+    for (const position of shortPositions) {
+        const key = positionKey(position);
+        if (riskExitOrdersInProgress.has(key)) {
+            continue;
+        }
+
+        const entryPrice = getPositionEntryPrice(position);
+        const ltp = await getPositionLtp(position, shouldRefreshRiskQuote(position));
+        const absQty = Math.abs(Number(position.netqty));
+        const { lotSize, maxLossPerLotDistance, trailingDistance } = getPerLotRiskConfig();
+        if (entryPrice === null || ltp === null || !Number.isFinite(absQty) || absQty <= 0) {
+            console.error(`Skipping risk monitor for ${key}: invalid position data.`);
+            if (ltp === null) {
+                warnMissingRiskLtp(position);
+            }
+            continue;
+        }
+
+        const existing = shortOptionRiskState.get(key);
+        const state = existing && existing.entryPrice === entryPrice
+            ? existing
+            : { entryPrice, bestLtp: entryPrice, trailingActive: false };
+
+        state.bestLtp = Math.min(state.bestLtp, ltp);
+        state.lotSize = lotSize;
+        state.lots = absQty / lotSize;
+        state.lastLtp = ltp;
+        state.openPnl = (entryPrice - ltp) * absQty;
+        state.maxLossPerLotDistance = maxLossPerLotDistance;
+        state.trailingDistance = trailingDistance;
+        state.hardStopLtp = entryPrice + maxLossPerLotDistance;
+        state.trailingActivationLtp = entryPrice * (1 - trailingSLActivationDecay);
+
+        if (state.bestLtp <= state.trailingActivationLtp) {
+            state.trailingActive = true;
+        }
+
+        state.trailingStopLtp = state.trailingActive ? state.bestLtp + trailingDistance : null;
+        state.activeStopLtp = state.trailingActive
+            ? Math.min(state.hardStopLtp, state.trailingStopLtp)
+            : state.hardStopLtp;
+        shortOptionRiskState.set(key, state);
+
+        if (!positionProcess.soldTsym || positionProcess.soldTsym === position.tsym) {
+            positionProcess.soldPrice = entryPrice;
+            positionProcess.soldTsym = position.tsym;
+            positionProcess.soldToken = position.token || getTokenByTradingSymbol(position.tsym);
+            positionProcess.trailPrice = state.activeStopLtp.toFixed(2);
+        }
+
+        if (ltp >= state.activeStopLtp) {
+            const reason = state.trailingActive ? 'Trailing SL hit' : 'Hard max loss hit';
+            return await exitShortOptionPositionForRisk(position, reason, state);
+        }
+    }
+
+    return false;
+};
+
 exitHedgeOrder = async (positionsData) => {
   let order = {
         buy_or_sell: 'S',
@@ -531,12 +789,11 @@ postOrderPosTracking = async (data) => {
     send_notification((limits?.collateral)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
     
     if(data?.trantype === 'S') {
-      positionProcess.soldPrice = data?.flprc; 
-      const trailDelta1 = + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
-      positionProcess.trailPrice = +positionProcess.soldPrice + trailDelta1;
+      positionProcess.soldPrice = +data?.flprc || 0;
+      positionProcess.trailPrice = 0;
       positionProcess.soldTsym = data?.tsym;
       positionProcess.soldToken = getTokenByTradingSymbol(positionProcess.soldTsym);
-      console.log(`positionProcess ${positionProcess.soldPrice} ${positionProcess.soldTsym}`)
+      console.log(`positionProcess ${positionProcess.soldPrice} ${positionProcess.soldTsym}; risk monitor will set SL`)
     }
 }
 
@@ -581,19 +838,11 @@ function receiveQuote(data) {
         return;
     }
 
-    if (Number(latestQuote) > Number(positionProcess.trailPrice)) {
-        const currentTime = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
-        if (currentTime - lastNotificationTime >= 10) {
-            triggerATMChangeActions();
-            lastNotificationTime = currentTime; // Update the last notification time
-            send_notification(
-                `^## Alert to exit ##\nSold Price: ${positionProcess.soldPrice}\nTrail Price: ${positionProcess.trailPrice}\nCurrent Price: ${latestQuote}`
-            );
-        }
-    }
+    // Exits are handled by monitorPerPositionRisk() using live positions.
 }
 
 let debounceTimer = null;
+let fatalOrderRejection = false;
 function receiveOrders(data) {
     // console.log("Order ::", data);
     // Update the latest order value for the corresponding instrument
@@ -607,10 +856,10 @@ function receiveOrders(data) {
 
       // Set a new debounce timer
       debounceTimer = setTimeout(() => {
-          exitSellsAndOrStop(true).then(() => {
-              console.log('exited');
+          stopForManualReview('Order rejected from websocket', JSON.stringify(apiResponseSummary(data))).then(() => {
+              console.log('stopped for manual review');
           }).catch((error) => {
-              console.error('Error exiting sells and/or stop:', error);
+              console.error('Error stopping for manual review:', error);
           }).finally(() => {
             // Reset the debounceTimer to null after the timeout function completes
             debounceTimer = null;
@@ -924,11 +1173,10 @@ const emaMonitorATMs = async () => {
     const subStrTemp = `${globalInput.pickedExchange}|${positionProcess.soldToken}`
     // console.log('subStrTemp : ', subStrTemp) // subStrTemp :  NFO|61726
     const latestQuote2 = latestQuotes[subStrTemp]?.lp;
-    //trail logic
-    const latestPrice = latestQuotes[subStrTemp]?.lp ?? Number.POSITIVE_INFINITY;
-    const trailDelta = + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
-    positionProcess.trailPrice = parseFloat(Math.min((+latestPrice * trailDelta), positionProcess.trailPrice)).toFixed(2)
-    // positionProcess.trailPrice = +positionProcess.soldPrice + (( +limits?.collateral / 100 ) / globalInput.emaLotMultiplierQty);
+    const riskState = getRiskStateForSymbol(positionProcess.soldTsym);
+    if (riskState?.activeStopLtp) {
+      positionProcess.trailPrice = riskState.activeStopLtp.toFixed(2);
+    }
     
     const isDefined = (value) => value !== undefined && value !== null;
 
@@ -1002,6 +1250,29 @@ const cancelOpenOrders = async () => {
   }
 }
 
+let manualReviewStopInProgress = false;
+const stopForManualReview = async (reason, details = '') => {
+  fatalOrderRejection = true;
+  isExiting = true;
+  if (manualReviewStopInProgress) {
+    return;
+  }
+
+  manualReviewStopInProgress = true;
+  const message = `Manual review required: ${reason}${details ? ` ${details}` : ''}. zema2 will stop and will not take new positions.`;
+  console.error(message);
+  send_notification(message, true);
+
+  try {
+    await cancelOpenOrders();
+  } catch (error) {
+    console.error('cancelOpenOrders failed during manual-review stop:', error.message || JSON.stringify(apiResponseSummary(error)));
+  }
+
+  setTimeout(function() {
+      cleanupAndExit();
+  }, 2000);
+}
 
 function cleanupAndExit() {
   console.log('Cleanup actions completed.');
@@ -1117,7 +1388,16 @@ const my_default_place_order = async (order) => {
     }));
 
     if (!isOrderAccepted(response)) {
-      throw new Error(`Shoonya order not accepted: ${JSON.stringify(summary)}`);
+      const message = `Shoonya order not accepted: ${JSON.stringify(summary)}`;
+      await stopForManualReview(message, JSON.stringify({
+        trantype: chunkOrder.buy_or_sell,
+        exch: chunkOrder.exchange,
+        tsym: chunkOrder.tradingsymbol,
+        qty: chunkOrder.quantity,
+        prctyp: chunkOrder.price_type,
+        prc: chunkOrder.price
+      }));
+      throw new Error(message);
     }
 
     responses.push(response);
@@ -1166,6 +1446,7 @@ const exitXemaLong = async () => {
     send_notification(`pnlTemp1: ${pnlValue} is not less than ${pnlThreshold} nor greater than ${pnlUpThreshold}`);  }
   }
 const enterXemaLong = async () => {
+  if (fatalOrderRejection) return;
   if (isInCooldownPeriod('enterXemaLong')) return;
   if (isExiting) return; // Block entry during exit
   let tempTradingPutSymbol = biasProcess.atmPutSymbol;
@@ -1235,6 +1516,7 @@ const exitXemaShort = async () => {
   }
 }
 const enterXemaShort = async () => {
+  if (fatalOrderRejection) return;
   if (isInCooldownPeriod('enterXemaShort')) return;
   if (isExiting) return; // Block entry during exit
 
@@ -1304,6 +1586,7 @@ const enterXemaBuyPut = async () => {
 }
 
 async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
+  if (fatalOrderRejection) return;
   // Check if we're in cooldown period after exit
   if (isInCooldownPeriod()) return;
   
@@ -1362,6 +1645,7 @@ const setBiasValue = async () => {
 }
 
 const optionBasedEmaRecurringFunction = async () => {
+  if (fatalOrderRejection) return;
   // Block entire EMA logic during cooldown period
   if (isInCooldownPeriod('optionBasedEmaRecurringFunction')) {
     return;
@@ -1385,8 +1669,22 @@ const checkForOpenOrders = async () => {
 
 // main run by calling recurring function and subscribe to new ITMs for BiasCalculation
 getEma = async () => {
+  if (fatalOrderRejection) {
+    return;
+  }
   var currentDate = new Date();
   var seconds = currentDate.getSeconds();
+  if (seconds % riskMonitorIntervalSeconds === 0) {
+    try {
+      const riskExited = await monitorPerPositionRisk();
+      if (riskExited) {
+        return;
+      }
+    } catch (error) {
+        console.error("Error occured in monitorPerPositionRisk: " + error);
+        send_notification("Error occured in monitorPerPositionRisk")
+    }
+  }
   // check when second is 2 on the clock for every minute
   if (seconds === 2) {
   //TODO 
