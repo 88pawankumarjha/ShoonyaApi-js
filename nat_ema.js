@@ -5,14 +5,22 @@ const futureOffset = 0;
 const maxLossThreshold = -2;
 const maxProfitThreshold = 1.5;
 const trailingLossPerLot = 3000;
-const profitBookingPremiumMoveRatio = 0.5;
+const profitLockStartDecayRatio = 0.20;
+const profitBookDecayRatio = 0.35;
+const profitTrailBounceRatio = 0.12;
+const profitMonitorLogIntervalMs = 30 * 1000;
 const eveningExitMinutesIST = (18 * 60) + 30;
 const eveningReentryMinutesIST = (21 * 60) + 30;
 const nightShutdownMinutesIST = (23 * 60) + 17;
 const trailingMonitorIntervalSeconds = 5;
 const reentryCooldownMs = 30 * 60 * 1000;
+const profitReentryCooldownMs = 20 * 60 * 1000;
 const reentryCooldownFile = '.nat-ema-reentry-cooldown.json';
 const natEmaPm2ProcessName = process.env.NAT_EMA_PM2_NAME || 'nat_ema2';
+const orderPriceSlippageRatio = 0.02;
+const orderPriceSlippageMin = 1;
+const orderPriceSlippageMax = 5;
+const orderTickSize = 0.1;
 
 const debug = false;
 let inputProp = true; // true for XEma logic
@@ -440,6 +448,134 @@ const toFiniteNumber = (value) => {
   return Number.isFinite(numericValue) ? numericValue : null;
 };
 
+const toPnlNumber = (value) => {
+  if (typeof value === 'string') {
+    return toFiniteNumber(value.replace('%', '').trim());
+  }
+  return toFiniteNumber(value);
+};
+
+const getPnlMood = (value) => {
+  const numericValue = toPnlNumber(value);
+  if (numericValue === null) {
+    return { label: 'neutral', icon: '😐' };
+  }
+  if (numericValue > 0.33) {
+    return { label: 'good', icon: '🙂' };
+  }
+  if (numericValue < -0.33) {
+    return { label: 'bad', icon: '☹️' };
+  }
+  return { label: 'neutral', icon: '😐' };
+};
+
+const getEmaGapMood = (gap) => {
+  const numericGap = toFiniteNumber(gap);
+  if (numericGap === null) {
+    return { label: 'unknown', icon: '❔' };
+  }
+  if (numericGap > 0.3) {
+    return { label: 'bullish gap', icon: '📈' };
+  }
+  if (numericGap < -0.3) {
+    return { label: 'bearish gap', icon: '📉' };
+  }
+  return { label: 'flat gap', icon: '➖' };
+};
+
+const getPositionMood = (direction) => {
+  if (direction === 'long') {
+    return { label: 'long bias / short PUT', icon: '🟢' };
+  }
+  if (direction === 'short') {
+    return { label: 'short bias / short CALL', icon: '🔴' };
+  }
+  return { label: 'no position', icon: '⚪' };
+};
+
+const formatPriceText = (value) => {
+  const numericValue = toFiniteNumber(value);
+  return numericValue === null ? 'NA' : numericValue.toFixed(2);
+};
+
+const formatPnlText = (value, includePercent = false) => {
+  const mood = getPnlMood(value);
+  const numericValue = toPnlNumber(value);
+  if (!includePercent || numericValue === null) {
+    return `${mood.icon} ${mood.label}`;
+  }
+  return `${mood.icon} ${mood.label} ${numericValue.toFixed(2)}%`;
+};
+
+const formatPnlPercent = (value) => {
+  const numericValue = toPnlNumber(value);
+  return numericValue === null ? 'NA' : `${numericValue.toFixed(2)}%`;
+};
+
+const formatEmaGapText = (gap) => {
+  const mood = getEmaGapMood(gap);
+  const numericGap = toFiniteNumber(gap);
+  return `${mood.icon} ${mood.label}${numericGap === null ? '' : ` ${numericGap.toFixed(2)}`}`;
+};
+
+const getCollateralLabel = () => {
+  const label = String(limits?.collateral ?? 'NA').substring(0, 3);
+  return label || 'NA';
+};
+
+const formatNatMessage = (title, rows = []) => [
+  `NAT EMA | ${title}`,
+  ...rows
+    .filter(row => row && row[1] !== undefined && row[1] !== null && row[1] !== '')
+    .map(([label, value]) => `${label}: ${value}`),
+].join('\n');
+
+const roundOrderPrice = (price, side) => {
+  if (!Number.isFinite(price) || price <= 0) {
+    return null;
+  }
+  const ticks = price / orderTickSize;
+  const rounded = side === 'B'
+    ? Math.ceil(ticks) * orderTickSize
+    : Math.floor(ticks) * orderTickSize;
+  return Number(Math.max(orderTickSize, rounded).toFixed(2));
+};
+
+const getLimitPriceFromLtp = (ltp, side) => {
+  const numericLtp = toFiniteNumber(ltp);
+  if (numericLtp === null || numericLtp <= 0) {
+    return null;
+  }
+  const slippage = Math.max(orderPriceSlippageMin, Math.min(orderPriceSlippageMax, numericLtp * orderPriceSlippageRatio));
+  const rawPrice = side === 'B'
+    ? numericLtp + slippage
+    : numericLtp - slippage;
+  return roundOrderPrice(rawPrice, side);
+};
+
+const formatEntryOrderMessage = ({ reason, symbol, side, qty, price, ltp, direction, emaGap }) => {
+  const position = getPositionMood(direction);
+  return formatNatMessage(`🟦 ENTRY | ${reason}`, [
+    ['Position', `${position.icon} ${position.label}`],
+    ['Symbol', symbol || 'NA'],
+    ['Qty', qty || 'NA'],
+    ['Order', `${side || 'NA'} @${formatPriceText(price)}`],
+    ['LTP', formatPriceText(ltp)],
+    ['EMA Gap', emaGap === undefined ? undefined : formatEmaGapText(emaGap)],
+  ]);
+};
+
+const formatExitOrderMessage = ({ reason, symbol, side, qty, price, ltp, entry, stop, pnl }) => formatNatMessage(`🟧 EXIT | ${reason}`, [
+  ['Symbol', symbol || 'NA'],
+  ['Qty', qty || 'NA'],
+  ['Order', `${side || 'NA'} @${formatPriceText(price)}`],
+  ['Entry', entry === undefined ? undefined : formatPriceText(entry)],
+  ['LTP', ltp === undefined ? undefined : formatPriceText(ltp)],
+  ['Stop', stop === undefined ? undefined : formatPriceText(stop)],
+  ['Mood', formatPnlText(pnl)],
+  ['PnL', formatPnlPercent(pnl)],
+]);
+
 const extractIntcPrices = (reply, params, minCandles = 1) => {
   const series = Array.isArray(reply) ? reply : Array.isArray(reply?.values) ? reply.values : null;
   const context = `${params?.exchange || 'unknown'}|${params?.token || 'unknown'}`;
@@ -508,11 +644,12 @@ const clearReentryCooldown = () => {
   }
 };
 
-const startReentryCooldown = (reason) => {
-  reentryBlockedUntil = Date.now() + reentryCooldownMs;
+const startReentryCooldown = (reason, durationMs = reentryCooldownMs) => {
+  reentryBlockedUntil = Date.now() + durationMs;
   const payload = {
     blockedUntil: reentryBlockedUntil,
     reason,
+    durationMs,
     createdAt: new Date().toISOString(),
   };
   try {
@@ -520,7 +657,10 @@ const startReentryCooldown = (reason) => {
   } catch (error) {
     console.error('Unable to persist NAT EMA re-entry cooldown:', error.message);
   }
-  const message = `NAT EMA re-entry blocked until ${formatISTTime(reentryBlockedUntil)} IST after ${reason}.`;
+  const message = formatNatMessage('⏳ RE-ENTRY COOLDOWN', [
+    ['Until', `${formatISTTime(reentryBlockedUntil)} IST`],
+    ['Reason', reason],
+  ]);
   console.log(message);
   buffer_notification(message, true);
 };
@@ -614,6 +754,12 @@ const trailingStopState = new Map();
 const exitOrdersInProgress = new Set();
 let eveningExitInProgress = false;
 let nightShutdownInProgress = false;
+let latestNatEmaSnapshot = {
+  fast: null,
+  slow: null,
+  gap: null,
+  updatedAt: 0,
+};
 
 const positionKey = (position) => `${position?.exch || ''}|${position?.tsym || ''}|${position?.prd || 'M'}`;
 
@@ -723,6 +869,28 @@ const getSymbolLtp = async (symbol, forceRest = false) => {
   return toFiniteNumber(latestQuotes[quoteKey]?.lp);
 };
 
+const getUnderlyingLtp = async (forceRest = false) => {
+  const quoteKey = `${globalInput.pickedExchange}|${globalInput.token}`;
+  if (forceRest) {
+    try {
+      const quote = await api.get_quotes(globalInput.pickedExchange, globalInput.token);
+      const ltp = toFiniteNumber(quote?.lp ?? quote?.c);
+      if (ltp !== null) {
+        latestQuotes[quoteKey] = {
+          ...quote,
+          e: quote?.e || quote?.exch || globalInput.pickedExchange,
+          tk: quote?.tk || quote?.token || globalInput.token,
+          lp: ltp,
+        };
+        return ltp;
+      }
+    } catch (error) {
+      console.error(`REST quote fetch failed for ${quoteKey}:`, error.message || JSON.stringify(apiResponseSummary(error)));
+    }
+  }
+  return toFiniteNumber(latestQuotes[quoteKey]?.lp);
+};
+
 const getOrderStatusText = (orderStatus) => String(orderStatus?.status || orderStatus?.st_intrn || '').toUpperCase();
 
 const isRejectedOrderStatus = (orderStatus) =>
@@ -758,6 +926,88 @@ const clearClosedTrailingStops = (openPositions) => {
       exitOrdersInProgress.delete(key);
     }
   });
+};
+
+const updateLatestEmaSnapshot = (fastEMA, slowEMA) => {
+  const fast = toFiniteNumber(fastEMA);
+  const slow = toFiniteNumber(slowEMA);
+  latestNatEmaSnapshot = {
+    fast,
+    slow,
+    gap: fast !== null && slow !== null ? fast - slow : null,
+    updatedAt: Date.now(),
+  };
+  return latestNatEmaSnapshot;
+};
+
+const getLatestEmaSnapshot = () => {
+  const ageMs = latestNatEmaSnapshot.updatedAt ? Date.now() - latestNatEmaSnapshot.updatedAt : null;
+  return {
+    ...latestNatEmaSnapshot,
+    ageMs,
+  };
+};
+
+const getProfitMoveRatio = (entryPrice, ltp, side) => {
+  if (!entryPrice || entryPrice <= 0 || ltp === null) {
+    return null;
+  }
+  const move = side === 'short'
+    ? entryPrice - ltp
+    : ltp - entryPrice;
+  return move / entryPrice;
+};
+
+const getTrailingStateForSymbol = (symbol) => {
+  if (!symbol) {
+    return null;
+  }
+  for (const [key, state] of trailingStopState.entries()) {
+    if (key.includes(`|${symbol}|`)) {
+      return state;
+    }
+  }
+  return null;
+};
+
+const formatProfitTrackingText = (state) => {
+  if (!state) {
+    return 'watching';
+  }
+  const movePercent = Number.isFinite(state.profitMoveRatio) ? `${(state.profitMoveRatio * 100).toFixed(1)}%` : 'NA';
+  const lock = state.profitLockActive ? '🔒 locked' : 'watching';
+  const target = state.profitBookLtp === undefined ? '' : ` target ${formatPriceText(state.profitBookLtp)}`;
+  const trail = state.profitTrailExitLtp === undefined || state.profitTrailExitLtp === null ? '' : ` trail ${formatPriceText(state.profitTrailExitLtp)}`;
+  return `${lock} ${movePercent}${target}${trail}`;
+};
+
+const logProfitMonitorState = (position, state, event = 'check') => {
+  const now = Date.now();
+  const shouldLog = event !== 'check' || !state.lastProfitLogAt || now - state.lastProfitLogAt >= profitMonitorLogIntervalMs;
+  if (!shouldLog) {
+    return;
+  }
+  state.lastProfitLogAt = now;
+  const payload = {
+    event,
+    timeIST: moment().utcOffset('+05:30').format('YYYY-MM-DD HH:mm:ss'),
+    symbol: position?.tsym,
+    side: state.side,
+    optionType: identify_option_type(position?.tsym),
+    entry: state.entryPrice,
+    ltp: state.lastLtp,
+    bestLtp: state.bestLtp,
+    profitMovePct: Number.isFinite(state.profitMoveRatio) ? Number((state.profitMoveRatio * 100).toFixed(2)) : null,
+    profitLockActive: Boolean(state.profitLockActive),
+    lockStartLtp: state.profitLockStartLtp,
+    profitBookLtp: state.profitBookLtp,
+    profitTrailExitLtp: state.profitTrailExitLtp,
+    emaGap: state.emaGap,
+    emaGapAgeSec: Number.isFinite(state.emaGapAgeMs) ? Number((state.emaGapAgeMs / 1000).toFixed(1)) : null,
+    openPnl: Number.isFinite(state.openPnl) ? Number(state.openPnl.toFixed(2)) : null,
+    stopLtp: state.stopLtp,
+  };
+  console.log(`NAT_EMA_PROFIT_MONITOR ${JSON.stringify(payload)}`);
 };
 
 const resetLocalPositionState = (symbol) => {
@@ -831,22 +1081,43 @@ const getOrderStatus = async (orderno) => {
 };
 
 const waitForExitConfirmation = async (position, orderno) => {
+  let lastOrderStatus = null;
   for (let attempt = 0; attempt < 6; attempt++) {
     await delay(2000);
     const orderStatus = await getOrderStatus(orderno);
+    lastOrderStatus = orderStatus || lastOrderStatus;
     if (isRejectedOrderStatus(orderStatus)) {
       console.error(`Exit order rejected for ${positionKey(position)}: ${orderStatus.rejreason || ''}`);
-      return false;
+      return { confirmed: false, orderStatus };
     }
     if (!(await isPositionStillOpen(position))) {
-      return true;
+      return { confirmed: true, orderStatus };
     }
   }
   console.error(`Exit order not confirmed for ${positionKey(position)} after waiting.`);
-  return false;
+  return { confirmed: false, orderStatus: lastOrderStatus || await getOrderStatus(orderno) };
+};
+
+const pauseForManualReview = async (reason, data) => {
+  manualInterventionRequired = true;
+  orderPlacementPausedForManualReview = true;
+  const summary = data ? JSON.stringify(apiResponseSummary(data)) : '';
+  console.error(`${reason}${summary ? `: ${summary}` : ''}`);
+  buffer_notification(formatNatMessage('🚨 MANUAL REVIEW', [
+    ['Reason', reason],
+    ['Action', 'All new NAT EMA order placement paused'],
+    ['Check', 'Verify live positions and orderbook manually'],
+    ['Detail', summary],
+  ]), true);
+  await syncPositionStateFromLive();
 };
 
 const placeExitOrderForPosition = async (position, reason) => {
+  if (orderPlacementPausedForManualReview) {
+    console.log('Skipping NAT EMA exit; manual intervention required after prior order issue.');
+    return false;
+  }
+
   const key = positionKey(position);
   if (exitOrdersInProgress.has(key)) {
     return false;
@@ -856,12 +1127,16 @@ const placeExitOrderForPosition = async (position, reason) => {
   const absQty = Math.abs(netQty);
   const ltp = await getPositionLtp(position, true);
   if (!Number.isFinite(netQty) || absQty === 0 || ltp === null) {
-    console.error(`Cannot exit ${key}: invalid qty/ltp.`, JSON.stringify(apiResponseSummary(position)));
+    await pauseForManualReview(`Cannot exit ${key}: invalid qty/ltp`, position);
     return false;
   }
 
   const buyOrSell = netQty < 0 ? 'B' : 'S';
-  const exitPrice = buyOrSell === 'B' ? ltp + 1 : Math.max(0, ltp - 0.3);
+  const exitPrice = getLimitPriceFromLtp(ltp, buyOrSell);
+  if (exitPrice === null) {
+    await pauseForManualReview(`Cannot exit ${key}: unable to calculate safe ${buyOrSell} price`, { ltp });
+    return false;
+  }
   const remarks = reason.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 30) || 'NatEmaExit';
   const order = {
     buy_or_sell: buyOrSell,
@@ -879,15 +1154,30 @@ const placeExitOrderForPosition = async (position, reason) => {
   try {
     const response = await api.place_order(order);
     console.log(response, `:${reason} exit order`, position.tsym, absQty, buyOrSell, exitPrice.toFixed(2));
-    buffer_notification(`${reason}: exiting ${position.tsym} ${buyOrSell} ${absQty} @ ${exitPrice.toFixed(2)}`, true);
     if (response?.stat !== 'Ok') {
       exitOrdersInProgress.delete(key);
-      console.error(`Exit order failed for ${key}:`, JSON.stringify(apiResponseSummary(response)));
+      await pauseForManualReview(`Exit order failed for ${key}`, response);
+      return false;
+    }
+    if (!response.norenordno) {
+      exitOrdersInProgress.delete(key);
+      await pauseForManualReview(`Exit order missing order number for ${key}`, response);
       return false;
     }
 
-    const confirmed = await waitForExitConfirmation(position, response.norenordno);
-    if (confirmed) {
+    const confirmation = await waitForExitConfirmation(position, response.norenordno);
+    if (confirmation.confirmed) {
+      const pnlAfterExit = await calcPnL(api, true);
+      buffer_notification(formatExitOrderMessage({
+        reason,
+        symbol: position.tsym,
+        side: buyOrSell,
+        qty: absQty,
+        price: getOrderFilledPrice(confirmation.orderStatus) ?? exitPrice,
+        ltp,
+        entry: getPositionEntryPrice(position),
+        pnl: pnlAfterExit,
+      }), true);
       resetLocalPositionState(position.tsym);
       trailingStopState.delete(key);
       exitOrdersInProgress.delete(key);
@@ -895,17 +1185,23 @@ const placeExitOrderForPosition = async (position, reason) => {
     }
 
     exitOrdersInProgress.delete(key);
+    await pauseForManualReview(`Exit order not confirmed for ${key}`, confirmation.orderStatus || response);
     await syncPositionStateFromLive();
     return false;
   } catch (error) {
     exitOrdersInProgress.delete(key);
-    console.error(`Exit order exception for ${key}:`, error.message || JSON.stringify(apiResponseSummary(error)));
+    await pauseForManualReview(`Exit order exception for ${key}`, error);
     await syncPositionStateFromLive();
     return false;
   }
 };
 
 const exitOpenStrategyPositions = async (reason) => {
+  if (orderPlacementPausedForManualReview) {
+    console.log(`Skipping NAT EMA exit-all for ${reason}; manual intervention required after prior order issue.`);
+    return false;
+  }
+
   const positions = await getOpenStrategyPositions();
   clearClosedTrailingStops(positions);
   if (positions.length === 0) {
@@ -945,11 +1241,16 @@ const pauseNewEntriesForManualReview = async (reason, data) => {
   manualInterventionRequired = true;
   const summary = data ? JSON.stringify(apiResponseSummary(data)) : '';
   console.error(`${reason}${summary ? `: ${summary}` : ''}`);
-  buffer_notification(`${reason}. New NAT EMA entries paused; exits/risk controls remain active.${summary ? ` ${summary}` : ''}`, true);
+  buffer_notification(formatNatMessage('🚨 ENTRY PAUSED', [
+    ['Reason', reason],
+    ['Action', 'New NAT EMA entries paused'],
+    ['Risk', 'Existing exits and risk controls remain active'],
+    ['Detail', summary],
+  ]), true);
   await syncPositionStateFromLive();
 };
 
-const placeEntryOrderAndConfirm = async (symbol, direction, reason) => {
+const placeEntryOrderAndConfirm = async (symbol, direction, reason, emaGap) => {
   if (manualInterventionRequired) {
     console.log('Skipping NAT EMA entry; manual intervention required after prior order issue.');
     return false;
@@ -973,12 +1274,16 @@ const placeEntryOrderAndConfirm = async (symbol, direction, reason) => {
 
     const ltp = await getSymbolLtp(symbol, true);
     if (ltp === null) {
-      console.error(`Cannot place NAT EMA entry for ${symbol}: missing LTP.`);
+      await pauseNewEntriesForManualReview(`Cannot place NAT EMA entry for ${symbol}: missing LTP`);
       return false;
     }
 
     const buyOrSell = swapSide('S');
-    const entryPrice = buyOrSell === 'B' ? ltp + 1 : Math.max(0, ltp - 0.3);
+    const entryPrice = getLimitPriceFromLtp(ltp, buyOrSell);
+    if (entryPrice === null) {
+      await pauseNewEntriesForManualReview(`Cannot place NAT EMA entry for ${symbol}: unable to calculate safe ${buyOrSell} price`, { ltp });
+      return false;
+    }
     const quantity = (Number(globalInput.LotSize || 1250) * Number(globalInput.emaLotMultiplier || 1)).toString();
     const order = {
       buy_or_sell: buyOrSell,
@@ -994,9 +1299,22 @@ const placeEntryOrderAndConfirm = async (symbol, direction, reason) => {
 
     const response = await api.place_order(order);
     console.log(response, `:${reason} entry order`, symbol, quantity, buyOrSell, entryPrice.toFixed(2));
-    buffer_notification(`${reason}: entering ${symbol} ${buyOrSell} ${quantity} @ ${entryPrice.toFixed(2)}`, true);
+    buffer_notification(formatEntryOrderMessage({
+      reason,
+      symbol,
+      side: buyOrSell,
+      qty: quantity,
+      price: entryPrice,
+      ltp,
+      direction,
+      emaGap,
+    }), true);
     if (response?.stat !== 'Ok') {
       await pauseNewEntriesForManualReview(`NAT EMA entry order failed for ${symbol}`, response);
+      return false;
+    }
+    if (!response.norenordno) {
+      await pauseNewEntriesForManualReview(`NAT EMA entry order missing order number for ${symbol}`, response);
       return false;
     }
 
@@ -1020,7 +1338,11 @@ const placeEntryOrderAndConfirm = async (symbol, direction, reason) => {
       return false;
     }
     clearClosedTrailingStops([confirmation.position]);
-    buffer_notification(`${reason}: entry confirmed COMPLETE ${symbol} S@${confirmedEntryPrice}`, true);
+    buffer_notification(formatNatMessage('✅ ENTRY CONFIRMED', [
+      ['Position', `${getPositionMood(direction).icon} ${getPositionMood(direction).label}`],
+      ['Symbol', symbol],
+      ['Fill', `S @${formatPriceText(confirmedEntryPrice)}`],
+    ]), true);
     return true;
   } catch (error) {
     await pauseNewEntriesForManualReview(`NAT EMA entry exception for ${symbol}`, error);
@@ -1056,27 +1378,38 @@ const runNightShutdownIfDue = async () => {
 
   nightShutdownInProgress = true;
   try {
-    buffer_notification('23:17 IST cutoff reached: exiting NAT EMA positions and stopping nat_ema2.', true);
+    buffer_notification(formatNatMessage('🌙 NIGHT SHUTDOWN', [
+      ['Time', '23:17 IST cutoff reached'],
+      ['Action', 'Exit positions and stop nat_ema2'],
+    ]), true);
     await exitOpenStrategyPositions('23:17 IST shutdown');
 
     const remainingPositions = await getOpenStrategyPositions();
     clearClosedTrailingStops(remainingPositions);
     if (remainingPositions.length > 0) {
       const symbols = remainingPositions.map(position => position.tsym).filter(Boolean).join(', ');
-      buffer_notification(`23:17 IST shutdown retry needed: ${remainingPositions.length} position(s) still open${symbols ? ` (${symbols})` : ''}.`, true);
+      buffer_notification(formatNatMessage('⚠️ NIGHT RETRY NEEDED', [
+        ['Open Positions', remainingPositions.length],
+        ['Symbols', symbols || 'NA'],
+      ]), true);
       await flush_notifications();
       nightShutdownInProgress = false;
       return true;
     }
 
     resetLocalPositionState();
-    buffer_notification('23:17 IST shutdown complete: no NAT EMA positions remain. Stopping nat_ema2 PM2 process.', true);
+    buffer_notification(formatNatMessage('✅ NIGHT SHUTDOWN COMPLETE', [
+      ['Positions', 'none open'],
+      ['Action', 'Stopping nat_ema2 PM2 process'],
+    ]), true);
     await flush_notifications();
     stopNatEmaPm2Process();
     return true;
   } catch (error) {
     console.error('Error during 23:17 IST shutdown:', error.message || JSON.stringify(apiResponseSummary(error)));
-    buffer_notification(`23:17 IST shutdown error: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+    buffer_notification(formatNatMessage('🚨 NIGHT SHUTDOWN ERROR', [
+      ['Error', error.message || JSON.stringify(apiResponseSummary(error))],
+    ]), true);
     await flush_notifications();
     nightShutdownInProgress = false;
     return true;
@@ -1086,6 +1419,10 @@ const runNightShutdownIfDue = async () => {
 let trailingMonitorInProgress = false;
 const monitorTrailingLoss = async () => {
   if (trailingMonitorInProgress) {
+    return false;
+  }
+  if (orderPlacementPausedForManualReview) {
+    console.log('Skipping NAT EMA trailing/profit monitor; manual intervention required after prior order issue.');
     return false;
   }
 
@@ -1119,22 +1456,68 @@ const monitorTrailingLoss = async () => {
         : { side, entryPrice, bestLtp: entryPrice, trailingActive: false };
       const lots = absQty / lotSize;
       const maxLoss = trailingLossPerLot * lots;
+      const emaSnapshot = getLatestEmaSnapshot();
+      const profitMoveRatio = getProfitMoveRatio(entryPrice, ltp, side);
+      const profitTrailBounceDistance = entryPrice * profitTrailBounceRatio;
+
+      state.lastLtp = ltp;
+      state.profitMoveRatio = profitMoveRatio;
+      state.profitLockStartLtp = side === 'short'
+        ? entryPrice * (1 - profitLockStartDecayRatio)
+        : entryPrice * (1 + profitLockStartDecayRatio);
+      state.profitBookLtp = side === 'short'
+        ? entryPrice * (1 - profitBookDecayRatio)
+        : entryPrice * (1 + profitBookDecayRatio);
+      state.profitTrailBounceDistance = profitTrailBounceDistance;
+      state.emaGap = emaSnapshot.gap;
+      state.emaGapAgeMs = emaSnapshot.ageMs;
 
       if (side === 'short') {
         state.bestLtp = Math.min(state.bestLtp, ltp);
-        state.profitTargetLtp = entryPrice * (1 - profitBookingPremiumMoveRatio);
         state.openPnl = (entryPrice - ltp) * absQty;
         state.hardStopLtp = entryPrice + stopDistance;
+        state.profitTrailExitLtp = state.profitLockActive ? state.bestLtp + profitTrailBounceDistance : null;
         if (state.bestLtp < entryPrice) {
           state.trailingActive = true;
         }
         state.trailingStopLtp = state.trailingActive ? state.bestLtp + stopDistance : null;
         state.stopLtp = state.trailingActive ? Math.min(state.hardStopLtp, state.trailingStopLtp) : state.hardStopLtp;
-        if (entryPrice > 0 && ltp <= state.profitTargetLtp) {
+        if (!state.profitLockActive && profitMoveRatio !== null && profitMoveRatio >= profitLockStartDecayRatio) {
+          state.profitLockActive = true;
+          state.profitLockActivatedAt = Date.now();
+          state.profitTrailExitLtp = state.bestLtp + profitTrailBounceDistance;
+          buffer_notification(formatNatMessage('🔒 PROFIT LOCK', [
+            ['Symbol', position.tsym],
+            ['Entry', formatPriceText(entryPrice)],
+            ['LTP', formatPriceText(ltp)],
+            ['Best LTP', formatPriceText(state.bestLtp)],
+            ['Move', `${(profitMoveRatio * 100).toFixed(1)}% decay`],
+            ['Trail Exit', formatPriceText(state.profitTrailExitLtp)],
+            ['EMA Gap', formatEmaGapText(emaSnapshot.gap)],
+          ]), true);
+          logProfitMonitorState(position, state, 'profit_lock_started');
+        }
+        if (entryPrice > 0 && ltp <= state.profitBookLtp) {
           const exitConfirmed = await placeExitOrderForPosition(
             position,
-            'Profit target 50 pct decay hit'
+            'Profit target 35 pct decay hit'
           );
+          logProfitMonitorState(position, state, exitConfirmed ? 'profit_book_exit_confirmed' : 'profit_book_exit_failed');
+          if (exitConfirmed) {
+            startReentryCooldown(`profit target exit for ${position.tsym}`, profitReentryCooldownMs);
+          }
+          exited = exitConfirmed || exited;
+          continue;
+        }
+        if (state.profitLockActive && state.profitTrailExitLtp !== null && ltp >= state.profitTrailExitLtp) {
+          const exitConfirmed = await placeExitOrderForPosition(
+            position,
+            `Profit lock trail exit best ${state.bestLtp.toFixed(2)} bounce ${profitTrailBounceDistance.toFixed(2)} ltp ${ltp.toFixed(2)}`
+          );
+          logProfitMonitorState(position, state, exitConfirmed ? 'profit_lock_trail_exit_confirmed' : 'profit_lock_trail_exit_failed');
+          if (exitConfirmed) {
+            startReentryCooldown(`profit lock trail exit for ${position.tsym}`, profitReentryCooldownMs);
+          }
           exited = exitConfirmed || exited;
           continue;
         }
@@ -1152,19 +1535,50 @@ const monitorTrailingLoss = async () => {
         }
       } else {
         state.bestLtp = Math.max(state.bestLtp, ltp);
-        state.profitTargetLtp = entryPrice * (1 + profitBookingPremiumMoveRatio);
         state.openPnl = (ltp - entryPrice) * absQty;
         state.hardStopLtp = entryPrice - stopDistance;
+        state.profitTrailExitLtp = state.profitLockActive ? state.bestLtp - profitTrailBounceDistance : null;
         if (state.bestLtp > entryPrice) {
           state.trailingActive = true;
         }
         state.trailingStopLtp = state.trailingActive ? state.bestLtp - stopDistance : null;
         state.stopLtp = state.trailingActive ? Math.max(state.hardStopLtp, state.trailingStopLtp) : state.hardStopLtp;
-        if (entryPrice > 0 && ltp >= state.profitTargetLtp) {
+        if (!state.profitLockActive && profitMoveRatio !== null && profitMoveRatio >= profitLockStartDecayRatio) {
+          state.profitLockActive = true;
+          state.profitLockActivatedAt = Date.now();
+          state.profitTrailExitLtp = state.bestLtp - profitTrailBounceDistance;
+          buffer_notification(formatNatMessage('🔒 PROFIT LOCK', [
+            ['Symbol', position.tsym],
+            ['Entry', formatPriceText(entryPrice)],
+            ['LTP', formatPriceText(ltp)],
+            ['Best LTP', formatPriceText(state.bestLtp)],
+            ['Move', `${(profitMoveRatio * 100).toFixed(1)}% gain`],
+            ['Trail Exit', formatPriceText(state.profitTrailExitLtp)],
+            ['EMA Gap', formatEmaGapText(emaSnapshot.gap)],
+          ]), true);
+          logProfitMonitorState(position, state, 'profit_lock_started');
+        }
+        if (entryPrice > 0 && ltp >= state.profitBookLtp) {
           const exitConfirmed = await placeExitOrderForPosition(
             position,
-            'Profit target 50 pct gain hit'
+            'Profit target 35 pct gain hit'
           );
+          logProfitMonitorState(position, state, exitConfirmed ? 'profit_book_exit_confirmed' : 'profit_book_exit_failed');
+          if (exitConfirmed) {
+            startReentryCooldown(`profit target exit for ${position.tsym}`, profitReentryCooldownMs);
+          }
+          exited = exitConfirmed || exited;
+          continue;
+        }
+        if (state.profitLockActive && state.profitTrailExitLtp !== null && ltp <= state.profitTrailExitLtp) {
+          const exitConfirmed = await placeExitOrderForPosition(
+            position,
+            `Profit lock trail exit best ${state.bestLtp.toFixed(2)} bounce ${profitTrailBounceDistance.toFixed(2)} ltp ${ltp.toFixed(2)}`
+          );
+          logProfitMonitorState(position, state, exitConfirmed ? 'profit_lock_trail_exit_confirmed' : 'profit_lock_trail_exit_failed');
+          if (exitConfirmed) {
+            startReentryCooldown(`profit lock trail exit for ${position.tsym}`, profitReentryCooldownMs);
+          }
           exited = exitConfirmed || exited;
           continue;
         }
@@ -1182,10 +1596,10 @@ const monitorTrailingLoss = async () => {
         }
       }
 
-      state.lastLtp = ltp;
       state.stopDistance = stopDistance;
       state.lots = lots;
       state.maxLoss = maxLoss;
+      logProfitMonitorState(position, state);
       trailingStopState.set(key, state);
     }
 
@@ -1257,8 +1671,14 @@ postOrderPosTracking = async (data) => {
       buffer_notification(`NAT EMA completion price unresolved for ${data?.tsym || positionTakenInSymbol}; check orderbook before new entry.`, true);
       return;
     }
-    buffer_notification(`${suffix} S at ${sellPrice} B @${buyPrice} ${new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}`, true)
-    buffer_notification(`${suffix} S at ${sellPrice} B @${buyPrice} ${new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}`)
+    const completionMessage = formatNatMessage('✅ ORDER COMPLETE', [
+      ['Symbol', suffix],
+      ['Sell', formatPriceText(sellPrice)],
+      ['Buy', formatPriceText(buyPrice)],
+      ['Time', new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })],
+    ]);
+    buffer_notification(completionMessage, true)
+    buffer_notification(completionMessage)
   }
 }
 
@@ -1401,7 +1821,11 @@ function open(data) {
   if (data?.s && data.s !== 'OK') {
     websocketReady = false;
     websocket_closed = true;
-    buffer_notification(`Shoonya websocket auth failed: ${JSON.stringify(apiResponseSummary(data))}`, true);
+    buffer_notification(formatNatMessage('⚠️ WEBSOCKET', [
+      ['Status', 'auth failed'],
+      ['Fallback', 'REST polling'],
+      ['Detail', JSON.stringify(apiResponseSummary(data))],
+    ]), true);
     return;
   }
   websocketReady = true;
@@ -1551,6 +1975,9 @@ async function updateITMSymbolfromOC() {
 }
 
 async function takeAction(goingUp) {
+  await pauseForManualReview(`Retired NAT EMA legacy takeAction path invoked (${goingUp ? 'up' : 'down'}); no order placed`);
+  return false;
+  return false;
   // let orders = await api.get_orderbook() 
   // console.log(orders)
 
@@ -1873,7 +2300,7 @@ async function takeAction(goingUp) {
     quantity: Math.abs(positionProcess.smallestCallPosition?.netqty).toString(),
     discloseqty: 0,
     price_type: 'MKT',
-    price: 0,
+    price: 'RETIRED_UNSAFE_PATH',
     remarks: 'WSOrderCEExitAPI'
   }
 
@@ -1886,7 +2313,7 @@ async function takeAction(goingUp) {
     quantity: Math.abs(positionProcess.smallestPutPosition?.netqty).toString(),
     discloseqty: 0,
     price_type: 'MKT',
-    price: 0,
+    price: 'RETIRED_UNSAFE_PATH',
     remarks: 'WSOrderPEExitAPI'
   }
 
@@ -1907,7 +2334,7 @@ async function takeAction(goingUp) {
     quantity: Math.abs(+positionProcess.smallestCallPosition?.netqty + +positionProcess.smallestCallPosition?.ls).toString(),
     discloseqty: 0,
     price_type: 'MKT',
-    price: 0,
+    price: 'RETIRED_UNSAFE_PATH',
     remarks: 'WSNewOrderAggressiveCEEntryAPI'
   }
 
@@ -1919,7 +2346,7 @@ async function takeAction(goingUp) {
     quantity: Math.abs(+positionProcess.smallestCallPosition?.netqty + +positionProcess.smallestCallPosition?.ls).toString(),
     discloseqty: 0,
     price_type: 'MKT',
-    price: 0,
+    price: 'RETIRED_UNSAFE_PATH',
     remarks: 'WSNewOrderSubmissiveCEEntryAPI'
   }
 
@@ -1931,7 +2358,7 @@ async function takeAction(goingUp) {
     quantity: Math.abs(+positionProcess.smallestPutPosition?.netqty + +positionProcess.smallestPutPosition?.ls).toString(),
     discloseqty: 0,
     price_type: 'MKT',
-    price: 0,
+    price: 'RETIRED_UNSAFE_PATH',
     remarks: 'WSNewOrderAggressivePEEntryAPI'
   }
 
@@ -1943,16 +2370,20 @@ async function takeAction(goingUp) {
     quantity: Math.abs(+positionProcess.smallestPutPosition?.netqty + +positionProcess.smallestPutPosition?.ls).toString(),
     discloseqty: 0,
     price_type: 'MKT',
-    price: 0,
+    price: 'RETIRED_UNSAFE_PATH',
     remarks: 'WSNewOrderSubmissivePEEntryAPI'
   }
 
   if (goingUp && !telegramSignals.stopSignal && !debug) {
-    await api.place_order(orderCE);
-    biasProcess.vix > 0 ? await api.place_order(orderSubmissiveCE) : await api.place_order(orderAggressiveCE);
+    await retiredUnsafeOrderPath('takeAction(orderCE)', orderCE.tradingsymbol, orderCE.quantity);
+    biasProcess.vix > 0
+      ? await retiredUnsafeOrderPath('takeAction(orderSubmissiveCE)', orderSubmissiveCE.tradingsymbol, orderSubmissiveCE.quantity)
+      : await retiredUnsafeOrderPath('takeAction(orderAggressiveCE)', orderAggressiveCE.tradingsymbol, orderAggressiveCE.quantity);
   } else if (!goingUp && !telegramSignals.stopSignal && !debug) {
-    await api.place_order(orderPE);
-    biasProcess.vix > 0 ? await api.place_order(orderSubmissivePE) : await api.place_order(orderAggressivePE);
+    await retiredUnsafeOrderPath('takeAction(orderPE)', orderPE.tradingsymbol, orderPE.quantity);
+    biasProcess.vix > 0
+      ? await retiredUnsafeOrderPath('takeAction(orderSubmissivePE)', orderSubmissivePE.tradingsymbol, orderSubmissivePE.quantity)
+      : await retiredUnsafeOrderPath('takeAction(orderAggressivePE)', orderAggressivePE.tradingsymbol, orderAggressivePE.quantity);
   }
   // console.log(orderCE, 'orderCE')
   // console.log(orderPE, 'orderPE')
@@ -2184,54 +2615,16 @@ const dynSubs = async () => {
 // };
 // getBias();
 
-const long = async (symbol, qty) => {
-  let orderCE = {
-    buy_or_sell: swapSide('B'),
-    product_type: 'M',
-    exchange: 'MCX',
-    tradingsymbol: symbol || 'NATURALGAS14DEC23P6700',
-    quantity: (1250 * globalInput.emaLotMultiplier).toString(), // multiplier
-    discloseqty: (1250 * globalInput.emaLotMultiplier).toString(), // multiplier
-    price_type: 'LMT',
-    price: +(latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(symbol)}`]?.lp) + 1 || 0,
-    remarks: 'PawanLongCrudeAPI'
-  }
-  try {
-    orderCERespObj = await api.place_order(orderCE);
-    console.log(orderCERespObj, ' :orderCERespObj')
-    console.log(symbol, qty, ' :symbol qty long')
-    return orderCERespObj;
-  }
-  catch (error) {
-    console.log(error)
-    return null;
-  }
+const retiredUnsafeOrderPath = async (helperName, symbol, qty) => {
+  await pauseForManualReview(
+    `Retired NAT EMA unsafe helper ${helperName} invoked; no order placed`,
+    { symbol, qty }
+  );
+  return null;
+};
 
-}
-const short = async (symbol, qty) => {
-  let orderCE = {
-    buy_or_sell: swapSide('S'),
-    product_type: 'M',
-    exchange: 'MCX',
-    tradingsymbol: symbol || 'NATURALGAS14DEC23P6700',
-    quantity: (1250 * globalInput.emaLotMultiplier).toString(), // multiplier
-    discloseqty: (1250 * globalInput.emaLotMultiplier).toString(), // multiplier
-    price_type: 'LMT',
-    price: +(latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(symbol)}`]?.lp) - 0.3 || 0,
-    remarks: 'PawanShortCrudeAPI'
-  }
-  try {
-    orderPERespObj = await api.place_order(orderCE);
-    console.log(orderPERespObj, ' :orderPERespOb')
-    console.log(symbol, qty, ' :symbol qty short')
-    return orderPERespObj;
-  }
-  catch (error) {
-    console.log(error)
-    return null;
-  }
-
-}
+const long = async (symbol, qty) => retiredUnsafeOrderPath('long()', symbol, qty);
+const short = async (symbol, qty) => retiredUnsafeOrderPath('short()', symbol, qty);
 
 
 
@@ -2241,67 +2634,19 @@ let positionTakenInSymbol = '';
 let positionEntryPrice = null;
 let entryOrderInProgress = false;
 let manualInterventionRequired = false;
+let orderPlacementPausedForManualReview = false;
 
 let prevEma9LessThanEma21 = ''
 let crossedUp = ''
 let firsttime = false;
 async function sellercrudecheckCrossOverExit(ema9, ema21) {
-  if (prevEma9LessThanEma21 === '') {
-    firsttime = true;
-    prevEma9LessThanEma21 = ema9 < ema21;
-    crossedUp = ema9 > ema21;
-    buffer_notification('first prevEma9LessThanEma21 stored for reference as ' + prevEma9LessThanEma21);
-  }
-  if ((!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) || (firsttime && crossedUp)) {
-    buffer_notification("Cross over detected. Take call position." + new Date());
-    await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    positionTakenInSymbol = biasProcess.atmPutSymbol;
-    positionTaken = true;
-    prevEma9LessThanEma21 = ema9 < ema21;
-    crossedUp = ema9 > ema21;
-    firsttime = false;
-    // Place your position-taking logic here
-  } else if ((!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) || (firsttime && !crossedUp)) {
-    buffer_notification("Cross over detected. Take put position." + new Date());
-    await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    positionTakenInSymbol = biasProcess.atmCallSymbol;
-    positionTaken = true;
-    prevEma9LessThanEma21 = ema9 < ema21;
-    crossedUp = ema9 > ema21;
-    firsttime = false;
-  }
-  else if (positionTaken) {
-    if (crossedUp && ema9 < ema21) {
-      // exitLong addshort
-      await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmCallSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-
-    } else if (!crossedUp && ema9 > ema21) {
-      // exitShort addLong
-      await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmPutSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-    }
-  } else {
-    console.log("No signal detected." + new Date());
-    // Additional logic if needed
-  }
-  // positionTakenInSymbol && buffer_notification(positionTakenInSymbol+ ': ltp: '+  +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp )
-  positionTakenInSymbol && buffer_notification(`MCX PnL: ${await calcPnL(api, true)}% ${(limits?.collateral)?.substring(0, 3)} \n${positionTakenInSymbol}: ltp: ${latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp}`);
-  //send notification
-  prevEma9LessThanEma21 = ema9 < ema21;
-  crossedUp = ema9 > ema21;
+  await pauseForManualReview('Retired NAT EMA legacy sellercrudecheckCrossOverExit path invoked; no order placed', { ema9, ema21 });
+  return false;
 }
 let positionDirection = '';
 async function XEma(fastEMA, slowEMA) {
   const diff = fastEMA - slowEMA;
+  updateLatestEmaSnapshot(fastEMA, slowEMA);
   await syncPositionStateFromLive();
 
   if (!positionTaken) {
@@ -2312,25 +2657,49 @@ async function XEma(fastEMA, slowEMA) {
 
     // Sell PUT when diff > 0.3
     if (diff > 0.3) {
-      buffer_notification(`SELL PUT: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} > 0.3`);
-      await placeEntryOrderAndConfirm(biasProcess.atmPutSymbol, 'long', 'SELL PUT');
+      buffer_notification(formatNatMessage('📈 SIGNAL', [
+        ['Action', 'SELL PUT'],
+        ['Position', `${getPositionMood('long').icon} ${getPositionMood('long').label}`],
+        ['Fast EMA', formatPriceText(fastEMA)],
+        ['Slow EMA', formatPriceText(slowEMA)],
+        ['EMA Gap', formatEmaGapText(diff)],
+      ]));
+      await placeEntryOrderAndConfirm(biasProcess.atmPutSymbol, 'long', 'SELL PUT', diff);
     }
     // Sell CALL when diff < -0.3
     else if (diff < -0.3) {
-      buffer_notification(`SELL CALL: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} < -0.3`);
-      await placeEntryOrderAndConfirm(biasProcess.atmCallSymbol, 'short', 'SELL CALL');
+      buffer_notification(formatNatMessage('📉 SIGNAL', [
+        ['Action', 'SELL CALL'],
+        ['Position', `${getPositionMood('short').icon} ${getPositionMood('short').label}`],
+        ['Fast EMA', formatPriceText(fastEMA)],
+        ['Slow EMA', formatPriceText(slowEMA)],
+        ['EMA Gap', formatEmaGapText(diff)],
+      ]));
+      await placeEntryOrderAndConfirm(biasProcess.atmCallSymbol, 'short', 'SELL CALL', diff);
     }
   } else if (positionTaken) {
     // Buy PUT when diff <= 0.3
     if (positionDirection == 'long' && (diff <= 0.3)) {
-      buffer_notification(`BUY PUT: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} <= 0.3`);
+      buffer_notification(formatNatMessage('🔄 EXIT SIGNAL', [
+        ['Action', 'BUY PUT'],
+        ['Reason', 'EMA gap crossed back'],
+        ['Fast EMA', formatPriceText(fastEMA)],
+        ['Slow EMA', formatPriceText(slowEMA)],
+        ['EMA Gap', formatEmaGapText(diff)],
+      ]));
       await exitOpenStrategyPositions('EMA PUT exit');
       await syncPositionStateFromLive();
       return;
     }
     // Buy CALL when diff >= -0.3
     else if (positionDirection == 'short' && (diff >= -0.3)) {
-      buffer_notification(`BUY CALL: fastEMA (${fastEMA}) - slowEMA (${slowEMA}) = ${diff} >= -0.3`);
+      buffer_notification(formatNatMessage('🔄 EXIT SIGNAL', [
+        ['Action', 'BUY CALL'],
+        ['Reason', 'EMA gap crossed back'],
+        ['Fast EMA', formatPriceText(fastEMA)],
+        ['Slow EMA', formatPriceText(slowEMA)],
+        ['EMA Gap', formatEmaGapText(diff)],
+      ]));
       await exitOpenStrategyPositions('EMA CALL exit');
       await syncPositionStateFromLive();
       return;
@@ -2344,108 +2713,44 @@ async function XEma(fastEMA, slowEMA) {
       buffer_notification(`NAT EMA entry price unresolved for ${positionTakenInSymbol}; suppressing S@ status until live position price is available.`, true);
       return;
     }
-    positionTakenInSymbol && buffer_notification(`MCX PnL: ${await calcPnL(api, true)} % ${(limits?.collateral)?.substring(0, 3)} \n${positionTakenInSymbolSubStr}: S@${displayEntryPrice}, ltp: ${latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp}`);
+    const pnl = await calcPnL(api, true);
+    const displayLtp = await getSymbolLtp(positionTakenInSymbol, true);
+    const profitState = getTrailingStateForSymbol(positionTakenInSymbol);
+    positionTakenInSymbol && buffer_notification(formatNatMessage('📍 STATUS', [
+      ['PnL', formatPnlText(pnl)],
+      ['Position', `${getPositionMood(positionDirection).icon} ${getPositionMood(positionDirection).label}`],
+      ['Symbol', positionTakenInSymbolSubStr],
+      ['Entry', formatPriceText(displayEntryPrice)],
+      ['LTP', formatPriceText(displayLtp)],
+      ['EMA Gap', formatEmaGapText(diff)],
+      ['Profit Lock', formatProfitTrackingText(profitState)],
+      ['Capital', getCollateralLabel()],
+    ]));
     console.log("Current Time:", moment().utcOffset("+05:30").format('HH:mm:ss'));
   } else {
-    console.log(`No position taken. \n${(limits?.collateral)?.substring(0, 3)} MCX PnL: ${await calcPnL(api, true)} % \nCurrent Time:`, moment().utcOffset("+05:30").format('HH:mm:ss'));
-    buffer_notification(`No position taken. \n${(limits?.collateral)?.substring(0, 3)} MCX PnL: ${await calcPnL(api, true)} %`);
+    const pnl = await calcPnL(api, true);
+    console.log(`No position taken. ${getCollateralLabel()} MCX PnL: ${pnl} % Current Time:`, moment().utcOffset("+05:30").format('HH:mm:ss'));
+    buffer_notification(formatNatMessage('⚪ STATUS', [
+      ['PnL', formatPnlText(pnl)],
+      ['Position', `${getPositionMood('').icon} ${getPositionMood('').label}`],
+      ['EMA Gap', formatEmaGapText(diff)],
+      ['Capital', getCollateralLabel()],
+    ]));
   }
 }
 
 async function crudecheckCrossOverExit(ema9, ema21) {
-  if (prevEma9LessThanEma21 === '') {
-    prevEma9LessThanEma21 = ema9 < ema21;
-    crossedUp = ema9 > ema21;
-    buffer_notification('first prevEma9LessThanEma21 stored for reference as ' + prevEma9LessThanEma21);
-  }
-  else if (!positionTaken && prevEma9LessThanEma21 && ema9 > ema21) {
-    buffer_notification("Cross over detected. Take call position." + new Date());
-    await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    positionTakenInSymbol = biasProcess.atmCallSymbol;
-    positionTaken = true;
-    prevEma9LessThanEma21 = ema9 < ema21;
-    crossedUp = ema9 > ema21;
-    // Place your position-taking logic here
-  } else if (!positionTaken && !prevEma9LessThanEma21 && ema9 < ema21) {
-    buffer_notification("Cross over detected. Take put position." + new Date());
-    await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    positionTakenInSymbol = biasProcess.atmPutSymbol;
-    positionTaken = true;
-    prevEma9LessThanEma21 = ema9 < ema21;
-    crossedUp = ema9 > ema21;
-  }
-  else if (positionTaken) {
-    if (crossedUp && ema9 < ema21) {
-      // exitLong addshort
-      await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmPutSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-
-    } else if (!crossedUp && ema9 > ema21) {
-      // exitShort addLong
-      await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-      positionTakenInSymbol = biasProcess.atmCallSymbol;
-      positionTaken = true;
-      prevEma9LessThanEma21 = ema9 < ema21;
-      crossedUp = ema9 > ema21;
-    }
-  } else {
-    console.log("No signal detected." + new Date());
-    // Additional logic if needed
-  }
-  positionTakenInSymbol && buffer_notification(`MCX PnL: ${await calcPnL(api, true)} % Rs - ${positionTakenInSymbol}: ltp: ${latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp}`);
-  //send notification
-  prevEma9LessThanEma21 = ema9 < ema21;
-  crossedUp = ema9 > ema21;
+  await pauseForManualReview('Retired NAT EMA legacy crudecheckCrossOverExit path invoked; no order placed', { ema9, ema21 });
+  return false;
 }
 async function checkCrossOverExit(ema9, ema21) {
-  if (callPreviousValue && !positionTaken && ema9 > ema21) {
-    console.log("Cross over detected. Take call position." + new Date());
-    await long(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    positionTakenInSymbol = biasProcess.atmCallSymbol;
-    positionTaken = true;
-    // Place your position-taking logic here
-  } else if (positionTaken && ema9 < ema21) {
-    console.log("Exit signal detected. Close call position." + new Date());
-    await short(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    positionTaken = false;
-    positionTakenInSymbol = '';
-    // Place your position-closing logic here
-  } else {
-    console.log("No call signal detected." + new Date());
-    // Additional logic if needed
-  }
-  positionTakenInSymbol && console.log(positionTakenInSymbol, ' : openCallPosition - LTP: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp)
-  //send notification
-  callPreviousValue = ema9 < ema21;
-
+  await pauseForManualReview('Retired NAT EMA legacy checkCrossOverExit path invoked; no order placed', { ema9, ema21 });
+  return false;
 }
 
 async function sellercheckCrossOverExit(ema9, ema21) {
-  if (callPreviousValue && !positionTaken && ema9 < ema21) {
-    console.log("Cross over detected. Take call position." + new Date());
-    await short(biasProcess.atmCallSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    positionTakenInSymbol = biasProcess.atmCallSymbol;
-    positionTaken = true;
-    // Place your position-taking logic here
-  } else if (positionTaken && ema9 > ema21) {
-    console.log("Exit signal detected. Close call position." + new Date());
-    await long(positionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    positionTaken = false;
-    positionTakenInSymbol = '';
-    // Place your position-closing logic here
-  } else {
-    console.log("No call signal detected." + new Date());
-    // Additional logic if needed
-  }
-  positionTakenInSymbol && console.log(positionTakenInSymbol, ' : openCallPosition - LTP: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(positionTakenInSymbol)}`]?.lp)
-  //send notification
-  callPreviousValue = ema9 > ema21;
-
+  await pauseForManualReview('Retired NAT EMA legacy sellercheckCrossOverExit path invoked; no order placed', { ema9, ema21 });
+  return false;
 }
 
 let putpositionTaken = false;
@@ -2453,49 +2758,14 @@ let putPreviousValue = false;
 let putpositionTakenInSymbol = '';
 
 async function putcheckCrossOverExit(ema9, ema21) {
-  if (putPreviousValue && !putpositionTaken && ema9 > ema21) {
-    console.log("Cross over detected. Take put position." + new Date());
-    await long(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    putpositionTakenInSymbol = biasProcess.atmPutSymbol;
-    putpositionTaken = true;
-    // Place your position-taking logic here
-  } else if (putpositionTaken && ema9 < ema21) {
-    console.log("Exit signal detected. Close put position." + new Date());
-    await short(putpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    putpositionTaken = false;
-    putpositionTakenInSymbol = ''
-    // Place your position-closing logic here
-  } else {
-    console.log("No put signal detected." + new Date());
-    // Additional logic if needed
-  }
-  putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : openPutPosition - LTP: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putpositionTakenInSymbol)}`]?.lp)
-  //send notification
-  putPreviousValue = ema9 < ema21;
+  await pauseForManualReview('Retired NAT EMA legacy putcheckCrossOverExit path invoked; no order placed', { ema9, ema21 });
+  return false;
 }
 
 
 async function sellerputcheckCrossOverExit(ema9, ema21) {
-  if (putPreviousValue && !putpositionTaken && ema9 < ema21) {
-    console.log("Cross over detected. Take put position." + new Date());
-    await short(biasProcess.atmPutSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    putpositionTakenInSymbol = biasProcess.atmPutSymbol;
-    putpositionTaken = true;
-    // Place your position-taking logic here
-  } else if (positionTaken && ema9 > ema21) {
-    console.log("Exit signal detected. Close put position." + new Date());
-    await long(putpositionTakenInSymbol, globalInput.LotSize * globalInput.emaLotMultiplier)
-    putpositionTaken = false;
-    putpositionTakenInSymbol = '';
-    // Place your position-closing logic here
-  } else {
-    console.log("No put signal detected." + new Date());
-    // Additional logic if needed
-  }
-  putpositionTakenInSymbol && console.log(putpositionTakenInSymbol, ' : openPutPosition - LTP: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putpositionTakenInSymbol)}`]?.lp)
-  //send notification
-  putPreviousValue = ema9 > ema21;
-
+  await pauseForManualReview('Retired NAT EMA legacy sellerputcheckCrossOverExit path invoked; no order placed', { ema9, ema21 });
+  return false;
 }
 
 // async function sellerputcheckCrossOverExit(ema9, ema21) {
@@ -2890,8 +3160,13 @@ emaRecurringFunction = async () => {
           console.log(`Skipping EMA tick: invalid TPSeries data for ${params.exchange}|${params.token}.`);
           return;
         }
-        // console.log(fastEMA, slowEMA, ' : fastEMA, slowEMA');
-        buffer_notification('NATURALGAS: ltp ' + +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + '\nfastEMA ' + parseFloat(fastEMA).toFixed(2) + '\nslowEMA ' + parseFloat(slowEMA).toFixed(2))
+        const underlyingLtp = await getUnderlyingLtp(true);
+        buffer_notification(formatNatMessage('📊 EMA CHECK', [
+          ['Underlying', `${globalInput.indexName} @${formatPriceText(underlyingLtp)}`],
+          ['Fast EMA', formatPriceText(fastEMA)],
+          ['Slow EMA', formatPriceText(slowEMA)],
+          ['EMA Gap', formatEmaGapText(fastEMA - slowEMA)],
+        ]));
         await XEma(fastEMA, slowEMA);
       } else {
         const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
@@ -2901,7 +3176,13 @@ emaRecurringFunction = async () => {
         }
         // const [putema9, putema21] = await ema9and21Values(params2); //put
 
-        buffer_notification('NATURALGAS: ltp ' + +latestQuotes[`${globalInput.pickedExchange}|${globalInput.token}`]?.lp + ', ema9 ' + parseFloat(callema9).toFixed(2) + ', ema21 ' + parseFloat(callema21).toFixed(2))
+        const underlyingLtp = await getUnderlyingLtp(true);
+        buffer_notification(formatNatMessage('📊 EMA CHECK', [
+          ['Underlying', `${globalInput.indexName} @${formatPriceText(underlyingLtp)}`],
+          ['EMA 9', formatPriceText(callema9)],
+          ['EMA 21', formatPriceText(callema21)],
+          ['EMA Gap', formatEmaGapText(callema9 - callema21)],
+        ]));
         // console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
 
         //send notification
@@ -2960,7 +3241,10 @@ getEma = async () => {
       try {
         const exited = await exitOpenStrategyPositions('18:30 IST no-entry window');
         if (exited) {
-          buffer_notification('18:30 IST no-entry window: exited open NATURALGAS positions. Re-entry blocked until 21:30 IST.', true);
+          buffer_notification(formatNatMessage('🌆 EVENING WINDOW', [
+            ['Action', 'Exited open NATURALGAS positions'],
+            ['Re-entry', 'Blocked until 21:30 IST'],
+          ]), true);
         }
       } catch (error) {
         console.error('Error enforcing evening no-entry window:', error.message || JSON.stringify(apiResponseSummary(error)));
@@ -2987,7 +3271,10 @@ getEma = async () => {
     if (seconds === 50) {
       const pnl = await calcPnL(api, true);
       if (pnl < maxLossThreshold || pnl > maxProfitThreshold) {
-        buffer_notification(`PnL threshold reached: ${pnl}. Exiting all positions.`);
+        buffer_notification(formatNatMessage('🚨 PNL THRESHOLD', [
+          ['PnL', formatPnlText(pnl)],
+          ['Action', 'Exiting all positions'],
+        ]));
         await exitOpenStrategyPositions('PnL threshold reached');
         return;
       }
