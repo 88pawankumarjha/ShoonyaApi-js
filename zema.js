@@ -24,6 +24,11 @@ const riskRestQuoteRefreshMs = 60 * 1000;
 const riskLiveQuoteMaxAgeMs = 10 * 1000;
 const riskMissingLtpWarningMs = 60 * 1000;
 const riskOrderbookRefreshMs = 15 * 1000;
+const orderStatusPollMs = 1000;
+const orderStatusMaxAttempts = 15;
+const orderPriceSlippageRatio = 0.02;
+const orderPriceSlippageMax = 5;
+const orderTickSize = 0.05;
 const smallAccountQty = [65, 65, 65, 65, 65, 65, 65];
 const bigAccountQty = [195, 195, 195, 195, 195, 195, 195];
 const smallAccountDailyQty = 65;
@@ -166,6 +171,9 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 //websocket
 let websocket;
 let websocket_closed= false;
+let websocketReady = false;
+let websocketAuthFailed = false;
+let websocketReconnectTimer;
 let intervalId;
 let intervalIdForEMA;
 const delayForEMA = 1000; 
@@ -301,14 +309,20 @@ const getAtmStrike = async () => {
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
   // console.log(biasOutput.bias, 'biasOutput.bias')
   // send_notification(biasOutput.bias + ' biasOutput.bias');
-  atm = Math.round((biasProcess.spotObject?.lp + (biasOutput.bias !== 0 ? biasOutput.bias : 0)) / globalInput.ocGap) * globalInput.ocGap;
-  if (!isNaN(atm)) {return atm;}  
+  const spotLtp = toFiniteNumber(biasProcess.spotObject?.lp);
+  const biasValue = toFiniteNumber(biasOutput.bias) ?? 0;
+  const atm = spotLtp === null ? null : Math.round((spotLtp + (biasValue !== 0 ? biasValue : 0)) / globalInput.ocGap) * globalInput.ocGap;
+  if (atm !== null && !isNaN(atm)) {return atm;}
   else { 
-    console.log('isNaN(atm) true')
     const Spot = await fetchSpotPrice(api, globalInput.token, globalInput.pickedExchange);
     if (!Spot) { console.log('Not able to find the spot'); return null; }
     // debug && console.log(Spot)
-    const ltp_rounded = Math.round(parseFloat(Spot.lp));
+    const fallbackSpotLtp = toFiniteNumber(Spot.lp);
+    if (fallbackSpotLtp === null) {
+      console.log('Skipping ATM update: missing spot LTP.');
+      return null;
+    }
+    const ltp_rounded = Math.round(fallbackSpotLtp);
     // const open = Math.round(parseFloat(Spot.o || Spot.c || Spot.lp)); // c for days when market is closed
     // debug && console.log(open, 'open, ', ltp_rounded, ' ltp_rounded, = ', ltp_rounded-open, " ltp_rounded-open")
     const mod = ltp_rounded % globalInput.ocGap;
@@ -429,6 +443,128 @@ const toFiniteNumber = (value) => {
     return Number.isFinite(numericValue) ? numericValue : null;
 };
 
+const toPnlNumber = (value) => {
+    if (typeof value === 'string') {
+        return toFiniteNumber(value.replace('%', '').trim());
+    }
+    return toFiniteNumber(value);
+};
+
+const getPnlMood = (value) => {
+    const numericValue = toPnlNumber(value);
+    if (numericValue === null) {
+        return 'neutral';
+    }
+    if (numericValue > 0.33) {
+        return 'good';
+    }
+    if (numericValue < -0.33) {
+        return 'bad';
+    }
+    return 'neutral';
+};
+
+const formatPnlPercent = (value) => {
+    const numericValue = toPnlNumber(value);
+    return numericValue === null ? 'NA' : `${numericValue.toFixed(2)}%`;
+};
+
+const formatPriceText = (value) => {
+    const numericValue = toFiniteNumber(value);
+    return numericValue === null ? 'NA' : numericValue.toFixed(2);
+};
+
+const getCollateralLabel = () => {
+    const label = String(limits?.collateral ?? 'NA').substring(0, 3);
+    return label || 'NA';
+};
+
+const formatTelegramMessage = (title, rows = []) => [
+    `ZEMA | ${title}`,
+    ...rows
+        .filter(row => row && row[1] !== undefined && row[1] !== null && row[1] !== '')
+        .map(([label, value]) => `${label}: ${value}`),
+].join('\n');
+
+const formatExitOrderMessage = ({
+    reason,
+    symbol,
+    qty,
+    side = 'B',
+    price,
+    entry,
+    ltp,
+    stop,
+    pnl,
+}) => formatTelegramMessage(`EXIT | ${reason}`, [
+    ['Symbol', symbol || 'NA'],
+    ['Qty', qty || 'NA'],
+    ['Order', `${side} @${formatPriceText(price)}`],
+    ['Entry', entry === undefined ? undefined : formatPriceText(entry)],
+    ['LTP', ltp === undefined ? undefined : formatPriceText(ltp)],
+    ['Stop', stop === undefined ? undefined : formatPriceText(stop)],
+    ['Mood', getPnlMood(pnl)],
+    ['PnL', formatPnlPercent(pnl)],
+]);
+
+const getFinalFillPrice = (responses, fallbackPrice) => {
+    const finalOrder = Array.isArray(responses) ? responses[responses.length - 1]?.finalOrder : null;
+    return toFiniteNumber(finalOrder?.avgprc ?? finalOrder?.flprc ?? finalOrder?.prc) ?? toFiniteNumber(fallbackPrice);
+};
+
+const roundOrderPrice = (price, side) => {
+    if (!Number.isFinite(price) || price <= 0) {
+        return null;
+    }
+    const ticks = price / orderTickSize;
+    const rounded = side === 'B'
+        ? Math.ceil(ticks) * orderTickSize
+        : Math.floor(ticks) * orderTickSize;
+    return Number(Math.max(orderTickSize, rounded).toFixed(2));
+};
+
+const getLimitPriceFromLtp = (ltp, side) => {
+    const numericLtp = toFiniteNumber(ltp);
+    if (numericLtp === null || numericLtp <= 0) {
+        return null;
+    }
+    const slippage = Math.max(orderTickSize, Math.min(orderPriceSlippageMax, numericLtp * orderPriceSlippageRatio));
+    const rawPrice = side === 'B'
+        ? numericLtp + slippage
+        : numericLtp - slippage;
+    return roundOrderPrice(rawPrice, side);
+};
+
+const getSafeOrderPriceFromQuote = async (symbol, side) => {
+    const token = getTokenByTradingSymbol(symbol);
+    if (!symbol || !token) {
+        throw new Error(`Cannot price ${side} order: missing token for ${symbol || 'unknown symbol'}`);
+    }
+
+    const quote = await api.get_quotes(globalInput.pickedExchange, token);
+    const quoteSymbol = quote?.tsym || quote?.tradingSymbol || quote?.ts;
+    if (quoteSymbol && quoteSymbol !== symbol) {
+        throw new Error(`Quote symbol mismatch for ${symbol}: got ${quoteSymbol}`);
+    }
+
+    const ltp = toFiniteNumber(quote?.lp);
+    const price = getLimitPriceFromLtp(ltp, side);
+    if (price === null) {
+        throw new Error(`Cannot price ${side} order for ${symbol}: invalid LTP ${quote?.lp}`);
+    }
+
+    console.log(`Safe ${side} price for ${symbol}: ltp=${ltp}, price=${price}`);
+    return price;
+};
+
+const getSafeOrderPriceFromPosition = async (position, side) => {
+    const priceFromPosition = getLimitPriceFromLtp(position?.lp, side);
+    if (priceFromPosition !== null) {
+        return priceFromPosition;
+    }
+    return getSafeOrderPriceFromQuote(position?.tsym, side);
+};
+
 const positionKey = (position) => `${position?.exch || globalInput.pickedExchange}|${position?.tsym || ''}|${position?.prd || 'M'}`;
 
 const isOpenShortOptionPosition = (position) => position?.exch === globalInput.pickedExchange &&
@@ -467,6 +603,66 @@ const getRiskOrderbook = async () => {
 
     console.error('Risk monitor could not read orderbook:', JSON.stringify(apiResponseSummary(orders)));
     return [];
+};
+
+const getOrderStatusText = (orderStatus) => String(orderStatus?.status || orderStatus?.st_intrn || '').toUpperCase();
+
+const isRejectedOrderStatus = (orderStatus) =>
+    ['REJECTED', 'CANCELED', 'CANCELLED'].includes(getOrderStatusText(orderStatus));
+
+const getOrderByNumber = async (orderno) => {
+    if (!orderno) {
+        return null;
+    }
+    const orderbook = await api.get_orderbook();
+    if (!Array.isArray(orderbook)) {
+        console.error('Could not read orderbook for confirmation:', JSON.stringify(apiResponseSummary(orderbook)));
+        return null;
+    }
+    return orderbook.find(order => order.norenordno === orderno) || null;
+};
+
+const waitForOrderCompletion = async (orderno, orderContext) => {
+    for (let attempt = 0; attempt < orderStatusMaxAttempts; attempt++) {
+        await delay(orderStatusPollMs);
+        const orderStatus = await getOrderByNumber(orderno);
+        const statusText = getOrderStatusText(orderStatus);
+        if (statusText === 'COMPLETE') {
+            return orderStatus;
+        }
+        if (isRejectedOrderStatus(orderStatus)) {
+            const reason = orderStatus?.rejreason || statusText;
+            const message = `Shoonya order rejected: ${reason}`;
+            await stopForManualReview(message, JSON.stringify({
+                ...orderContext,
+                norenordno: orderno,
+                status: statusText,
+                rejreason: orderStatus?.rejreason,
+            }));
+            throw new Error(message);
+        }
+    }
+
+    const message = `Shoonya order not confirmed COMPLETE after ${orderStatusMaxAttempts}s`;
+    await stopForManualReview(message, JSON.stringify({ ...orderContext, norenordno: orderno }));
+    throw new Error(message);
+};
+
+const waitForOpenShortPosition = async (symbol, label) => {
+    for (let attempt = 0; attempt < 6; attempt++) {
+        await delay(1000);
+        const positions = await api.get_positions();
+        const position = Array.isArray(positions)
+            ? positions.find(item => item?.tsym === symbol && Number(item?.netqty) < 0)
+            : null;
+        if (position) {
+            return position;
+        }
+    }
+
+    const message = `${label} order completed but live short position not found`;
+    await stopForManualReview(message, JSON.stringify({ symbol }));
+    throw new Error(message);
 };
 
 const getActiveShortEntryFromOrderbook = async (position) => {
@@ -669,11 +865,21 @@ const exitShortOptionPositionForRisk = async (position, reason, state) => {
     const absQty = Math.abs(Number(position?.netqty));
     const ltp = await getPositionLtp(position, true);
     if (!Number.isFinite(absQty) || absQty <= 0 || ltp === null) {
-        console.error(`Cannot risk-exit ${key}: invalid qty/ltp.`, JSON.stringify(apiResponseSummary(position)));
+        await stopForManualReview(
+            `Cannot risk-exit ${key}: invalid qty/ltp`,
+            JSON.stringify(apiResponseSummary(position))
+        );
         return false;
     }
 
-    const exitPrice = Math.ceil(ltp + (ltp / 10));
+    const exitPrice = getLimitPriceFromLtp(ltp, 'B');
+    if (exitPrice === null) {
+        await stopForManualReview(
+            `Cannot risk-exit ${key}: unable to calculate buy price from LTP`,
+            JSON.stringify({ ltp })
+        );
+        return false;
+    }
     const order = {
         buy_or_sell: 'B',
         product_type: position.prd || 'M',
@@ -690,13 +896,21 @@ const exitShortOptionPositionForRisk = async (position, reason, state) => {
     isExiting = true;
     try {
         await cancelOpenOrders();
-        await my_default_place_order(order);
+        const exitResponses = await my_default_place_order(order);
         await delay(1000);
         const pnlAfterExit = await calcPnL(api);
         const triggerLtp = toFiniteNumber(state.triggerLtp ?? state.lastLtp);
-        const triggerText = triggerLtp === null ? 'NA' : triggerLtp.toFixed(2);
-        const riskText = `entry=${state.entryPrice.toFixed(2)}, triggerLtp=${triggerText}, exitLtp=${ltp.toFixed(2)}, stop=${state.activeStopLtp.toFixed(2)}, pnl=${pnlAfterExit}`;
-        send_notification(`${reason}: exiting ${position.tsym} ${absQty} @ ${exitPrice} (${riskText})`, true);
+        send_notification(formatExitOrderMessage({
+            reason,
+            symbol: position.tsym,
+            qty: absQty,
+            side: 'B',
+            price: getFinalFillPrice(exitResponses, exitPrice),
+            entry: state.entryPrice,
+            ltp: triggerLtp ?? ltp,
+            stop: state.activeStopLtp,
+            pnl: pnlAfterExit,
+        }), true);
         if (identify_option_type(position.tsym) === 'P') {
             longPositionTaken = false;
         } else if (identify_option_type(position.tsym) === 'C') {
@@ -710,10 +924,13 @@ const exitShortOptionPositionForRisk = async (position, reason, state) => {
     } catch (error) {
         console.error(`Risk exit failed for ${key}:`, error.message || JSON.stringify(apiResponseSummary(error)));
         send_notification(`Risk exit failed for ${position.tsym}: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+        await stopForManualReview('Risk exit failed', error.message || JSON.stringify(apiResponseSummary(error)));
         return false;
     } finally {
         riskExitOrdersInProgress.delete(key);
-        isExiting = false;
+        if (!fatalOrderRejection) {
+            isExiting = false;
+        }
     }
 };
 
@@ -796,7 +1013,9 @@ const monitorPerPositionRisk = async () => {
 };
 
 exitHedgeOrder = async (positionsData) => {
-  let order = {
+  try {
+    const exitPrice = await getSafeOrderPriceFromPosition(positionsData, 'S');
+    let order = {
         buy_or_sell: 'S',
         product_type: 'M',
         exchange: globalInput.pickedExchange,
@@ -804,29 +1023,26 @@ exitHedgeOrder = async (positionsData) => {
         quantity: positionsData.netqty.toString(),
         discloseqty: 0,
         price_type: 'LMT',
-        price: +positionsData.lp ? Math.max(Math.floor(+positionsData.lp - (+positionsData.lp / 10)), 0.1) : 0.1,
+        price: exitPrice,
         remarks: 'ExitHedgeAPI'
     }
     // console.log('exitHedgeOrder ignored: ', order);
     await my_default_place_order(order);
+  } catch (error) {
+    console.error('exitHedgeOrder failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    send_notification(`exitHedgeOrder failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+    await stopForManualReview('exitHedgeOrder failed', error.message || JSON.stringify(apiResponseSummary(error)));
+  }
 }
 
 exitHedges = async () => {
-  api.get_positions()
-        .then((data) => { 
-          if (Array.isArray(data)) {
-            // Separate calls and puts for NFO - these are sold options with smallest LTP
-            const calls = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
-            const puts = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
-
-            calls.forEach(position => {
-                exitHedgeOrder(position)
-            });
-            puts.forEach(position => {
-                exitHedgeOrder(position)
-            });
-          }
-        });
+  const data = await api.get_positions();
+  if (Array.isArray(data)) {
+    // Separate calls and puts for NFO - these are bought hedge options.
+    const calls = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'C');
+    const puts = data.filter(option => parseInt(option.netqty) > 0 && identify_option_type(option.tsym) == 'P');
+    await Promise.all([...calls, ...puts].map(position => exitHedgeOrder(position)));
+  }
 }
 
 updatePositions = async () => {
@@ -913,9 +1129,13 @@ postOrderPosTracking = async (data) => {
     
     positionProcess.posPutSubStr && dynamicallyAddSubscription(positionProcess.posPutSubStr);
     // console.log('order placed: ', data)
-    str = '\n' + data?.trantype + ' ' + data?.flprc + ' ' + data?.tsym + ' ';
     pnl = await calcPnL(api);
-    send_notification((limits?.collateral)?.substring(0,3) + ' : PNL : ' + pnl + ' ' + str)
+    send_notification(formatTelegramMessage('ORDER UPDATE', [
+      ['Action', `${data?.trantype || 'NA'} ${data?.tsym || 'NA'}`],
+      ['Fill', formatPriceText(data?.flprc)],
+      ['Mood', getPnlMood(pnl)],
+      ['Capital', getCollateralLabel()],
+    ]));
     
     if(data?.trantype === 'S') {
       positionProcess.soldPrice = +data?.flprc || 0;
@@ -1004,19 +1224,67 @@ function receiveOrders(data) {
 }
 
 function open(data) {
-    
+    console.log('ws open ack:', JSON.stringify(apiResponseSummary(data)));
+    if (data?.s && data.s !== 'OK') {
+        websocketReady = false;
+        websocketAuthFailed = true;
+        const message = `Shoonya websocket auth failed: ${JSON.stringify(apiResponseSummary(data))}. Order confirmation will use REST orderbook polling.`;
+        console.error(message);
+        send_notification(message, true);
+        return;
+    }
+
+    websocketReady = true;
+    websocketAuthFailed = false;
+    websocket_closed = false;
     const initialInstruments = [`${globalInput.indexName.includes('EX') ? 'NSE' : 'NSE'}|${globalInput.token}`, 'NSE|26017']; 
 
     subscribeToInstruments(initialInstruments);
 }
 
+const scheduleWebsocketReconnect = (reason) => {
+    if (fatalOrderRejection || websocketAuthFailed || websocketReconnectTimer) {
+        return;
+    }
+    console.error(`Shoonya websocket ${reason}; reconnecting in 30s.`);
+    websocketReconnectTimer = setTimeout(async () => {
+        websocketReconnectTimer = null;
+        try {
+            await startWebsocket();
+        } catch (error) {
+            console.error('Shoonya websocket reconnect failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+            scheduleWebsocketReconnect('reconnect failed');
+        }
+    }, 30000);
+};
+
+const onSocketClose = (data) => {
+    websocketReady = false;
+    websocket_closed = true;
+    console.error('Shoonya websocket closed:', data);
+    scheduleWebsocketReconnect('closed');
+};
+
+const onSocketError = (data) => {
+    websocketReady = false;
+    console.error('Shoonya websocket error:', data);
+    scheduleWebsocketReconnect('errored');
+};
+
 function subscribeToInstruments(instruments) {
+    if (!websocketReady) {
+        console.log('Skipping websocket subscribe; websocket is not ready.');
+        return;
+    }
     instruments.forEach(instrument => {
         api.subscribe(instrument);
     });
 }
 
 function dynamicallyAddSubscription(newInstrument) {
+    if (!websocketReady) {
+        return;
+    }
     if (!latestQuotes[newInstrument]) {
         console.log("Subscribing to new :: ", newInstrument);
         api.subscribe(newInstrument);
@@ -1025,6 +1293,8 @@ function dynamicallyAddSubscription(newInstrument) {
 
 params = {
     'socket_open': open,
+    'socket_close': onSocketClose,
+    'socket_error': onSocketError,
     'quote': receiveQuote,
     'order': receiveOrders
 };
@@ -1316,12 +1586,16 @@ const emaMonitorATMs = async () => {
     const soldText = soldDisplay === null ? 'NA' : soldDisplay.toFixed(2);
     const ltpText = ltpDisplay === null ? 'NA' : ltpDisplay.toFixed(2);
     const hasTrackedRiskPosition = riskState || soldDisplay > 0 || Boolean(positionProcess.soldTsym);
-    const strTemp = riskStopLabel
-                  ? `S @${soldText} T @${riskStopLabel}\nL @${ltpText}\n`
+    const riskText = riskStopLabel
+                  ? `S @${soldText} | T @${riskStopLabel} | L @${ltpText}`
                   : hasTrackedRiskPosition
-                    ? `Risk SL pending\nS @${soldText} T @pending\nL @${ltpText}\n`
-                    : '';
-    send_notification(`${strTemp}ces: ${parseFloat(callemaSlow).toFixed(2)} pes: ${parseFloat(putemaSlow).toFixed(2)}\ncem: ${parseFloat(callemaMedium).toFixed(2)} pem: ${parseFloat(putemaMedium).toFixed(2)}`);
+                    ? `SL pending | S @${soldText} | T @pending | L @${ltpText}`
+                    : undefined;
+    send_notification(formatTelegramMessage('EMA CHECK', [
+      ['Risk', riskText],
+      ['Slow', `CE ${parseFloat(callemaSlow).toFixed(2)} | PE ${parseFloat(putemaSlow).toFixed(2)}`],
+      ['Medium', `CE ${parseFloat(callemaMedium).toFixed(2)} | PE ${parseFloat(putemaMedium).toFixed(2)}`],
+    ]));
    
     emaUpFastCall = callemaMedium - callemaSlow > -2;
     emaUpFastPut = putemaMedium - putemaSlow > -2;
@@ -1336,7 +1610,11 @@ const emaMonitorATMs = async () => {
       console.log(`[EMA Gap Alert] Large gap detected! callEmaGap: ${parseFloat(callEmaGap).toFixed(2)}, putEmaGap: ${parseFloat(putEmaGap).toFixed(2)}`);
       if (shortPositionTaken || longPositionTaken) {
         console.log(`[EMA Gap Action] Pausing trading. shortPositionTaken: ${shortPositionTaken}, longPositionTaken: ${longPositionTaken}`);
-        send_notification(`^## Large EMA Gap Detected ##\nCall Gap: ${parseFloat(callEmaGap).toFixed(2)}\nPut Gap: ${parseFloat(putEmaGap).toFixed(2)}\nExiting all positions and waiting 30 minutes`);
+        send_notification(formatTelegramMessage('LARGE EMA GAP', [
+          ['Call Gap', parseFloat(callEmaGap).toFixed(2)],
+          ['Put Gap', parseFloat(putEmaGap).toFixed(2)],
+          ['Action', 'Exit positions; wait 30 min'],
+        ]));
         await exitSellsAndOrStop(false);
         largeEmaGapExitTime = Date.now();
       }
@@ -1367,7 +1645,11 @@ const isInCooldownPeriod = (functionName = '') => {
     const prefix = functionName ? `${functionName}: ` : '';
     const message = `${prefix}In cooldown period. ${remainingCooldown} minutes remaining before new positions allowed.`;
     console.log(message);
-    send_notification(`⏳ Cooldown Active\n${message}`);
+    send_notification(formatTelegramMessage('COOLDOWN', [
+      ['Status', 'active'],
+      ['Wait', `${remainingCooldown} min`],
+      ['Scope', functionName || 'strategy'],
+    ]));
     return true;
   }
   return false;
@@ -1387,12 +1669,17 @@ let manualReviewStopInProgress = false;
 const stopForManualReview = async (reason, details = '') => {
   fatalOrderRejection = true;
   isExiting = true;
+  telegramSignals.isPlaying = false;
+  if (intervalIdForEMA) {
+    clearInterval(intervalIdForEMA);
+    intervalIdForEMA = null;
+  }
   if (manualReviewStopInProgress) {
     return;
   }
 
   manualReviewStopInProgress = true;
-  const message = `Manual review required: ${reason}${details ? ` ${details}` : ''}. zema2 will stop and will not take new positions.`;
+  const message = `Manual review required: ${reason}${details ? ` ${details}` : ''}. zema2 is paused and will not take new positions. PM2 remains online.`;
   console.error(message);
   send_notification(message, true);
 
@@ -1401,10 +1688,6 @@ const stopForManualReview = async (reason, details = '') => {
   } catch (error) {
     console.error('cancelOpenOrders failed during manual-review stop:', error.message || JSON.stringify(apiResponseSummary(error)));
   }
-
-  setTimeout(function() {
-      cleanupAndExit();
-  }, 2000);
 }
 
 function cleanupAndExit() {
@@ -1425,11 +1708,14 @@ const exitSellsAndOrStop = async (stop = false) => {
   isExiting = stop ? true : false; // Set exit mode
   await delay(1000);
   pnlTemp1 = await calcPnL(api);
-  const pnlValue = typeof pnlTemp1 === 'string' ? parseFloat(pnlTemp1.replace('%', '')) : pnlTemp1;
-  if ((pnlValue < pnlThreshold) || (pnlValue > pnlUpThreshold)) {
+  const pnlValue = toPnlNumber(pnlTemp1);
+  if (pnlValue !== null && ((pnlValue < pnlThreshold) || (pnlValue > pnlUpThreshold))) {
     stop = true;
   } else {
-    send_notification(`pnlTemp1: ${pnlValue} is not less than ${pnlThreshold} nor greater than ${pnlUpThreshold}`);
+    send_notification(formatTelegramMessage('EXIT CHECK', [
+      ['Mood', getPnlMood(pnlTemp1)],
+      ['Result', 'No stop threshold hit'],
+    ]));
   }
 
   const currentTime = Date.now();
@@ -1463,11 +1749,16 @@ const exitSellsAndOrStop = async (stop = false) => {
   // Start 30-minute cooldown after exit
   if (positionsExited) {
       largeEmaGapExitTime = Date.now();
-      send_notification(`Positions exited. Waiting 30 minutes before next trade.`);
+      send_notification(formatTelegramMessage('POST EXIT', [
+        ['Status', 'positions exited'],
+        ['Wait', '30 min before next trade'],
+      ]));
   }
   
   if (stop) {
-      send_notification('exiting all and stopping');
+      send_notification(formatTelegramMessage('STOP', [
+        ['Action', 'exit all and stop'],
+      ]));
       setTimeout(function() {
           cancelOpenOrders();
       }, 2000);
@@ -1483,7 +1774,9 @@ const exitSellsAndOrStop = async (stop = false) => {
       }, 10000);
   } else {
       if (longPositionTaken || shortPositionTaken) {
-          send_notification('exiting all');
+          send_notification(formatTelegramMessage('EXIT', [
+            ['Action', 'exit all'],
+          ]));
       }
       // Also reset position flags after normal exit
       longPositionTaken = false;
@@ -1533,7 +1826,16 @@ const my_default_place_order = async (order) => {
       throw new Error(message);
     }
 
-    responses.push(response);
+    const finalOrder = await waitForOrderCompletion(response.norenordno || response.result, {
+      trantype: chunkOrder.buy_or_sell,
+      exch: chunkOrder.exchange,
+      tsym: chunkOrder.tradingsymbol,
+      qty: chunkOrder.quantity,
+      prctyp: chunkOrder.price_type,
+      prc: chunkOrder.price,
+    });
+
+    responses.push({ response, finalOrder });
     remainingQty -= chunkQty;
   }
 
@@ -1543,25 +1845,39 @@ const my_default_place_order = async (order) => {
 //buy Put
 const exitXemaLong = async () => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  order = {
-    buy_or_sell: 'B',
-    product_type: 'M',
-    exchange: globalInput.pickedExchange,
-    tradingsymbol: positionProcess.smallestPutPosition?.tsym,
-    quantity: getDailyQty().toString(),
-    discloseqty: 0,
-    price_type: 'LMT',
-    price: Math.ceil(+positionProcess.smallestPutPosition?.lp + (+positionProcess.smallestPutPosition?.lp/10)),
-    remarks: 'API'
-  }
   let exitOrderAccepted = false;
   if(positionProcess.smallestPutPosition?.tsym) {
     try {
-      await my_default_place_order(order);
+      const order = {
+        buy_or_sell: 'B',
+        product_type: 'M',
+        exchange: globalInput.pickedExchange,
+        tradingsymbol: positionProcess.smallestPutPosition.tsym,
+        quantity: getDailyQty().toString(),
+        discloseqty: 0,
+        price_type: 'LMT',
+        price: await getSafeOrderPriceFromPosition(positionProcess.smallestPutPosition, 'B'),
+        remarks: 'API'
+      };
+      const exitResponses = await my_default_place_order(order);
       exitOrderAccepted = true;
+      const riskState = shortOptionRiskState.get(positionKey(positionProcess.smallestPutPosition));
+      const pnlAfterExit = await calcPnL(api);
+      send_notification(formatExitOrderMessage({
+        reason: 'PUT SHORT EXIT',
+        symbol: order.tradingsymbol,
+        qty: order.quantity,
+        side: 'B',
+        price: getFinalFillPrice(exitResponses, order.price),
+        entry: riskState?.entryPrice ?? positionProcess.soldPrice,
+        ltp: positionProcess.smallestPutPosition?.lp,
+        stop: riskState?.activeStopLtp ?? positionProcess.trailPrice,
+        pnl: pnlAfterExit,
+      }), true);
     } catch (error) {
       console.error('exitXemaLong order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
       send_notification(`exitXemaLong order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+      await stopForManualReview('exitXemaLong order failed', error.message || JSON.stringify(apiResponseSummary(error)));
     }
   }
   longPositionTaken = exitOrderAccepted ? false:longPositionTaken;
@@ -1572,38 +1888,43 @@ const exitXemaLong = async () => {
   resetTrailPrice();
   await delay(1000);
   pnlTemp1 = await calcPnL(api);
-  const pnlValue = typeof pnlTemp1 === 'string' ? parseFloat(pnlTemp1.replace('%', '')) : pnlTemp1;
-  if ((pnlValue < pnlThreshold) || (pnlValue > pnlUpThreshold)) {
+  const pnlValue = toPnlNumber(pnlTemp1);
+  if (pnlValue !== null && ((pnlValue < pnlThreshold) || (pnlValue > pnlUpThreshold))) {
     await exitSellsAndOrStop(true);
   } else {
-    send_notification(`pnlTemp1: ${pnlValue} is not less than ${pnlThreshold} nor greater than ${pnlUpThreshold}`);  }
+    send_notification(formatTelegramMessage('EXIT CHECK', [
+      ['Mood', getPnlMood(pnlTemp1)],
+      ['Result', 'No stop threshold hit'],
+    ]));
+  }
   }
 const enterXemaLong = async () => {
   if (fatalOrderRejection) return;
   if (isInCooldownPeriod('enterXemaLong')) return;
   if (isExiting) return; // Block entry during exit
   let tempTradingPutSymbol = biasProcess.atmPutSymbol;
-  const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingPutSymbol));
 
-  order = {
-    buy_or_sell: 'S',
-    product_type: 'M',
-    exchange: globalInput.pickedExchange,
-    tradingsymbol: tempTradingPutSymbol,
-    quantity: getDailyQty().toString(),
-    discloseqty: 0,
-    price_type: 'LMT',
-    price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) : 0.1 : 0.1,
-    remarks: 'API'
-  }
   try {
+    const order = {
+      buy_or_sell: 'S',
+      product_type: 'M',
+      exchange: globalInput.pickedExchange,
+      tradingsymbol: tempTradingPutSymbol,
+      quantity: getDailyQty().toString(),
+      discloseqty: 0,
+      price_type: 'LMT',
+      price: await getSafeOrderPriceFromQuote(tempTradingPutSymbol, 'S'),
+      remarks: 'API'
+    };
     await my_default_place_order(order);
+    await waitForOpenShortPosition(tempTradingPutSymbol, 'enterXemaLong');
     // send_notification('entering Long', true)
     longPositionTaken = true;
   } catch (error) {
     longPositionTaken = false;
     console.error('enterXemaLong order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
     send_notification(`enterXemaLong order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+    await stopForManualReview('enterXemaLong order failed', error.message || JSON.stringify(apiResponseSummary(error)));
   }
   await delay(1000);
 }
@@ -1611,25 +1932,39 @@ const enterXemaLong = async () => {
 //Exit short Call
 const exitXemaShort = async () => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
-  order = {
-    buy_or_sell: 'B',
-    product_type: 'M',
-    exchange: globalInput.pickedExchange,
-    tradingsymbol: positionProcess.smallestCallPosition?.tsym,
-    quantity: getDailyQty().toString(),
-    discloseqty: 0,
-    price_type: 'LMT',
-    price: Math.ceil(+positionProcess.smallestCallPosition?.lp + (+positionProcess.smallestCallPosition?.lp/10)),
-    remarks: 'API'
-  }
   let exitOrderAccepted = false;
   if(positionProcess.smallestCallPosition?.tsym) {
     try {
-      await my_default_place_order(order);
+      const order = {
+        buy_or_sell: 'B',
+        product_type: 'M',
+        exchange: globalInput.pickedExchange,
+        tradingsymbol: positionProcess.smallestCallPosition.tsym,
+        quantity: getDailyQty().toString(),
+        discloseqty: 0,
+        price_type: 'LMT',
+        price: await getSafeOrderPriceFromPosition(positionProcess.smallestCallPosition, 'B'),
+        remarks: 'API'
+      };
+      const exitResponses = await my_default_place_order(order);
       exitOrderAccepted = true;
+      const riskState = shortOptionRiskState.get(positionKey(positionProcess.smallestCallPosition));
+      const pnlAfterExit = await calcPnL(api);
+      send_notification(formatExitOrderMessage({
+        reason: 'CALL SHORT EXIT',
+        symbol: order.tradingsymbol,
+        qty: order.quantity,
+        side: 'B',
+        price: getFinalFillPrice(exitResponses, order.price),
+        entry: riskState?.entryPrice ?? positionProcess.soldPrice,
+        ltp: positionProcess.smallestCallPosition?.lp,
+        stop: riskState?.activeStopLtp ?? positionProcess.trailPrice,
+        pnl: pnlAfterExit,
+      }), true);
     } catch (error) {
       console.error('exitXemaShort order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
       send_notification(`exitXemaShort order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+      await stopForManualReview('exitXemaShort order failed', error.message || JSON.stringify(apiResponseSummary(error)));
     }
   }
   shortPositionTaken = exitOrderAccepted ? false:shortPositionTaken;
@@ -1641,11 +1976,14 @@ const exitXemaShort = async () => {
   await delay(1000);
 
   pnlTemp1 = await calcPnL(api);
-  const pnlValue = typeof pnlTemp1 === 'string' ? parseFloat(pnlTemp1.replace('%', '')) : pnlTemp1;
-  if ((pnlValue < pnlThreshold) || (pnlValue > pnlUpThreshold)) {
+  const pnlValue = toPnlNumber(pnlTemp1);
+  if (pnlValue !== null && ((pnlValue < pnlThreshold) || (pnlValue > pnlUpThreshold))) {
     await exitSellsAndOrStop(true);
   } else {
-    send_notification(`pnlTemp1: ${pnlValue} is not less than ${pnlThreshold} nor greater than ${pnlUpThreshold}`);
+    send_notification(formatTelegramMessage('EXIT CHECK', [
+      ['Mood', getPnlMood(pnlTemp1)],
+      ['Result', 'No stop threshold hit'],
+    ]));
   }
 }
 const enterXemaShort = async () => {
@@ -1655,27 +1993,27 @@ const enterXemaShort = async () => {
 
   let tempTradingCallSymbol = biasProcess.atmCallSymbol;
 
-  const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(tempTradingCallSymbol));
-
-  order = {
-    buy_or_sell: 'S',
-    product_type: 'M',
-    exchange: globalInput.pickedExchange,
-    tradingsymbol: tempTradingCallSymbol,
-    quantity: getDailyQty().toString(),
-    discloseqty: 0,
-    price_type: 'LMT',
-    price: +quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) > 0.1 ? Math.floor(+quotesResponse.bp5 - Math.min(+quotesResponse.lp/2 , 5)) : 0.1 : 0.1,
-    remarks: 'API'
-  }
   try {
+    const order = {
+      buy_or_sell: 'S',
+      product_type: 'M',
+      exchange: globalInput.pickedExchange,
+      tradingsymbol: tempTradingCallSymbol,
+      quantity: getDailyQty().toString(),
+      discloseqty: 0,
+      price_type: 'LMT',
+      price: await getSafeOrderPriceFromQuote(tempTradingCallSymbol, 'S'),
+      remarks: 'API'
+    };
     await my_default_place_order(order);
+    await waitForOpenShortPosition(tempTradingCallSymbol, 'enterXemaShort');
     // send_notification('entering Short', true)
     shortPositionTaken = true;
   } catch (error) {
     shortPositionTaken = false;
     console.error('enterXemaShort order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
     send_notification(`enterXemaShort order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+    await stopForManualReview('enterXemaShort order failed', error.message || JSON.stringify(apiResponseSummary(error)));
   }
   await delay(1000);
 }
@@ -1683,39 +2021,49 @@ const enterXemaShort = async () => {
 
 
 const enterXemaBuyCall = async () => {
-  nearestCETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, 1)
-  const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(nearestCETsym));
-  order = {
-    buy_or_sell: 'B',
-    product_type: 'M',
-    exchange: globalInput.pickedExchange,
-    tradingsymbol: nearestCETsym,
-    quantity: getDailyQty().toString(),
-    discloseqty: 0,
-    price_type: 'LMT',
-    price: Math.ceil(+quotesResponse.sp5 +3),
-    remarks: 'API'
+  try {
+    nearestCETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, 1)
+    order = {
+      buy_or_sell: 'B',
+      product_type: 'M',
+      exchange: globalInput.pickedExchange,
+      tradingsymbol: nearestCETsym,
+      quantity: getDailyQty().toString(),
+      discloseqty: 0,
+      price_type: 'LMT',
+      price: await getSafeOrderPriceFromQuote(nearestCETsym, 'B'),
+      remarks: 'API'
+    }
+    await my_default_place_order(order);
+    send_notification('bought hedge call', true)
+  } catch (error) {
+    console.error('enterXemaBuyCall failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    send_notification(`enterXemaBuyCall failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+    await stopForManualReview('enterXemaBuyCall failed', error.message || JSON.stringify(apiResponseSummary(error)));
   }
-  await my_default_place_order(order);
-  send_notification('bought hedge call', true)
 }
 
 const enterXemaBuyPut = async () => {
-  nearestPETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, 1)
-  const quotesResponse = await api.get_quotes(globalInput.pickedExchange, getTokenByTradingSymbol(nearestPETsym));
-  order = {
-    buy_or_sell: 'B',
-    product_type: 'M',
-    exchange: globalInput.pickedExchange,
-    tradingsymbol: nearestPETsym,
-    quantity: getDailyQty().toString(),
-    discloseqty: 0,
-    price_type: 'LMT',
-    price: Math.ceil(+quotesResponse.sp5 +3),
-    remarks: 'API'
+  try {
+    nearestPETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, 1)
+    order = {
+      buy_or_sell: 'B',
+      product_type: 'M',
+      exchange: globalInput.pickedExchange,
+      tradingsymbol: nearestPETsym,
+      quantity: getDailyQty().toString(),
+      discloseqty: 0,
+      price_type: 'LMT',
+      price: await getSafeOrderPriceFromQuote(nearestPETsym, 'B'),
+      remarks: 'API'
+    }
+    await my_default_place_order(order);
+    send_notification('bought hedge put', true)
+  } catch (error) {
+    console.error('enterXemaBuyPut failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    send_notification(`enterXemaBuyPut failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
+    await stopForManualReview('enterXemaBuyPut failed', error.message || JSON.stringify(apiResponseSummary(error)));
   }
-  await my_default_place_order(order);
-  send_notification('bought hedge put', true)
 }
 
 async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
@@ -1758,23 +2106,33 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
 
   currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
   pnl = await calcPnL(api);
-  //if pnl is greater than 0.25% then send notification good
-  
-  if (pnl > 0.33) {
-    pnlMood = 'good';
-  } else if (pnl < -0.33) {
-    pnlMood = 'bad';
-  } else {
-    pnlMood = 'neutral';
-  }
-  send_notification((limits?.collateral)?.substring(0,3) + ' PnL: ' + pnlMood + ' : ' + biasOutput.bias + ' ' + currentPositionStatus);
+  pnlMood = getPnlMood(pnl);
+  const biasDisplay = Number.isFinite(Number(biasOutput.bias)) ? biasOutput.bias : 'NA';
+  send_notification(formatTelegramMessage('STATUS', [
+    ['Mood', pnlMood],
+    ['Position', currentPositionStatus],
+    ['Bias', biasDisplay],
+    ['Capital', getCollateralLabel()],
+  ]));
   console.log(' PnL: ' + pnl);
 }
 
 const setBiasValue = async () => {
-  ltpSuggestedPut = +biasProcess.itmPutStrikePrice - (+latestQuotes[biasProcess.putSubStr]?.lp);
-  ltpSuggestedCall = (+latestQuotes[biasProcess.callSubStr]?.lp + +biasProcess.itmCallStrikePrice);
-  biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - +(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'NSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'NSE'}|${globalInput.token}`]?.lp));
+  const putStrike = toFiniteNumber(biasProcess.itmPutStrikePrice);
+  const putLtp = toFiniteNumber(latestQuotes[biasProcess.putSubStr]?.lp);
+  const callStrike = toFiniteNumber(biasProcess.itmCallStrikePrice);
+  const callLtp = toFiniteNumber(latestQuotes[biasProcess.callSubStr]?.lp);
+  const spotLtp = toFiniteNumber(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'NSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'NSE'}|${globalInput.token}`]?.lp);
+
+  if ([putStrike, putLtp, callStrike, callLtp, spotLtp].some(value => value === null)) {
+    console.log('Skipping bias update: missing quote data.');
+    return false;
+  }
+
+  ltpSuggestedPut = putStrike - putLtp;
+  ltpSuggestedCall = callLtp + callStrike;
+  biasOutput.bias = Math.round(((ltpSuggestedCall + ltpSuggestedPut) / 2) - spotLtp);
+  return Number.isFinite(biasOutput.bias);
 }
 
 const optionBasedEmaRecurringFunction = async () => {
@@ -1784,7 +2142,10 @@ const optionBasedEmaRecurringFunction = async () => {
     return;
   }
   
-  await setBiasValue();
+  const biasReady = await setBiasValue();
+  if (!biasReady) {
+    return;
+  }
   let [emaMonitorMediumCallUp, emaMediumMonitorPutUp] = await emaMonitorATMs();
   await takeEMADecision(emaMonitorMediumCallUp, emaMediumMonitorPutUp)
 }
