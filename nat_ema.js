@@ -5,16 +5,17 @@ const futureOffset = 0;
 const maxLossThreshold = -2;
 const maxProfitThreshold = 1.5;
 const trailingLossPerLot = 3000;
-const profitLockStartDecayRatio = 0.20;
-const profitBookDecayRatio = 0.35;
-const profitTrailBounceRatio = 0.12;
+const emaGapSignalThreshold = 0.15;
+const profitLockStartDecayRatio = 0.03;
+const profitBookDecayRatio = 0.10;
+const profitTrailBounceRatio = 0.03;
 const profitMonitorLogIntervalMs = 30 * 1000;
 const telegramMinuteDivider = '────────────────────';
 const eveningExitMinutesIST = (18 * 60) + 30;
 const eveningReentryMinutesIST = (21 * 60) + 30;
 const nightShutdownMinutesIST = (23 * 60) + 17;
 const trailingMonitorIntervalSeconds = 5;
-const reentryCooldownMs = 30 * 60 * 1000;
+const reentryCooldownMs = 20 * 60 * 1000;
 const profitReentryCooldownMs = 20 * 60 * 1000;
 const reentryCooldownFile = '.nat-ema-reentry-cooldown.json';
 const natEmaPm2ProcessName = process.env.NAT_EMA_PM2_NAME || 'nat_ema2';
@@ -22,6 +23,12 @@ const orderPriceSlippageRatio = 0.02;
 const orderPriceSlippageMin = 1;
 const orderPriceSlippageMax = 5;
 const orderTickSize = 0.1;
+const paperStrategyFastPeriod = 5;
+const paperStrategySlowPeriod = 13;
+const paperStrategySignalThreshold = 0.05;
+const paperStrategyProfitLockRatio = 0.03;
+const paperStrategyTrailBounceRatio = 0.03;
+const paperStrategyLogPrefix = 'NAT_EMA_PAPER';
 
 const debug = false;
 let inputProp = true; // true for XEma logic
@@ -479,10 +486,10 @@ const getEmaGapMood = (gap) => {
   if (numericGap === null) {
     return { label: 'unknown', icon: '❔' };
   }
-  if (numericGap > 0.3) {
+  if (numericGap > emaGapSignalThreshold) {
     return { label: 'bullish gap', icon: '📈' };
   }
-  if (numericGap < -0.3) {
+  if (numericGap < -emaGapSignalThreshold) {
     return { label: 'bearish gap', icon: '📉' };
   }
   return { label: 'flat gap', icon: '➖' };
@@ -902,6 +909,358 @@ const getUnderlyingLtp = async (forceRest = false) => {
     }
   }
   return toFiniteNumber(latestQuotes[quoteKey]?.lp);
+};
+
+const createPaperStrategyState = () => ({
+  emas: new Map(),
+  position: null,
+  realizedPnl: 0,
+  trades: [],
+  blockedTradeKey: null,
+  lastTick: null,
+  eodSummarySent: false,
+});
+
+const paperStrategyState = createPaperStrategyState();
+
+const paperStrategyQty = () => {
+  const lotSize = toFiniteNumber(globalInput.LotSize);
+  const multiplier = toFiniteNumber(globalInput.emaLotMultiplier);
+  return Math.max(1, (lotSize || 1250) * (multiplier || 1));
+};
+
+const paperLog = (event, payload = {}) => {
+  try {
+    console.log(`${paperStrategyLogPrefix} ${JSON.stringify({
+      event,
+      ts: new Date().toISOString(),
+      ist: formatISTTime(Date.now()),
+      ...payload,
+    })}`);
+  } catch (error) {
+    console.error(`${paperStrategyLogPrefix}_LOG_ERROR`, error.message || error);
+  }
+};
+
+const updatePaperOptionEma = (symbol, ltp) => {
+  const existing = paperStrategyState.emas.get(symbol);
+  const fastAlpha = 2 / (paperStrategyFastPeriod + 1);
+  const slowAlpha = 2 / (paperStrategySlowPeriod + 1);
+  const next = existing
+    ? {
+      fast: (ltp * fastAlpha) + (existing.fast * (1 - fastAlpha)),
+      slow: (ltp * slowAlpha) + (existing.slow * (1 - slowAlpha)),
+      samples: existing.samples + 1,
+    }
+    : { fast: ltp, slow: ltp, samples: 1 };
+  next.gap = next.fast - next.slow;
+  paperStrategyState.emas.set(symbol, next);
+  return next;
+};
+
+const getPaperTradeKey = (signal) => signal ? `${signal.side}|${signal.symbol}` : null;
+
+const choosePaperSignal = ({ callSymbol, putSymbol, callLtp, putLtp, callEma, putEma }) => {
+  if (callEma.samples < paperStrategyFastPeriod || putEma.samples < paperStrategyFastPeriod) {
+    return null;
+  }
+
+  const candidates = [];
+  if (callEma.gap <= -paperStrategySignalThreshold) {
+    candidates.push({
+      side: 'SELL_CALL',
+      direction: 'short',
+      symbol: callSymbol,
+      ltp: callLtp,
+      gap: callEma.gap,
+      fast: callEma.fast,
+      slow: callEma.slow,
+    });
+  }
+  if (putEma.gap <= -paperStrategySignalThreshold) {
+    candidates.push({
+      side: 'SELL_PUT',
+      direction: 'long',
+      symbol: putSymbol,
+      ltp: putLtp,
+      gap: putEma.gap,
+      fast: putEma.fast,
+      slow: putEma.slow,
+    });
+  }
+
+  return candidates.sort((left, right) => left.gap - right.gap)[0] || null;
+};
+
+const paperPositionPnl = (position, ltp = position?.lastLtp) => {
+  const numericLtp = toFiniteNumber(ltp);
+  if (!position || numericLtp === null) {
+    return 0;
+  }
+  return (position.entry - numericLtp) * position.qty;
+};
+
+const paperTrailSnapshot = (position, ltp) => {
+  const numericLtp = toFiniteNumber(ltp);
+  if (!position || numericLtp === null || numericLtp <= 0) {
+    return null;
+  }
+
+  position.lastLtp = numericLtp;
+  position.bestLtp = Math.min(position.bestLtp, numericLtp);
+  const moveRatio = position.entry > 0 ? (position.entry - position.bestLtp) / position.entry : 0;
+  if (!position.profitLockActive && moveRatio >= paperStrategyProfitLockRatio) {
+    position.profitLockActive = true;
+    position.profitLockActivatedAt = Date.now();
+    paperLog('profit_lock_started', {
+      symbol: position.symbol,
+      entry: position.entry,
+      bestLtp: position.bestLtp,
+      moveRatio,
+    });
+  }
+
+  const hardStop = position.entry + (trailingLossPerLot / position.qty);
+  const trailStop = position.profitLockActive
+    ? position.bestLtp + (position.entry * paperStrategyTrailBounceRatio)
+    : null;
+  const stop = trailStop === null ? hardStop : Math.min(hardStop, trailStop);
+  const pnl = paperPositionPnl(position, numericLtp);
+
+  return {
+    ltp: numericLtp,
+    hardStop,
+    trailStop,
+    stop,
+    pnl,
+    moveRatio,
+    exitHit: numericLtp >= stop,
+    exitReason: numericLtp >= stop
+      ? position.profitLockActive ? 'tight_trail_hit' : 'hard_loss_hit'
+      : null,
+  };
+};
+
+const exitPaperPosition = (snapshot) => {
+  const position = paperStrategyState.position;
+  if (!position) {
+    return;
+  }
+
+  const exitPrice = snapshot?.ltp ?? position.lastLtp;
+  const pnl = paperPositionPnl(position, exitPrice);
+  const trade = {
+    ...position,
+    exit: exitPrice,
+    exitedAt: new Date().toISOString(),
+    pnl,
+    reason: snapshot?.exitReason || 'manual_paper_exit',
+  };
+  paperStrategyState.realizedPnl += pnl;
+  paperStrategyState.trades.push(trade);
+  paperStrategyState.position = null;
+  paperStrategyState.blockedTradeKey = pnl > 0 ? `${position.side}|${position.symbol}` : null;
+  paperLog('exit', {
+    symbol: trade.symbol,
+    side: trade.side,
+    entry: trade.entry,
+    exit: trade.exit,
+    qty: trade.qty,
+    pnl: trade.pnl,
+    reason: trade.reason,
+    blockedTradeKey: paperStrategyState.blockedTradeKey,
+  });
+};
+
+const updatePaperOpenPosition = async ({ callSymbol, callLtp, putSymbol, putLtp }) => {
+  const position = paperStrategyState.position;
+  if (!position) {
+    return false;
+  }
+
+  let ltp = position.symbol === callSymbol
+    ? callLtp
+    : position.symbol === putSymbol
+      ? putLtp
+      : null;
+  if (toFiniteNumber(ltp) === null) {
+    ltp = await getSymbolLtp(position.symbol, true);
+  }
+  if (toFiniteNumber(ltp) === null) {
+    paperLog('position_ltp_missing', { symbol: position.symbol, lastLtp: position.lastLtp });
+    return true;
+  }
+
+  const snapshot = paperTrailSnapshot(position, ltp);
+  if (!snapshot) {
+    return true;
+  }
+
+  if (snapshot.exitHit) {
+    exitPaperPosition(snapshot);
+    return false;
+  }
+
+  paperLog('position_tick', {
+    symbol: position.symbol,
+    side: position.side,
+    entry: position.entry,
+    ltp: snapshot.ltp,
+    bestLtp: position.bestLtp,
+    stop: snapshot.stop,
+    trailStop: snapshot.trailStop,
+    hardStop: snapshot.hardStop,
+    pnl: snapshot.pnl,
+    locked: Boolean(position.profitLockActive),
+  });
+  return true;
+};
+
+const enterPaperPosition = (signal) => {
+  const qty = paperStrategyQty();
+  paperStrategyState.position = {
+    symbol: signal.symbol,
+    side: signal.side,
+    direction: signal.direction,
+    entry: signal.ltp,
+    lastLtp: signal.ltp,
+    bestLtp: signal.ltp,
+    qty,
+    openedAt: new Date().toISOString(),
+    atmStrike: biasProcess.atmStrike,
+    signalGap: signal.gap,
+    signalFast: signal.fast,
+    signalSlow: signal.slow,
+    profitLockActive: false,
+  };
+  paperLog('entry', {
+    symbol: signal.symbol,
+    side: signal.side,
+    entry: signal.ltp,
+    qty,
+    atmStrike: biasProcess.atmStrike,
+    signalGap: signal.gap,
+  });
+};
+
+const runPaperStrategyTick = async () => {
+  const callSymbol = biasProcess.atmCallSymbol;
+  const putSymbol = biasProcess.atmPutSymbol;
+  if (!callSymbol || !putSymbol) {
+    paperLog('skip', { reason: 'atm_symbols_missing', callSymbol, putSymbol });
+    return;
+  }
+
+  const [callLtp, putLtp] = await Promise.all([
+    getSymbolLtp(callSymbol, true),
+    getSymbolLtp(putSymbol, true),
+  ]);
+  if (toFiniteNumber(callLtp) === null || toFiniteNumber(putLtp) === null) {
+    paperLog('skip', { reason: 'ltp_missing', callSymbol, callLtp, putSymbol, putLtp });
+    return;
+  }
+
+  const callEma = updatePaperOptionEma(callSymbol, callLtp);
+  const putEma = updatePaperOptionEma(putSymbol, putLtp);
+  paperStrategyState.lastTick = {
+    callSymbol,
+    putSymbol,
+    callLtp,
+    putLtp,
+    callGap: callEma.gap,
+    putGap: putEma.gap,
+    samples: Math.min(callEma.samples, putEma.samples),
+  };
+
+  const positionStillOpen = await updatePaperOpenPosition({ callSymbol, callLtp, putSymbol, putLtp });
+  const signal = choosePaperSignal({ callSymbol, putSymbol, callLtp, putLtp, callEma, putEma });
+  const signalKey = getPaperTradeKey(signal);
+
+  if (paperStrategyState.blockedTradeKey && paperStrategyState.blockedTradeKey !== signalKey) {
+    paperLog('same_trade_block_cleared', {
+      blockedTradeKey: paperStrategyState.blockedTradeKey,
+      signalKey,
+    });
+    paperStrategyState.blockedTradeKey = null;
+  }
+
+  if (!positionStillOpen && signal) {
+    if (paperStrategyState.blockedTradeKey === signalKey) {
+      paperLog('entry_blocked_same_trade', {
+        signalKey,
+        symbol: signal.symbol,
+        side: signal.side,
+        gap: signal.gap,
+      });
+    } else {
+      enterPaperPosition(signal);
+    }
+  }
+
+  paperLog('tick', {
+    callSymbol,
+    putSymbol,
+    callLtp,
+    putLtp,
+    callGap: callEma.gap,
+    putGap: putEma.gap,
+    samples: paperStrategyState.lastTick.samples,
+    signal: signal ? { side: signal.side, symbol: signal.symbol, gap: signal.gap } : null,
+    openSymbol: paperStrategyState.position?.symbol || null,
+    realizedPnl: paperStrategyState.realizedPnl,
+  });
+};
+
+const runPaperStrategyTickSafely = async () => {
+  try {
+    await runPaperStrategyTick();
+  } catch (error) {
+    console.error(`${paperStrategyLogPrefix}_ERROR`, error.message || JSON.stringify(apiResponseSummary(error)));
+  }
+};
+
+const bufferPaperStrategySummary = async (reason) => {
+  if (paperStrategyState.eodSummarySent) {
+    return;
+  }
+  paperStrategyState.eodSummarySent = true;
+
+  const openPosition = paperStrategyState.position;
+  let openLtp = openPosition ? await getSymbolLtp(openPosition.symbol, true) : null;
+  if (openPosition && toFiniteNumber(openLtp) === null) {
+    openLtp = openPosition.lastLtp;
+  }
+  const openPnl = openPosition ? paperPositionPnl(openPosition, openLtp) : 0;
+  const totalPnl = paperStrategyState.realizedPnl + openPnl;
+  const summary = {
+    reason,
+    realizedPnl: paperStrategyState.realizedPnl,
+    openPnl,
+    totalPnl,
+    trades: paperStrategyState.trades.length,
+    openSymbol: openPosition?.symbol || null,
+    openSide: openPosition?.side || null,
+    openLtp,
+    lastTick: paperStrategyState.lastTick,
+  };
+
+  paperLog('eod_summary', summary);
+  buffer_notification(formatNatMessage('🧾 PAPER STRATEGY EOD', [
+    ['Reason', reason],
+    ['Realized', `Rs ${summary.realizedPnl.toFixed(2)}`],
+    ['Open', `Rs ${summary.openPnl.toFixed(2)}`],
+    ['Possible Total', `Rs ${summary.totalPnl.toFixed(2)}`],
+    ['Trades', summary.trades],
+    ['Open Position', openPosition ? `${openPosition.side} ${openPosition.symbol} @${formatPriceText(openPosition.entry)}` : 'none'],
+  ]), true);
+};
+
+const bufferPaperStrategySummarySafely = async (reason) => {
+  try {
+    await bufferPaperStrategySummary(reason);
+  } catch (error) {
+    console.error(`${paperStrategyLogPrefix}_SUMMARY_ERROR`, error.message || JSON.stringify(apiResponseSummary(error)));
+  }
 };
 
 const getOrderStatusText = (orderStatus) => String(orderStatus?.status || orderStatus?.st_intrn || '').toUpperCase();
@@ -1406,6 +1765,7 @@ const runNightShutdownIfDue = async () => {
       ['Action', 'Exit positions and stop nat_ema2'],
     ]), true);
     await exitOpenStrategyPositions('23:17 IST shutdown');
+    await bufferPaperStrategySummarySafely('23:17 IST shutdown');
 
     const remainingPositions = await getOpenStrategyPositions();
     clearClosedTrailingStops(remainingPositions);
@@ -1523,7 +1883,7 @@ const monitorTrailingLoss = async () => {
         if (entryPrice > 0 && ltp <= state.profitBookLtp) {
           const exitConfirmed = await placeExitOrderForPosition(
             position,
-            'Profit target 35 pct decay hit'
+            `Profit target ${Math.round(profitBookDecayRatio * 100)} pct decay hit`
           );
           logProfitMonitorState(position, state, exitConfirmed ? 'profit_book_exit_confirmed' : 'profit_book_exit_failed');
           if (exitConfirmed) {
@@ -1584,7 +1944,7 @@ const monitorTrailingLoss = async () => {
         if (entryPrice > 0 && ltp >= state.profitBookLtp) {
           const exitConfirmed = await placeExitOrderForPosition(
             position,
-            'Profit target 35 pct gain hit'
+            `Profit target ${Math.round(profitBookDecayRatio * 100)} pct gain hit`
           );
           logProfitMonitorState(position, state, exitConfirmed ? 'profit_book_exit_confirmed' : 'profit_book_exit_failed');
           if (exitConfirmed) {
@@ -2678,8 +3038,8 @@ async function XEma(fastEMA, slowEMA) {
       return;
     }
 
-    // Sell PUT when diff > 0.3
-    if (diff > 0.3) {
+    // Sell PUT when the futures EMA gap is meaningfully positive.
+    if (diff > emaGapSignalThreshold) {
       buffer_notification(formatNatMessage('📈 SIGNAL', [
         ['Action', 'SELL PUT'],
         ['Position', `${getPositionMood('long').icon} ${getPositionMood('long').label}`],
@@ -2689,8 +3049,8 @@ async function XEma(fastEMA, slowEMA) {
       ]));
       await placeEntryOrderAndConfirm(biasProcess.atmPutSymbol, 'long', 'SELL PUT', diff);
     }
-    // Sell CALL when diff < -0.3
-    else if (diff < -0.3) {
+    // Sell CALL when the futures EMA gap is meaningfully negative.
+    else if (diff < -emaGapSignalThreshold) {
       buffer_notification(formatNatMessage('📉 SIGNAL', [
         ['Action', 'SELL CALL'],
         ['Position', `${getPositionMood('short').icon} ${getPositionMood('short').label}`],
@@ -2701,8 +3061,8 @@ async function XEma(fastEMA, slowEMA) {
       await placeEntryOrderAndConfirm(biasProcess.atmCallSymbol, 'short', 'SELL CALL', diff);
     }
   } else if (positionTaken) {
-    // Buy PUT when diff <= 0.3
-    if (positionDirection == 'long' && (diff <= 0.3)) {
+    // Buy PUT when the positive futures EMA gap collapses.
+    if (positionDirection == 'long' && (diff <= emaGapSignalThreshold)) {
       buffer_notification(formatNatMessage('🔄 EXIT SIGNAL', [
         ['Action', 'BUY PUT'],
         ['Reason', 'EMA gap crossed back'],
@@ -2714,8 +3074,8 @@ async function XEma(fastEMA, slowEMA) {
       await syncPositionStateFromLive();
       return;
     }
-    // Buy CALL when diff >= -0.3
-    else if (positionDirection == 'short' && (diff >= -0.3)) {
+    // Buy CALL when the negative futures EMA gap collapses.
+    else if (positionDirection == 'short' && (diff >= -emaGapSignalThreshold)) {
       buffer_notification(formatNatMessage('🔄 EXIT SIGNAL', [
         ['Action', 'BUY CALL'],
         ['Reason', 'EMA gap crossed back'],
@@ -3192,6 +3552,7 @@ emaRecurringFunction = async () => {
           ['EMA Gap', formatEmaGapText(fastEMA - slowEMA)],
         ]));
         await XEma(fastEMA, slowEMA);
+        await runPaperStrategyTickSafely();
         bufferMinuteDivider();
       } else {
         const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
