@@ -599,21 +599,29 @@ const extractIntcPrices = (reply, params, minCandles = 1) => {
   return intcPrices;
 };
 
-const getCurrentISTMinutes = () => {
+const getCurrentISTDateParts = () => {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Kolkata',
+    weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   }).formatToParts(new Date());
   const hours = Number(parts.find(part => part.type === 'hour')?.value);
   const minutes = Number(parts.find(part => part.type === 'minute')?.value);
-  return (hours * 60) + minutes;
+  return {
+    weekday: parts.find(part => part.type === 'weekday')?.value,
+    minutes: (hours * 60) + minutes,
+  };
+};
+
+const getCurrentISTMinutes = () => {
+  return getCurrentISTDateParts().minutes;
 };
 
 const isEveningNoEntryWindow = () => {
-  const minutes = getCurrentISTMinutes();
-  return minutes >= eveningExitMinutesIST && minutes < eveningReentryMinutesIST;
+  const { weekday, minutes } = getCurrentISTDateParts();
+  return weekday === 'Thu' && minutes >= eveningExitMinutesIST && minutes < eveningReentryMinutesIST;
 };
 
 const isNightShutdownDue = () => getCurrentISTMinutes() >= nightShutdownMinutesIST;
@@ -3257,10 +3265,11 @@ getEma = async () => {
     if (seconds % trailingMonitorIntervalSeconds === 0 && !eveningExitInProgress) {
       eveningExitInProgress = true;
       try {
-        const exited = await exitOpenStrategyPositions('18:30 IST no-entry window');
+        const exited = await exitOpenStrategyPositions('Thursday 18:30 IST no-entry window');
         if (exited) {
-          buffer_notification(formatNatMessage('🌆 EVENING WINDOW', [
+          buffer_notification(formatNatMessage('🌆 THURSDAY EVENING PAUSE', [
             ['Action', 'Exited open NATURALGAS positions'],
+            ['Window', 'Thursday 18:30-21:30 IST'],
             ['Re-entry', 'Blocked until 21:30 IST'],
           ]), true);
         }
