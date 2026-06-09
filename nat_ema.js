@@ -9,6 +9,7 @@ const profitLockStartDecayRatio = 0.20;
 const profitBookDecayRatio = 0.35;
 const profitTrailBounceRatio = 0.12;
 const profitMonitorLogIntervalMs = 30 * 1000;
+const telegramMinuteDivider = '────────────────────';
 const eveningExitMinutesIST = (18 * 60) + 30;
 const eveningReentryMinutesIST = (21 * 60) + 30;
 const nightShutdownMinutesIST = (23 * 60) + 17;
@@ -57,6 +58,10 @@ let lastNotificationSent = Date.now();
 
 function buffer_notification(message, me = false) {
   if (message) notificationBuffer.push({ message, me });
+}
+
+function bufferMinuteDivider() {
+  buffer_notification(telegramMinuteDivider);
 }
 
 async function flush_notifications() {
@@ -979,6 +984,16 @@ const formatProfitTrackingText = (state) => {
   const target = state.profitBookLtp === undefined ? '' : ` target ${formatPriceText(state.profitBookLtp)}`;
   const trail = state.profitTrailExitLtp === undefined || state.profitTrailExitLtp === null ? '' : ` trail ${formatPriceText(state.profitTrailExitLtp)}`;
   return `${lock} ${movePercent}${target}${trail}`;
+};
+
+const formatTrailingStopText = (state) => {
+  if (!state) {
+    return 'calculating';
+  }
+  const stopType = state.trailingActive ? 'trailing' : 'hard max';
+  const stop = formatPriceText(state.stopLtp);
+  const best = formatPriceText(state.bestLtp);
+  return `${stopType} @${stop} best ${best}`;
 };
 
 const logProfitMonitorState = (position, state, event = 'check') => {
@@ -2723,6 +2738,7 @@ async function XEma(fastEMA, slowEMA) {
       ['Entry', formatPriceText(displayEntryPrice)],
       ['LTP', formatPriceText(displayLtp)],
       ['EMA Gap', formatEmaGapText(diff)],
+      ['Trailing SL', formatTrailingStopText(profitState)],
       ['Profit Lock', formatProfitTrackingText(profitState)],
       ['Capital', getCollateralLabel()],
     ]));
@@ -3168,6 +3184,7 @@ emaRecurringFunction = async () => {
           ['EMA Gap', formatEmaGapText(fastEMA - slowEMA)],
         ]));
         await XEma(fastEMA, slowEMA);
+        bufferMinuteDivider();
       } else {
         const [callema9, callema21] = await ema9and21ValuesIndicators(params); //call
         if (toFiniteNumber(callema9) === null || toFiniteNumber(callema21) === null) {
@@ -3189,6 +3206,7 @@ emaRecurringFunction = async () => {
 
         // //buyer
         await sellercrudecheckCrossOverExit(callema9, callema21)
+        bufferMinuteDivider();
         // await crudecheckCrossOverExit(callema9, callema21)
         // await crudecheckCrossOverExit(putema9, putema21)
 
