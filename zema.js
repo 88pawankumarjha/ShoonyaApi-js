@@ -565,6 +565,36 @@ const getSafeOrderPriceFromPosition = async (position, side) => {
     return getSafeOrderPriceFromQuote(position?.tsym, side);
 };
 
+const getSpotSubscriptionKey = () => `${globalInput.pickedExchange === 'BFO' ? 'NSE' : globalInput.pickedExchange === 'NFO' ? 'NSE' : 'NSE'}|${globalInput.token}`;
+
+const getRestBackedQuote = async (subscriptionKey, expectedSymbol) => {
+    const cachedQuote = latestQuotes[subscriptionKey];
+    if (toFiniteNumber(cachedQuote?.lp) !== null) {
+        return cachedQuote;
+    }
+
+    const [exchange, token] = String(subscriptionKey || '').split('|');
+    if (!exchange || !token) {
+        return null;
+    }
+
+    const quote = await api.get_quotes(exchange, token);
+    const quoteSymbol = quote?.tsym || quote?.tradingSymbol || quote?.ts;
+    if (expectedSymbol && quoteSymbol && quoteSymbol !== expectedSymbol) {
+        console.error(`REST quote symbol mismatch for ${subscriptionKey}: expected ${expectedSymbol}, got ${quoteSymbol}`);
+        return null;
+    }
+
+    if (toFiniteNumber(quote?.lp) === null) {
+        console.error(`REST quote missing LTP for ${subscriptionKey}:`, JSON.stringify(apiResponseSummary(quote)));
+        return null;
+    }
+
+    latestQuotes[subscriptionKey] = quote;
+    latestQuotesTimestamps[subscriptionKey] = Date.now();
+    return quote;
+};
+
 const positionKey = (position) => `${position?.exch || globalInput.pickedExchange}|${position?.tsym || ''}|${position?.prd || 'M'}`;
 
 const isOpenShortOptionPosition = (position) => position?.exch === globalInput.pickedExchange &&
@@ -2118,11 +2148,18 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
 }
 
 const setBiasValue = async () => {
+  const spotSubStr = getSpotSubscriptionKey();
+  const [putQuote, callQuote, spotQuote] = await Promise.all([
+    getRestBackedQuote(biasProcess.putSubStr, biasProcess.itmPutSymbol),
+    getRestBackedQuote(biasProcess.callSubStr, biasProcess.itmCallSymbol),
+    getRestBackedQuote(spotSubStr),
+  ]);
+
   const putStrike = toFiniteNumber(biasProcess.itmPutStrikePrice);
-  const putLtp = toFiniteNumber(latestQuotes[biasProcess.putSubStr]?.lp);
+  const putLtp = toFiniteNumber(putQuote?.lp);
   const callStrike = toFiniteNumber(biasProcess.itmCallStrikePrice);
-  const callLtp = toFiniteNumber(latestQuotes[biasProcess.callSubStr]?.lp);
-  const spotLtp = toFiniteNumber(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'NSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'NSE'}|${globalInput.token}`]?.lp);
+  const callLtp = toFiniteNumber(callQuote?.lp);
+  const spotLtp = toFiniteNumber(spotQuote?.lp);
 
   if ([putStrike, putLtp, callStrike, callLtp, spotLtp].some(value => value === null)) {
     console.log('Skipping bias update: missing quote data.');
