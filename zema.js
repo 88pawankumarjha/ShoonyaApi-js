@@ -453,15 +453,15 @@ const toPnlNumber = (value) => {
 const getPnlMood = (value) => {
     const numericValue = toPnlNumber(value);
     if (numericValue === null) {
-        return 'neutral';
+        return '😐';
     }
     if (numericValue > 0.33) {
-        return 'good';
+        return '🙂';
     }
     if (numericValue < -0.33) {
-        return 'bad';
+        return '☹️';
     }
-    return 'neutral';
+    return '😐';
 };
 
 const formatPnlPercent = (value) => {
@@ -469,9 +469,69 @@ const formatPnlPercent = (value) => {
     return numericValue === null ? 'NA' : `${numericValue.toFixed(2)}%`;
 };
 
+const toDisplayNumber = (value) => {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    return toFiniteNumber(value);
+};
+
+const formatSignedPointText = (value) => {
+    const numericValue = toDisplayNumber(value);
+    if (numericValue === null) {
+        return 'NA';
+    }
+    const prefix = numericValue > 0 ? '+' : '';
+    return `${prefix}${numericValue.toFixed(2)} pt`;
+};
+
 const formatPriceText = (value) => {
     const numericValue = toFiniteNumber(value);
     return numericValue === null ? 'NA' : numericValue.toFixed(2);
+};
+
+const getPositionCircle = (status) => {
+    if (status === 'Long') return '🟢';
+    if (status === 'Short') return '🔴';
+    return '⚪';
+};
+
+const getBiasArrow = (bias) => {
+    const numericBias = toDisplayNumber(bias);
+    if (numericBias === null) return '↔️';
+    if (numericBias > 0) return '⬆️';
+    if (numericBias < 0) return '⬇️';
+    return '↔️';
+};
+
+const formatPositionBiasText = (status, bias) => {
+    const numericBias = toDisplayNumber(bias);
+    const biasText = numericBias === null ? 'NA' : numericBias.toFixed(2);
+    return `${getPositionCircle(status)} ${status} ${getBiasArrow(bias)} ${biasText}`;
+};
+
+const formatEmaGapLine = (callSlow, callMedium, putSlow, putMedium) => {
+    const callSlowValue = toDisplayNumber(callSlow);
+    const callMediumValue = toDisplayNumber(callMedium);
+    const putSlowValue = toDisplayNumber(putSlow);
+    const putMediumValue = toDisplayNumber(putMedium);
+    const callGap = callSlowValue === null || callMediumValue === null
+        ? null
+        : callSlowValue - callMediumValue;
+    const putGap = putSlowValue === null || putMediumValue === null
+        ? null
+        : putSlowValue - putMediumValue;
+    return `CE ${formatSignedPointText(callGap)} | PE ${formatSignedPointText(putGap)}`;
+};
+
+const formatRiskLine = ({ sell, trail, ltp, pending = false }) => {
+    const sellValue = toDisplayNumber(sell);
+    const ltpValue = toDisplayNumber(ltp);
+    const points = sellValue === null || ltpValue === null ? null : sellValue - ltpValue;
+    const trailText = trail || (pending ? 'pending' : 'NA');
+    const pendingPrefix = pending ? 'SL pending | ' : '';
+    const sellText = sellValue === null ? 'NA' : sellValue.toFixed(2);
+    return `${pendingPrefix}S @${sellText} | T @${trailText} | ${formatSignedPointText(points)}`;
 };
 
 const getCollateralLabel = () => {
@@ -1613,18 +1673,15 @@ const emaMonitorATMs = async () => {
     }
     const soldDisplay = toFiniteNumber(riskState?.entryPrice ?? positionProcess.soldPrice);
     const ltpDisplay = toFiniteNumber(riskState?.lastLtp ?? latestQuote2);
-    const soldText = soldDisplay === null ? 'NA' : soldDisplay.toFixed(2);
-    const ltpText = ltpDisplay === null ? 'NA' : ltpDisplay.toFixed(2);
     const hasTrackedRiskPosition = riskState || soldDisplay > 0 || Boolean(positionProcess.soldTsym);
     const riskText = riskStopLabel
-                  ? `S @${soldText} | T @${riskStopLabel} | L @${ltpText}`
+                  ? formatRiskLine({ sell: soldDisplay, trail: riskStopLabel, ltp: ltpDisplay })
                   : hasTrackedRiskPosition
-                    ? `SL pending | S @${soldText} | T @pending | L @${ltpText}`
+                    ? formatRiskLine({ sell: soldDisplay, trail: 'pending', ltp: ltpDisplay, pending: true })
                     : undefined;
     send_notification(formatTelegramMessage('EMA CHECK', [
       ['Risk', riskText],
-      ['Slow', `CE ${parseFloat(callemaSlow).toFixed(2)} | PE ${parseFloat(putemaSlow).toFixed(2)}`],
-      ['Medium', `CE ${parseFloat(callemaMedium).toFixed(2)} | PE ${parseFloat(putemaMedium).toFixed(2)}`],
+      ['Gap', formatEmaGapLine(callemaSlow, callemaMedium, putemaSlow, putemaMedium)],
     ]));
    
     emaUpFastCall = callemaMedium - callemaSlow > -2;
@@ -2140,9 +2197,7 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
   const biasDisplay = Number.isFinite(Number(biasOutput.bias)) ? biasOutput.bias : 'NA';
   send_notification(formatTelegramMessage('STATUS', [
     ['Mood', pnlMood],
-    ['Position', currentPositionStatus],
-    ['Bias', biasDisplay],
-    ['Capital', getCollateralLabel()],
+    ['Position', formatPositionBiasText(currentPositionStatus, biasDisplay)],
   ]));
   console.log(' PnL: ' + pnl);
 }
