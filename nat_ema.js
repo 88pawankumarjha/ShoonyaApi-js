@@ -11,8 +11,8 @@ const profitBookDecayRatio = 0.10;
 const profitTrailBounceRatio = 0.03;
 const profitMonitorLogIntervalMs = 30 * 1000;
 const telegramMinuteDivider = '────────────────────';
-const eveningExitMinutesIST = (18 * 60) + 30;
-const eveningReentryMinutesIST = (21 * 60) + 30;
+const eveningExitMinutesIST = (18 * 60) + 25;
+const eveningReentryMinutesIST = (21 * 60) + 25;
 const nightShutdownMinutesIST = (23 * 60) + 17;
 const trailingMonitorIntervalSeconds = 5;
 const reentryCooldownMs = 20 * 60 * 1000;
@@ -1142,6 +1142,42 @@ const exitPaperPosition = (snapshot) => {
     reason: trade.reason,
     blockedTradeKey: paperStrategyState.blockedTradeKey,
   });
+};
+
+const exitPaperPositionForEveningPause = async () => {
+  const position = paperStrategyState.position;
+  if (!position) {
+    return false;
+  }
+
+  let ltp = await getSymbolLtp(position.symbol, true);
+  if (toFiniteNumber(ltp) === null) {
+    ltp = position.lastLtp;
+  }
+  if (toFiniteNumber(ltp) === null) {
+    paperLog('pause_exit_skipped', {
+      reason: 'ltp_missing',
+      symbol: position.symbol,
+      side: position.side,
+      entry: position.entry,
+    });
+    return false;
+  }
+
+  exitPaperPosition({
+    ltp,
+    exitReason: 'evening_pause_exit',
+  });
+  return true;
+};
+
+const exitPaperPositionForEveningPauseSafely = async () => {
+  try {
+    return await exitPaperPositionForEveningPause();
+  } catch (error) {
+    console.error(`${paperStrategyLogPrefix}_PAUSE_EXIT_ERROR`, error.message || JSON.stringify(apiResponseSummary(error)));
+    return false;
+  }
 };
 
 const updatePaperOpenPosition = async ({ callSymbol, callLtp, putSymbol, putLtp }) => {
@@ -3703,12 +3739,14 @@ getEma = async () => {
     if (seconds % trailingMonitorIntervalSeconds === 0 && !eveningExitInProgress) {
       eveningExitInProgress = true;
       try {
-        const exited = await exitOpenStrategyPositions('Thursday 18:30 IST no-entry window');
-        if (exited) {
+        const exited = await exitOpenStrategyPositions('Thursday 18:25 IST no-entry window');
+        const paperExited = await exitPaperPositionForEveningPauseSafely();
+        if (exited || paperExited) {
           buffer_notification(formatNatMessage('🌆 THURSDAY EVENING PAUSE', [
             ['Action', 'Exited open NATURALGAS positions'],
-            ['Window', 'Thursday 18:30-21:30 IST'],
-            ['Re-entry', 'Blocked until 21:30 IST'],
+            ['Window', 'Thursday 18:25-21:25 IST'],
+            ['Re-entry', 'Blocked until 21:25 IST'],
+            ['Paper', paperExited ? 'paper position exited' : 'no paper position'],
           ]), true);
         }
       } catch (error) {
