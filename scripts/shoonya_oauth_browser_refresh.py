@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from selenium import webdriver
@@ -154,10 +155,19 @@ def capture_code_from_logs(driver: webdriver.Chrome) -> str | None:
         return None
 
     for entry in logs:
-        message = entry.get("message", "")
-        code = extract_code_from_text(message)
-        if code:
-            return code
+        try:
+            message = json.loads(entry.get("message", "{}")).get("message", {})
+            if message.get("method") != "Network.requestWillBeSent":
+                continue
+            url = message.get("params", {}).get("request", {}).get("url", "")
+            if "code=" not in url or "shoonya" not in url.lower():
+                continue
+            parsed = urlparse(url)
+            code = parse_qs(parsed.query).get("code", [None])[0]
+            if code:
+                return code
+        except Exception:
+            continue
     return None
 
 
@@ -190,10 +200,9 @@ def capture_auth_code(config: dict[str, str], timeout_seconds: int) -> str:
 
             deadline = time.time() + timeout_seconds
             while time.time() < deadline:
-                for text in (driver.current_url, driver.page_source):
-                    code = extract_code_from_text(text)
-                    if code:
-                        return code
+                code = extract_code_from_text(driver.current_url)
+                if code and "shoonya" in driver.current_url.lower():
+                    return code
                 code = capture_code_from_logs(driver)
                 if code:
                     return code
