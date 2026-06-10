@@ -552,14 +552,14 @@ const formatCompactEmaGapText = (gap) => {
   return `${mood.icon} ${numericGap === null ? 'NA' : numericGap.toFixed(2)}`;
 };
 
-const formatNatPositionText = (direction, emaGap) => {
+const formatNatPositionText = (direction) => {
   if (direction === 'long') {
-    return `🟢 short PUT ${formatCompactEmaGapText(emaGap)}`;
+    return '🟢 short PUT';
   }
   if (direction === 'short') {
-    return `🔴 short CALL ${formatCompactEmaGapText(emaGap)}`;
+    return '🔴 short CALL';
   }
-  return `⚪ none ${formatCompactEmaGapText(emaGap)}`;
+  return '⚪ none';
 };
 
 const formatCompactTrailLabel = (state) => {
@@ -634,6 +634,7 @@ const getLimitPriceFromLtp = (ltp, side) => {
 const formatEntryOrderMessage = ({ reason, symbol, side, qty, price, ltp, direction, emaGap }) => {
   return formatNatMessage(`🟦 ENTRY | ${reason}`, [
     ['Position', formatNatPositionText(direction, emaGap)],
+    ['Gap', emaGap === undefined ? undefined : formatCompactEmaGapText(emaGap)],
     ['Order', `${side || 'NA'} ${qty || 'NA'} @${formatPriceText(price)}`],
     ['Risk', formatNatRiskLine({
       symbol,
@@ -1793,6 +1794,7 @@ const placeEntryOrderAndConfirm = async (symbol, direction, reason, emaGap) => {
     clearClosedTrailingStops([confirmation.position]);
     buffer_notification(formatNatMessage('✅ ENTRY CONFIRMED', [
       ['Position', formatNatPositionText(direction, emaGap)],
+      ['Gap', emaGap === undefined ? undefined : formatCompactEmaGapText(emaGap)],
       ['Risk', formatNatRiskLine({
         symbol,
         sell: confirmedEntryPrice,
@@ -3128,6 +3130,7 @@ async function XEma(fastEMA, slowEMA) {
       buffer_notification(formatNatMessage('📈 SIGNAL', [
         ['Action', 'SELL PUT'],
         ['Position', formatNatPositionText('long', diff)],
+        ['Gap', formatCompactEmaGapText(diff)],
       ]));
       await placeEntryOrderAndConfirm(biasProcess.atmPutSymbol, 'long', 'SELL PUT', diff);
     }
@@ -3136,6 +3139,7 @@ async function XEma(fastEMA, slowEMA) {
       buffer_notification(formatNatMessage('📉 SIGNAL', [
         ['Action', 'SELL CALL'],
         ['Position', formatNatPositionText('short', diff)],
+        ['Gap', formatCompactEmaGapText(diff)],
       ]));
       await placeEntryOrderAndConfirm(biasProcess.atmCallSymbol, 'short', 'SELL CALL', diff);
     }
@@ -3146,6 +3150,7 @@ async function XEma(fastEMA, slowEMA) {
         ['Action', 'BUY PUT'],
         ['Reason', 'EMA gap crossed back'],
         ['Position', formatNatPositionText(positionDirection, diff)],
+        ['Gap', formatCompactEmaGapText(diff)],
       ]));
       await exitOpenStrategyPositions('EMA PUT exit');
       await syncPositionStateFromLive();
@@ -3157,6 +3162,7 @@ async function XEma(fastEMA, slowEMA) {
         ['Action', 'BUY CALL'],
         ['Reason', 'EMA gap crossed back'],
         ['Position', formatNatPositionText(positionDirection, diff)],
+        ['Gap', formatCompactEmaGapText(diff)],
       ]));
       await exitOpenStrategyPositions('EMA CALL exit');
       await syncPositionStateFromLive();
