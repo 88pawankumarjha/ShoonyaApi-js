@@ -514,9 +514,9 @@ const formatPnlText = (value, includePercent = false) => {
   const mood = getPnlMood(value);
   const numericValue = toPnlNumber(value);
   if (!includePercent || numericValue === null) {
-    return `${mood.icon} ${mood.label}`;
+    return mood.icon;
   }
-  return `${mood.icon} ${mood.label} ${numericValue.toFixed(2)}%`;
+  return `${mood.icon} ${numericValue.toFixed(2)}%`;
 };
 
 const formatPnlPercent = (value) => {
@@ -524,10 +524,76 @@ const formatPnlPercent = (value) => {
   return numericValue === null ? 'NA' : `${numericValue.toFixed(2)}%`;
 };
 
+const toDisplayNumber = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  return toFiniteNumber(value);
+};
+
+const formatSignedPointText = (value) => {
+  const numericValue = toDisplayNumber(value);
+  if (numericValue === null) {
+    return 'NA';
+  }
+  const prefix = numericValue > 0 ? '+' : '';
+  return `${prefix}${numericValue.toFixed(2)} pt`;
+};
+
 const formatEmaGapText = (gap) => {
   const mood = getEmaGapMood(gap);
   const numericGap = toFiniteNumber(gap);
   return `${mood.icon} ${mood.label}${numericGap === null ? '' : ` ${numericGap.toFixed(2)}`}`;
+};
+
+const formatCompactEmaGapText = (gap) => {
+  const mood = getEmaGapMood(gap);
+  const numericGap = toDisplayNumber(gap);
+  return `${mood.icon} ${numericGap === null ? 'NA' : numericGap.toFixed(2)}`;
+};
+
+const formatNatPositionText = (direction, emaGap) => {
+  if (direction === 'long') {
+    return `🟢 short PUT ${formatCompactEmaGapText(emaGap)}`;
+  }
+  if (direction === 'short') {
+    return `🔴 short CALL ${formatCompactEmaGapText(emaGap)}`;
+  }
+  return `⚪ none ${formatCompactEmaGapText(emaGap)}`;
+};
+
+const formatCompactTrailLabel = (state) => {
+  if (!state || toDisplayNumber(state.stopLtp) === null) {
+    return 'pending';
+  }
+  const stopType = state.trailingActive ? 'TSL' : 'HSL';
+  return `${formatPriceText(state.stopLtp)} ${stopType}`;
+};
+
+const formatNatRiskLine = ({ symbol, sell, trail, ltp, side = 'short', pending = false }) => {
+  const sellValue = toDisplayNumber(sell);
+  const ltpValue = toDisplayNumber(ltp);
+  const points = sellValue === null || ltpValue === null
+    ? null
+    : side === 'long' ? ltpValue - sellValue : sellValue - ltpValue;
+  const compactSymbol = symbol ? String(symbol).slice(-4) : '';
+  const symbolPrefix = compactSymbol ? `${compactSymbol} | ` : '';
+  const pendingPrefix = pending ? 'SL pending | ' : '';
+  const sellText = sellValue === null ? 'NA' : sellValue.toFixed(2);
+  return `${symbolPrefix}${pendingPrefix}S @${sellText} | T @${trail || 'pending'} | ${formatSignedPointText(points)}`;
+};
+
+const formatProfitLockLine = (state) => {
+  if (!state?.profitLockActive) {
+    return undefined;
+  }
+  const movePercent = Number.isFinite(state.profitMoveRatio)
+    ? `${(state.profitMoveRatio * 100).toFixed(1)}%`
+    : 'NA';
+  const trail = state.profitTrailExitLtp === undefined || state.profitTrailExitLtp === null
+    ? ''
+    : ` | trail ${formatPriceText(state.profitTrailExitLtp)}`;
+  return `🔒 ${movePercent}${trail}`;
 };
 
 const getCollateralLabel = () => {
@@ -566,24 +632,29 @@ const getLimitPriceFromLtp = (ltp, side) => {
 };
 
 const formatEntryOrderMessage = ({ reason, symbol, side, qty, price, ltp, direction, emaGap }) => {
-  const position = getPositionMood(direction);
   return formatNatMessage(`🟦 ENTRY | ${reason}`, [
-    ['Position', `${position.icon} ${position.label}`],
-    ['Symbol', symbol || 'NA'],
-    ['Qty', qty || 'NA'],
-    ['Order', `${side || 'NA'} @${formatPriceText(price)}`],
-    ['LTP', formatPriceText(ltp)],
-    ['EMA Gap', emaGap === undefined ? undefined : formatEmaGapText(emaGap)],
+    ['Position', formatNatPositionText(direction, emaGap)],
+    ['Order', `${side || 'NA'} ${qty || 'NA'} @${formatPriceText(price)}`],
+    ['Risk', formatNatRiskLine({
+      symbol,
+      sell: price,
+      trail: 'pending',
+      ltp,
+      side: 'short',
+      pending: true,
+    })],
   ]);
 };
 
 const formatExitOrderMessage = ({ reason, symbol, side, qty, price, ltp, entry, stop, pnl }) => formatNatMessage(`🟧 EXIT | ${reason}`, [
-  ['Symbol', symbol || 'NA'],
-  ['Qty', qty || 'NA'],
-  ['Order', `${side || 'NA'} @${formatPriceText(price)}`],
-  ['Entry', entry === undefined ? undefined : formatPriceText(entry)],
-  ['LTP', ltp === undefined ? undefined : formatPriceText(ltp)],
-  ['Stop', stop === undefined ? undefined : formatPriceText(stop)],
+  ['Order', `${side || 'NA'} ${qty || 'NA'} @${formatPriceText(price)}`],
+  ['Risk', formatNatRiskLine({
+    symbol,
+    sell: entry,
+    trail: stop === undefined ? formatPriceText(price) : formatPriceText(stop),
+    ltp,
+    side: 'short',
+  })],
   ['Mood', formatPnlText(pnl)],
   ['PnL', formatPnlPercent(pnl)],
 ]);
@@ -1721,9 +1792,15 @@ const placeEntryOrderAndConfirm = async (symbol, direction, reason, emaGap) => {
     }
     clearClosedTrailingStops([confirmation.position]);
     buffer_notification(formatNatMessage('✅ ENTRY CONFIRMED', [
-      ['Position', `${getPositionMood(direction).icon} ${getPositionMood(direction).label}`],
-      ['Symbol', symbol],
-      ['Fill', `S @${formatPriceText(confirmedEntryPrice)}`],
+      ['Position', formatNatPositionText(direction, emaGap)],
+      ['Risk', formatNatRiskLine({
+        symbol,
+        sell: confirmedEntryPrice,
+        trail: 'pending',
+        ltp: confirmedEntryPrice,
+        side: 'short',
+        pending: true,
+      })],
     ]), true);
     return true;
   } catch (error) {
@@ -1870,13 +1947,15 @@ const monitorTrailingLoss = async () => {
           state.profitLockActivatedAt = Date.now();
           state.profitTrailExitLtp = state.bestLtp + profitTrailBounceDistance;
           buffer_notification(formatNatMessage('🔒 PROFIT LOCK', [
-            ['Symbol', position.tsym],
-            ['Entry', formatPriceText(entryPrice)],
-            ['LTP', formatPriceText(ltp)],
-            ['Best LTP', formatPriceText(state.bestLtp)],
+            ['Risk', formatNatRiskLine({
+              symbol: position.tsym,
+              sell: entryPrice,
+              trail: formatPriceText(state.profitTrailExitLtp),
+              ltp,
+              side,
+            })],
             ['Move', `${(profitMoveRatio * 100).toFixed(1)}% decay`],
-            ['Trail Exit', formatPriceText(state.profitTrailExitLtp)],
-            ['EMA Gap', formatEmaGapText(emaSnapshot.gap)],
+            ['Gap', formatCompactEmaGapText(emaSnapshot.gap)],
           ]), true);
           logProfitMonitorState(position, state, 'profit_lock_started');
         }
@@ -1931,13 +2010,15 @@ const monitorTrailingLoss = async () => {
           state.profitLockActivatedAt = Date.now();
           state.profitTrailExitLtp = state.bestLtp - profitTrailBounceDistance;
           buffer_notification(formatNatMessage('🔒 PROFIT LOCK', [
-            ['Symbol', position.tsym],
-            ['Entry', formatPriceText(entryPrice)],
-            ['LTP', formatPriceText(ltp)],
-            ['Best LTP', formatPriceText(state.bestLtp)],
+            ['Risk', formatNatRiskLine({
+              symbol: position.tsym,
+              sell: entryPrice,
+              trail: formatPriceText(state.profitTrailExitLtp),
+              ltp,
+              side,
+            })],
             ['Move', `${(profitMoveRatio * 100).toFixed(1)}% gain`],
-            ['Trail Exit', formatPriceText(state.profitTrailExitLtp)],
-            ['EMA Gap', formatEmaGapText(emaSnapshot.gap)],
+            ['Gap', formatCompactEmaGapText(emaSnapshot.gap)],
           ]), true);
           logProfitMonitorState(position, state, 'profit_lock_started');
         }
@@ -2055,9 +2136,13 @@ postOrderPosTracking = async (data) => {
       return;
     }
     const completionMessage = formatNatMessage('✅ ORDER COMPLETE', [
-      ['Symbol', suffix],
-      ['Sell', formatPriceText(sellPrice)],
-      ['Buy', formatPriceText(buyPrice)],
+      ['Risk', formatNatRiskLine({
+        symbol: suffix,
+        sell: sellPrice,
+        trail: formatPriceText(buyPrice),
+        ltp: buyPrice,
+        side: 'short',
+      })],
       ['Time', new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })],
     ]);
     buffer_notification(completionMessage, true)
@@ -3042,10 +3127,7 @@ async function XEma(fastEMA, slowEMA) {
     if (diff > emaGapSignalThreshold) {
       buffer_notification(formatNatMessage('📈 SIGNAL', [
         ['Action', 'SELL PUT'],
-        ['Position', `${getPositionMood('long').icon} ${getPositionMood('long').label}`],
-        ['Fast EMA', formatPriceText(fastEMA)],
-        ['Slow EMA', formatPriceText(slowEMA)],
-        ['EMA Gap', formatEmaGapText(diff)],
+        ['Position', formatNatPositionText('long', diff)],
       ]));
       await placeEntryOrderAndConfirm(biasProcess.atmPutSymbol, 'long', 'SELL PUT', diff);
     }
@@ -3053,10 +3135,7 @@ async function XEma(fastEMA, slowEMA) {
     else if (diff < -emaGapSignalThreshold) {
       buffer_notification(formatNatMessage('📉 SIGNAL', [
         ['Action', 'SELL CALL'],
-        ['Position', `${getPositionMood('short').icon} ${getPositionMood('short').label}`],
-        ['Fast EMA', formatPriceText(fastEMA)],
-        ['Slow EMA', formatPriceText(slowEMA)],
-        ['EMA Gap', formatEmaGapText(diff)],
+        ['Position', formatNatPositionText('short', diff)],
       ]));
       await placeEntryOrderAndConfirm(biasProcess.atmCallSymbol, 'short', 'SELL CALL', diff);
     }
@@ -3066,9 +3145,7 @@ async function XEma(fastEMA, slowEMA) {
       buffer_notification(formatNatMessage('🔄 EXIT SIGNAL', [
         ['Action', 'BUY PUT'],
         ['Reason', 'EMA gap crossed back'],
-        ['Fast EMA', formatPriceText(fastEMA)],
-        ['Slow EMA', formatPriceText(slowEMA)],
-        ['EMA Gap', formatEmaGapText(diff)],
+        ['Position', formatNatPositionText(positionDirection, diff)],
       ]));
       await exitOpenStrategyPositions('EMA PUT exit');
       await syncPositionStateFromLive();
@@ -3079,9 +3156,7 @@ async function XEma(fastEMA, slowEMA) {
       buffer_notification(formatNatMessage('🔄 EXIT SIGNAL', [
         ['Action', 'BUY CALL'],
         ['Reason', 'EMA gap crossed back'],
-        ['Fast EMA', formatPriceText(fastEMA)],
-        ['Slow EMA', formatPriceText(slowEMA)],
-        ['EMA Gap', formatEmaGapText(diff)],
+        ['Position', formatNatPositionText(positionDirection, diff)],
       ]));
       await exitOpenStrategyPositions('EMA CALL exit');
       await syncPositionStateFromLive();
@@ -3100,25 +3175,25 @@ async function XEma(fastEMA, slowEMA) {
     const displayLtp = await getSymbolLtp(positionTakenInSymbol, true);
     const profitState = getTrailingStateForSymbol(positionTakenInSymbol);
     positionTakenInSymbol && buffer_notification(formatNatMessage('📍 STATUS', [
-      ['PnL', formatPnlText(pnl)],
-      ['Position', `${getPositionMood(positionDirection).icon} ${getPositionMood(positionDirection).label}`],
-      ['Symbol', positionTakenInSymbolSubStr],
-      ['Entry', formatPriceText(displayEntryPrice)],
-      ['LTP', formatPriceText(displayLtp)],
-      ['EMA Gap', formatEmaGapText(diff)],
-      ['Trailing SL', formatTrailingStopText(profitState)],
-      ['Profit Lock', formatProfitTrackingText(profitState)],
-      ['Capital', getCollateralLabel()],
+      ['Mood', formatPnlText(pnl)],
+      ['Position', formatNatPositionText(positionDirection, diff)],
+      ['Risk', formatNatRiskLine({
+        symbol: positionTakenInSymbolSubStr,
+        sell: displayEntryPrice,
+        trail: formatCompactTrailLabel(profitState),
+        ltp: displayLtp,
+        side: profitState?.side || 'short',
+        pending: !profitState,
+      })],
+      ['Lock', formatProfitLockLine(profitState)],
     ]));
     console.log("Current Time:", moment().utcOffset("+05:30").format('HH:mm:ss'));
   } else {
     const pnl = await calcPnL(api, true);
     console.log(`No position taken. ${getCollateralLabel()} MCX PnL: ${pnl} % Current Time:`, moment().utcOffset("+05:30").format('HH:mm:ss'));
     buffer_notification(formatNatMessage('⚪ STATUS', [
-      ['PnL', formatPnlText(pnl)],
-      ['Position', `${getPositionMood('').icon} ${getPositionMood('').label}`],
-      ['EMA Gap', formatEmaGapText(diff)],
-      ['Capital', getCollateralLabel()],
+      ['Mood', formatPnlText(pnl)],
+      ['Position', formatNatPositionText('', diff)],
     ]));
   }
 }
@@ -3546,10 +3621,8 @@ emaRecurringFunction = async () => {
         }
         const underlyingLtp = await getUnderlyingLtp(true);
         buffer_notification(formatNatMessage('📊 EMA CHECK', [
-          ['Underlying', `${globalInput.indexName} @${formatPriceText(underlyingLtp)}`],
-          ['Fast EMA', formatPriceText(fastEMA)],
-          ['Slow EMA', formatPriceText(slowEMA)],
-          ['EMA Gap', formatEmaGapText(fastEMA - slowEMA)],
+          ['Spot', `${globalInput.indexName} @${formatPriceText(underlyingLtp)}`],
+          ['Gap', formatCompactEmaGapText(fastEMA - slowEMA)],
         ]));
         await XEma(fastEMA, slowEMA);
         await runPaperStrategyTickSafely();
@@ -3564,10 +3637,8 @@ emaRecurringFunction = async () => {
 
         const underlyingLtp = await getUnderlyingLtp(true);
         buffer_notification(formatNatMessage('📊 EMA CHECK', [
-          ['Underlying', `${globalInput.indexName} @${formatPriceText(underlyingLtp)}`],
-          ['EMA 9', formatPriceText(callema9)],
-          ['EMA 21', formatPriceText(callema21)],
-          ['EMA Gap', formatEmaGapText(callema9 - callema21)],
+          ['Spot', `${globalInput.indexName} @${formatPriceText(underlyingLtp)}`],
+          ['Gap', formatCompactEmaGapText(callema9 - callema21)],
         ]));
         // console.log(putSymbolForEma,  ': ltp: ', +latestQuotes[`${globalInput.pickedExchange}|${getTokenByTradingSymbol(putSymbolForEma)}`]?.lp , ' : putema9, putema21. input for position', putema9, putema21)
 
@@ -3660,7 +3731,8 @@ getEma = async () => {
       const pnl = await calcPnL(api, true);
       if (pnl < maxLossThreshold || pnl > maxProfitThreshold) {
         buffer_notification(formatNatMessage('🚨 PNL THRESHOLD', [
-          ['PnL', formatPnlText(pnl)],
+          ['Mood', formatPnlText(pnl)],
+          ['PnL', formatPnlPercent(pnl)],
           ['Action', 'Exiting all positions'],
         ]));
         await exitOpenStrategyPositions('PnL threshold reached');
