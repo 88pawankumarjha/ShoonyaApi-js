@@ -239,12 +239,11 @@ def exchange_token(config: dict[str, str], auth_code: str) -> dict[str, Any]:
     return token_data
 
 
-def write_token_file(path: Path, token_data: dict[str, Any], auth_code: str) -> None:
+def write_token_file(path: Path, token_data: dict[str, Any]) -> None:
     output = {
         **token_data,
         "auth_type": "python_browser_oauth",
         "auth_code_captured": True,
-        "auth_code_preview": f"{auth_code[:4]}...{auth_code[-4:]}" if len(auth_code) > 8 else "***",
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     tmp_path = path.with_suffix(path.suffix + ".tmp")
@@ -329,7 +328,7 @@ def main() -> int:
     config = load_config(repo_dir)
     auth_code = capture_auth_code(config, args.timeout)
     token_data = exchange_token(config, auth_code)
-    write_token_file(token_path, token_data, auth_code)
+    write_token_file(token_path, token_data)
 
     summary: dict[str, Any] = {
         "stage": "shoonya_oauth_browser_refresh",
