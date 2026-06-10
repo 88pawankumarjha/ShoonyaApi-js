@@ -36,9 +36,16 @@ class RefreshError(RuntimeError):
 
 
 def run_node(repo_dir: Path, code: str) -> str:
+    node_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key in {"HOME", "LANG", "LC_ALL", "LOGNAME", "PATH", "SHELL", "USER"}
+    }
+    node_env["PWD"] = str(repo_dir)
     completed = subprocess.run(
         ["node", "-e", code, str(repo_dir)],
         cwd=repo_dir,
+        env=node_env,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
