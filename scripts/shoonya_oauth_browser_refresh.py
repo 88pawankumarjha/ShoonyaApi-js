@@ -45,7 +45,7 @@ def run_node(repo_dir: Path, code: str) -> str:
         check=False,
     )
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
+        detail = completed.stderr.strip() or f"node exited with status {completed.returncode}"
         raise RefreshError(f"Node helper failed: {detail}")
     return completed.stdout.strip()
 
