@@ -29,6 +29,9 @@ const orderStatusMaxAttempts = 15;
 const orderPriceSlippageRatio = 0.02;
 const orderPriceSlippageMax = 5;
 const orderTickSize = 0.05;
+const entryPriceRetryAttempts = 3;
+const entryPriceRetryDelayMs = 1000;
+const entryRecoverableNotifyMs = 5 * 60 * 1000;
 const smallAccountQty = [65, 65, 65, 65, 65, 65, 65];
 const bigAccountQty = [195, 195, 195, 195, 195, 195, 195];
 const smallAccountDailyQty = 65;
@@ -595,6 +598,26 @@ const getLimitPriceFromLtp = (ltp, side) => {
     return roundOrderPrice(rawPrice, side);
 };
 
+class RecoverableEntryError extends Error {
+    constructor(message, details = {}) {
+        super(message);
+        this.name = 'RecoverableEntryError';
+        this.details = details;
+    }
+}
+
+const isRecoverableEntryError = (error) => error instanceof RecoverableEntryError;
+
+const isRecoverableEntryPricingError = (error) => {
+    const message = String(error?.message || error || '');
+    return [
+        'Cannot price',
+        'Quote symbol mismatch',
+        'missing token',
+        'invalid LTP',
+    ].some(pattern => message.includes(pattern));
+};
+
 const getSafeOrderPriceFromQuote = async (symbol, side) => {
     const token = getTokenByTradingSymbol(symbol);
     if (!symbol || !token) {
@@ -615,6 +638,46 @@ const getSafeOrderPriceFromQuote = async (symbol, side) => {
 
     console.log(`Safe ${side} price for ${symbol}: ltp=${ltp}, price=${price}`);
     return price;
+};
+
+const refreshOptionChainForEntryPricing = async (label, attempt, error) => {
+    console.error(`${label}: recoverable entry pricing issue on attempt ${attempt}/${entryPriceRetryAttempts}: ${error.message || error}`);
+    try {
+        await updateITMSymbolfromOC();
+    } catch (refreshError) {
+        console.error(`${label}: option-chain refresh failed during entry retry: ${refreshError.message || JSON.stringify(apiResponseSummary(refreshError))}`);
+    }
+    await delay(entryPriceRetryDelayMs);
+};
+
+const getRecoverableEntryPrice = async ({ label, side, symbolGetter }) => {
+    let lastError = null;
+    let lastSymbol = '';
+
+    for (let attempt = 1; attempt <= entryPriceRetryAttempts; attempt++) {
+        const symbol = symbolGetter();
+        lastSymbol = symbol;
+
+        try {
+            return {
+                symbol,
+                price: await getSafeOrderPriceFromQuote(symbol, side),
+            };
+        } catch (error) {
+            lastError = error;
+            if (!isRecoverableEntryPricingError(error)) {
+                throw error;
+            }
+            if (attempt < entryPriceRetryAttempts) {
+                await refreshOptionChainForEntryPricing(label, attempt, error);
+            }
+        }
+    }
+
+    throw new RecoverableEntryError(
+        `${label}: entry pricing skipped after ${entryPriceRetryAttempts} attempts for ${lastSymbol || 'unknown symbol'}: ${lastError?.message || lastError}`,
+        { label, side, symbol: lastSymbol, cause: lastError?.message || String(lastError || '') }
+    );
 };
 
 const getSafeOrderPriceFromPosition = async (position, side) => {
@@ -1282,6 +1345,26 @@ function receiveQuote(data) {
 
 let debounceTimer = null;
 let fatalOrderRejection = false;
+const entryRecoveryNotifications = new Map();
+
+const notifyRecoverableEntrySkip = async (label, error) => {
+    const message = error?.message || String(error || '');
+    console.error(`${label}: recoverable entry skipped. ${message}`);
+
+    const now = Date.now();
+    const lastNotifiedAt = entryRecoveryNotifications.get(label) || 0;
+    if (now - lastNotifiedAt < entryRecoverableNotifyMs) {
+        return;
+    }
+
+    entryRecoveryNotifications.set(label, now);
+    await send_notification(formatTelegramMessage('ENTRY SKIPPED', [
+        ['Type', label],
+        ['Reason', message],
+        ['Next', 'retry next cycle'],
+    ]), true);
+};
+
 function receiveOrders(data) {
     // console.log("Order ::", data);
     // Update the latest order value for the corresponding instrument
@@ -1989,9 +2072,14 @@ const enterXemaLong = async () => {
   if (fatalOrderRejection) return;
   if (isInCooldownPeriod('enterXemaLong')) return;
   if (isExiting) return; // Block entry during exit
-  let tempTradingPutSymbol = biasProcess.atmPutSymbol;
 
   try {
+    const entryPrice = await getRecoverableEntryPrice({
+      label: 'enterXemaLong',
+      side: 'S',
+      symbolGetter: () => biasProcess.atmPutSymbol,
+    });
+    const tempTradingPutSymbol = entryPrice.symbol;
     const order = {
       buy_or_sell: 'S',
       product_type: 'M',
@@ -2000,7 +2088,7 @@ const enterXemaLong = async () => {
       quantity: getDailyQty().toString(),
       discloseqty: 0,
       price_type: 'LMT',
-      price: await getSafeOrderPriceFromQuote(tempTradingPutSymbol, 'S'),
+      price: entryPrice.price,
       remarks: 'API'
     };
     await my_default_place_order(order);
@@ -2010,6 +2098,10 @@ const enterXemaLong = async () => {
   } catch (error) {
     longPositionTaken = false;
     console.error('enterXemaLong order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    if (isRecoverableEntryError(error)) {
+      await notifyRecoverableEntrySkip('enterXemaLong', error);
+      return;
+    }
     send_notification(`enterXemaLong order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
     await stopForManualReview('enterXemaLong order failed', error.message || JSON.stringify(apiResponseSummary(error)));
   }
@@ -2078,9 +2170,13 @@ const enterXemaShort = async () => {
   if (isInCooldownPeriod('enterXemaShort')) return;
   if (isExiting) return; // Block entry during exit
 
-  let tempTradingCallSymbol = biasProcess.atmCallSymbol;
-
   try {
+    const entryPrice = await getRecoverableEntryPrice({
+      label: 'enterXemaShort',
+      side: 'S',
+      symbolGetter: () => biasProcess.atmCallSymbol,
+    });
+    const tempTradingCallSymbol = entryPrice.symbol;
     const order = {
       buy_or_sell: 'S',
       product_type: 'M',
@@ -2089,7 +2185,7 @@ const enterXemaShort = async () => {
       quantity: getDailyQty().toString(),
       discloseqty: 0,
       price_type: 'LMT',
-      price: await getSafeOrderPriceFromQuote(tempTradingCallSymbol, 'S'),
+      price: entryPrice.price,
       remarks: 'API'
     };
     await my_default_place_order(order);
@@ -2099,6 +2195,10 @@ const enterXemaShort = async () => {
   } catch (error) {
     shortPositionTaken = false;
     console.error('enterXemaShort order failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    if (isRecoverableEntryError(error)) {
+      await notifyRecoverableEntrySkip('enterXemaShort', error);
+      return;
+    }
     send_notification(`enterXemaShort order failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
     await stopForManualReview('enterXemaShort order failed', error.message || JSON.stringify(apiResponseSummary(error)));
   }
@@ -2109,8 +2209,13 @@ const enterXemaShort = async () => {
 
 const enterXemaBuyCall = async () => {
   try {
-    nearestCETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, 1)
-    order = {
+    const nearestCETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocCallOptions, 1);
+    const entryPrice = await getRecoverableEntryPrice({
+      label: 'enterXemaBuyCall',
+      side: 'B',
+      symbolGetter: () => nearestCETsym,
+    });
+    const order = {
       buy_or_sell: 'B',
       product_type: 'M',
       exchange: globalInput.pickedExchange,
@@ -2118,13 +2223,17 @@ const enterXemaBuyCall = async () => {
       quantity: getDailyQty().toString(),
       discloseqty: 0,
       price_type: 'LMT',
-      price: await getSafeOrderPriceFromQuote(nearestCETsym, 'B'),
+      price: entryPrice.price,
       remarks: 'API'
     }
     await my_default_place_order(order);
     send_notification('bought hedge call', true)
   } catch (error) {
     console.error('enterXemaBuyCall failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    if (isRecoverableEntryError(error)) {
+      await notifyRecoverableEntrySkip('enterXemaBuyCall', error);
+      return;
+    }
     send_notification(`enterXemaBuyCall failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
     await stopForManualReview('enterXemaBuyCall failed', error.message || JSON.stringify(apiResponseSummary(error)));
   }
@@ -2132,8 +2241,13 @@ const enterXemaBuyCall = async () => {
 
 const enterXemaBuyPut = async () => {
   try {
-    nearestPETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, 1)
-    order = {
+    const nearestPETsym = await getOptionBasedOnNearestPremium(api, globalInput.pickedExchange, biasProcess.ocPutOptions, 1);
+    const entryPrice = await getRecoverableEntryPrice({
+      label: 'enterXemaBuyPut',
+      side: 'B',
+      symbolGetter: () => nearestPETsym,
+    });
+    const order = {
       buy_or_sell: 'B',
       product_type: 'M',
       exchange: globalInput.pickedExchange,
@@ -2141,13 +2255,17 @@ const enterXemaBuyPut = async () => {
       quantity: getDailyQty().toString(),
       discloseqty: 0,
       price_type: 'LMT',
-      price: await getSafeOrderPriceFromQuote(nearestPETsym, 'B'),
+      price: entryPrice.price,
       remarks: 'API'
     }
     await my_default_place_order(order);
     send_notification('bought hedge put', true)
   } catch (error) {
     console.error('enterXemaBuyPut failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+    if (isRecoverableEntryError(error)) {
+      await notifyRecoverableEntrySkip('enterXemaBuyPut', error);
+      return;
+    }
     send_notification(`enterXemaBuyPut failed: ${error.message || JSON.stringify(apiResponseSummary(error))}`, true);
     await stopForManualReview('enterXemaBuyPut failed', error.message || JSON.stringify(apiResponseSummary(error)));
   }
