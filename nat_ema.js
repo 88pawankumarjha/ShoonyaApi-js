@@ -581,8 +581,7 @@ const formatNatRiskLine = ({ symbol, sell, trail, ltp, side = 'short', pending =
   const symbolPrefix = compactSymbol ? `${compactSymbol} | ` : '';
   const pendingPrefix = pending ? 'SL pending | ' : '';
   const sellText = sellValue === null ? 'NA' : sellValue.toFixed(2);
-  const ltpText = ltpValue === null ? 'NA' : ltpValue.toFixed(2);
-  return `${symbolPrefix}${pendingPrefix}S ${sellText} | T ${trail || 'pending'} | L ${ltpText} | ${formatSignedPointText(points)}`;
+  return `${symbolPrefix}${pendingPrefix}S ${sellText} | T ${trail || 'pending'} | ${formatSignedPointText(points)}`;
 };
 
 const formatProfitLockLine = (state) => {
@@ -3250,9 +3249,8 @@ async function XEma(fastEMA, slowEMA) {
     const pnl = await calcPnL(api, true);
     const displayLtp = await getSymbolLtp(positionTakenInSymbol, true);
     const profitState = getTrailingStateForSymbol(positionTakenInSymbol);
-    positionTakenInSymbol && buffer_notification(formatNatMessage('📍 STATUS', [
+    positionTakenInSymbol && buffer_notification(formatNatMessage(formatNatPositionText(positionDirection, diff), [
       ['Mood', formatPnlText(pnl)],
-      ['Position', formatNatPositionText(positionDirection, diff)],
       ['Risk', formatNatRiskLine({
         symbol: positionTakenInSymbolSubStr,
         sell: displayEntryPrice,
@@ -3267,9 +3265,8 @@ async function XEma(fastEMA, slowEMA) {
   } else {
     const pnl = await calcPnL(api, true);
     console.log(`No position taken. ${getCollateralLabel()} MCX PnL: ${pnl} % Current Time:`, moment().utcOffset("+05:30").format('HH:mm:ss'));
-    buffer_notification(formatNatMessage('⚪ STATUS', [
+    buffer_notification(formatNatMessage(formatNatPositionText('', diff), [
       ['Mood', formatPnlText(pnl)],
-      ['Position', formatNatPositionText('', diff)],
     ]));
   }
 }
