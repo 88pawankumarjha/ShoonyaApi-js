@@ -24,6 +24,8 @@ const riskRestQuoteRefreshMs = 60 * 1000;
 const riskLiveQuoteMaxAgeMs = 10 * 1000;
 const riskMissingLtpWarningMs = 60 * 1000;
 const riskOrderbookRefreshMs = 15 * 1000;
+const spotQuoteMaxAgeMs = 5 * 1000;
+const biasQuoteMaxAgeMs = 10 * 1000;
 const orderStatusPollMs = 1000;
 const orderStatusMaxAttempts = 15;
 const orderPriceSlippageRatio = 0.02;
@@ -183,7 +185,36 @@ const delayForEMA = 1000;
 
 let latestQuotes = {};
 let latestQuotesTimestamps = {}; // Add this map
+let restQuotes = {};
+let restQuoteTimestamps = {};
 let latestOrders = {};
+const completedOrderUpdateKeys = new Set();
+
+const getRestQuoteAgeMs = (subscriptionKey) => Date.now() - (restQuoteTimestamps[subscriptionKey] || 0);
+
+const getCachedRestQuoteIfFresh = (subscriptionKey, maxAgeMs) => {
+  const cachedQuote = restQuotes[subscriptionKey];
+  if (toFiniteNumber(cachedQuote?.lp) === null) {
+    return null;
+  }
+  if (getRestQuoteAgeMs(subscriptionKey) > maxAgeMs) {
+    return null;
+  }
+  return cachedQuote;
+};
+
+const cacheRestQuote = (subscriptionKey, quote, exchange, token) => {
+  const normalizedQuote = {
+    ...quote,
+    e: quote?.e || quote?.exch || exchange,
+    tk: quote?.tk || quote?.token || token,
+  };
+  restQuotes[subscriptionKey] = normalizedQuote;
+  restQuoteTimestamps[subscriptionKey] = Date.now();
+  latestQuotes[subscriptionKey] = normalizedQuote;
+  latestQuotesTimestamps[subscriptionKey] = Date.now();
+  return normalizedQuote;
+};
 
 let positionProcess = {
   soldPrice: 0,
@@ -302,20 +333,28 @@ getEMAQtyForGeneric = () => {
 // Execute the findNearestExpiry function
 findNearestExpiry();
 
-const getAtmStrike = async () => {
+const getAtmStrike = async ({ forceRest = false, label = 'ATM' } = {}) => {
   // TODO
   // return 50700;
   // console.log(`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}`)
   // console.log(globalInput.token)
   // console.log(latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'BSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'MCX'}|${globalInput.token}`]);
-  biasProcess.spotObject = latestQuotes[`${globalInput.pickedExchange === 'BFO' ? 'NSE':globalInput.pickedExchange === 'NFO'? 'NSE': 'NSE'}|${globalInput.token}`];
+  const spotSubStr = getSpotSubscriptionKey();
+  const useRest = forceRest || !getCachedRestQuoteIfFresh(spotSubStr, spotQuoteMaxAgeMs);
+  biasProcess.spotObject = await getRestBackedQuote(spotSubStr, undefined, {
+    forceRest: useRest,
+    maxAgeMs: spotQuoteMaxAgeMs,
+  });
   // debug && console.log(biasProcess.spotObject) //updateAtmStrike(s) --> 50, spot object -> s?.lp = 20100
   // console.log(biasOutput.bias, 'biasOutput.bias')
   // send_notification(biasOutput.bias + ' biasOutput.bias');
   const spotLtp = toFiniteNumber(biasProcess.spotObject?.lp);
   const biasValue = toFiniteNumber(biasOutput.bias) ?? 0;
   const atm = spotLtp === null ? null : Math.round((spotLtp + (biasValue !== 0 ? biasValue : 0)) / globalInput.ocGap) * globalInput.ocGap;
-  if (atm !== null && !isNaN(atm)) {return atm;}
+  if (atm !== null && !isNaN(atm)) {
+    console.log(`${label} REST-backed ATM check: spot=${spotLtp}, bias=${biasValue}, atm=${atm}`);
+    return atm;
+  }
   else { 
     const Spot = await fetchSpotPrice(api, globalInput.token, globalInput.pickedExchange);
     if (!Spot) { console.log('Not able to find the spot'); return null; }
@@ -325,6 +364,8 @@ const getAtmStrike = async () => {
       console.log('Skipping ATM update: missing spot LTP.');
       return null;
     }
+    const [spotExchange, spotToken] = String(spotSubStr || '').split('|');
+    biasProcess.spotObject = cacheRestQuote(spotSubStr, Spot, spotExchange, spotToken);
     const ltp_rounded = Math.round(fallbackSpotLtp);
     // const open = Math.round(parseFloat(Spot.o || Spot.c || Spot.lp)); // c for days when market is closed
     // debug && console.log(open, 'open, ', ltp_rounded, ' ltp_rounded, = ', ltp_rounded-open, " ltp_rounded-open")
@@ -690,9 +731,11 @@ const getSafeOrderPriceFromPosition = async (position, side) => {
 
 const getSpotSubscriptionKey = () => `${globalInput.pickedExchange === 'BFO' ? 'NSE' : globalInput.pickedExchange === 'NFO' ? 'NSE' : 'NSE'}|${globalInput.token}`;
 
-const getRestBackedQuote = async (subscriptionKey, expectedSymbol) => {
-    const cachedQuote = latestQuotes[subscriptionKey];
-    if (toFiniteNumber(cachedQuote?.lp) !== null) {
+const getRestBackedQuote = async (subscriptionKey, expectedSymbol, options = {}) => {
+    const maxAgeMs = options.maxAgeMs ?? biasQuoteMaxAgeMs;
+    const forceRest = Boolean(options.forceRest);
+    const cachedQuote = getCachedRestQuoteIfFresh(subscriptionKey, maxAgeMs);
+    if (!forceRest && cachedQuote) {
         return cachedQuote;
     }
 
@@ -713,9 +756,7 @@ const getRestBackedQuote = async (subscriptionKey, expectedSymbol) => {
         return null;
     }
 
-    latestQuotes[subscriptionKey] = quote;
-    latestQuotesTimestamps[subscriptionKey] = Date.now();
-    return quote;
+    return cacheRestQuote(subscriptionKey, quote, exchange, token);
 };
 
 const positionKey = (position) => `${position?.exch || globalInput.pickedExchange}|${position?.tsym || ''}|${position?.prd || 'M'}`;
@@ -799,6 +840,20 @@ const waitForOrderCompletion = async (orderno, orderContext) => {
     const message = `Shoonya order not confirmed COMPLETE after ${orderStatusMaxAttempts}s`;
     await stopForManualReview(message, JSON.stringify({ ...orderContext, norenordno: orderno }));
     throw new Error(message);
+};
+
+const handleCompletedOrderUpdate = async (order, source = 'REST') => {
+    const key = order?.norenordno || `${source}|${order?.tsym || ''}|${order?.trantype || ''}|${order?.flqty || order?.qty || ''}|${order?.avgprc || order?.flprc || order?.prc || ''}`;
+    if (!key || completedOrderUpdateKeys.has(key)) {
+        return;
+    }
+    const normalizedOrder = {
+        ...order,
+        flprc: order?.flprc ?? order?.avgprc ?? order?.prc,
+    };
+    completedOrderUpdateKeys.add(key);
+    latestOrders[normalizedOrder?.Instrument || normalizedOrder?.tsym || key] = normalizedOrder;
+    await postOrderPosTracking(normalizedOrder);
 };
 
 const waitForOpenShortPosition = async (symbol, label) => {
@@ -1069,6 +1124,7 @@ const exitShortOptionPositionForRisk = async (position, reason, state) => {
         } else if (identify_option_type(position.tsym) === 'C') {
             shortPositionTaken = false;
         }
+        syncCurrentPositionStatus();
         shortOptionRiskState.delete(key);
         largeEmaGapExitTime = Date.now();
         resetTrailPrice();
@@ -1390,9 +1446,9 @@ function receiveOrders(data) {
   }
   
   if (data.status === 'COMPLETE') {
-      latestOrders[data.Instrument] = data;
-      // update the smallest positions after each order
-      postOrderPosTracking(data);
+      handleCompletedOrderUpdate(data, 'WS').catch((error) => {
+          console.error('post-order websocket update failed:', error.message || JSON.stringify(apiResponseSummary(error)));
+      });
   }
 }
 
@@ -1545,6 +1601,30 @@ async function updateITMSymbolfromOC() {
         debug && console.log(biasProcess, ' :biasProcess')
     }
 }
+
+const refreshAtmSymbolsForEntry = async (label) => {
+    const freshAtmStrike = await getAtmStrike({ forceRest: true, label });
+    if (freshAtmStrike === null || !Number.isFinite(Number(freshAtmStrike))) {
+        throw new RecoverableEntryError(`${label}: fresh REST ATM unavailable`, { label });
+    }
+
+    const needsRefresh = freshAtmStrike !== biasProcess.atmStrike ||
+        !biasProcess.atmCallSymbol ||
+        !biasProcess.atmPutSymbol;
+
+    if (needsRefresh) {
+        console.log(`${label}: refreshing option chain before entry. previousATM=${biasProcess.atmStrike || 'NA'}, freshATM=${freshAtmStrike}`);
+        resetBiasProcess();
+        await updateITMSymbolfromOC();
+        await dynSubs();
+    }
+
+    if (!biasProcess.atmCallSymbol || !biasProcess.atmPutSymbol) {
+        throw new RecoverableEntryError(`${label}: ATM symbols unavailable after refresh`, { label, freshAtmStrike });
+    }
+
+    console.log(`${label}: entry symbols ready. atm=${biasProcess.atmStrike}, CE=${biasProcess.atmCallSymbol}, PE=${biasProcess.atmPutSymbol}`);
+};
 
 // takeAction(true)
 
@@ -1803,9 +1883,15 @@ const emaMonitorATMs = async () => {
 
 let longPositionTaken = false; // Variable to track long position status
 let shortPositionTaken = false; // Variable to track short position status
+let currentPositionStatus = 'No Position';
 let largeEmaGapExitTime = 0; // Timestamp when large EMA gap exit occurred
 const EMA_GAP_COOLDOWN = 20 * 60 * 1000; // 30 minutes in milliseconds
 const EMA_GAP_THRESHOLD = 30; // Gap threshold between medium and slow EMA
+
+const syncCurrentPositionStatus = () => {
+  currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
+  return currentPositionStatus;
+};
 
 // Reusable method to check if in cooldown period after exit
 const isInCooldownPeriod = (functionName = '') => {
@@ -1940,6 +2026,7 @@ const exitSellsAndOrStop = async (stop = false) => {
           // Also reset position flags after cleanup
           longPositionTaken = false;
           shortPositionTaken = false;
+          syncCurrentPositionStatus();
           isExiting = false; // Reset after exit
       }, 10000);
   } else {
@@ -1951,6 +2038,7 @@ const exitSellsAndOrStop = async (stop = false) => {
       // Also reset position flags after normal exit
       longPositionTaken = false;
       shortPositionTaken = false;
+      syncCurrentPositionStatus();
       isExiting = false; // Reset after exit
   }
 }
@@ -2005,6 +2093,7 @@ const my_default_place_order = async (order) => {
       prc: chunkOrder.price,
     });
 
+    await handleCompletedOrderUpdate(finalOrder, 'REST');
     responses.push({ response, finalOrder });
     remainingQty -= chunkQty;
   }
@@ -2016,22 +2105,23 @@ const my_default_place_order = async (order) => {
 const exitXemaLong = async () => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
   let exitOrderAccepted = false;
-  if(positionProcess.smallestPutPosition?.tsym) {
+  const exitingPutPosition = positionProcess.smallestPutPosition;
+  if(exitingPutPosition?.tsym) {
     try {
       const order = {
         buy_or_sell: 'B',
         product_type: 'M',
         exchange: globalInput.pickedExchange,
-        tradingsymbol: positionProcess.smallestPutPosition.tsym,
+        tradingsymbol: exitingPutPosition.tsym,
         quantity: getDailyQty().toString(),
         discloseqty: 0,
         price_type: 'LMT',
-        price: await getSafeOrderPriceFromPosition(positionProcess.smallestPutPosition, 'B'),
+        price: await getSafeOrderPriceFromPosition(exitingPutPosition, 'B'),
         remarks: 'API'
       };
       const exitResponses = await my_default_place_order(order);
       exitOrderAccepted = true;
-      const riskState = shortOptionRiskState.get(positionKey(positionProcess.smallestPutPosition));
+      const riskState = shortOptionRiskState.get(positionKey(exitingPutPosition));
       const pnlAfterExit = await calcPnL(api);
       send_notification(formatExitOrderMessage({
         reason: 'PUT SHORT EXIT',
@@ -2040,7 +2130,7 @@ const exitXemaLong = async () => {
         side: 'B',
         price: getFinalFillPrice(exitResponses, order.price),
         entry: riskState?.entryPrice ?? positionProcess.soldPrice,
-        ltp: positionProcess.smallestPutPosition?.lp,
+        ltp: exitingPutPosition?.lp,
         stop: riskState?.activeStopLtp ?? positionProcess.trailPrice,
         pnl: pnlAfterExit,
       }), true);
@@ -2051,8 +2141,9 @@ const exitXemaLong = async () => {
     }
   }
   longPositionTaken = exitOrderAccepted ? false:longPositionTaken;
+  syncCurrentPositionStatus();
   // Set cooldown period when exiting position
-  if(positionProcess.smallestPutPosition?.tsym) {
+  if(exitingPutPosition?.tsym) {
     largeEmaGapExitTime = Date.now();
   }
   resetTrailPrice();
@@ -2074,6 +2165,7 @@ const enterXemaLong = async () => {
   if (isExiting) return; // Block entry during exit
 
   try {
+    await refreshAtmSymbolsForEntry('enterXemaLong');
     const entryPrice = await getRecoverableEntryPrice({
       label: 'enterXemaLong',
       side: 'S',
@@ -2112,22 +2204,23 @@ const enterXemaLong = async () => {
 const exitXemaShort = async () => {
   await updateTwoSmallestPositionsAndNeighboursSubs(false);
   let exitOrderAccepted = false;
-  if(positionProcess.smallestCallPosition?.tsym) {
+  const exitingCallPosition = positionProcess.smallestCallPosition;
+  if(exitingCallPosition?.tsym) {
     try {
       const order = {
         buy_or_sell: 'B',
         product_type: 'M',
         exchange: globalInput.pickedExchange,
-        tradingsymbol: positionProcess.smallestCallPosition.tsym,
+        tradingsymbol: exitingCallPosition.tsym,
         quantity: getDailyQty().toString(),
         discloseqty: 0,
         price_type: 'LMT',
-        price: await getSafeOrderPriceFromPosition(positionProcess.smallestCallPosition, 'B'),
+        price: await getSafeOrderPriceFromPosition(exitingCallPosition, 'B'),
         remarks: 'API'
       };
       const exitResponses = await my_default_place_order(order);
       exitOrderAccepted = true;
-      const riskState = shortOptionRiskState.get(positionKey(positionProcess.smallestCallPosition));
+      const riskState = shortOptionRiskState.get(positionKey(exitingCallPosition));
       const pnlAfterExit = await calcPnL(api);
       send_notification(formatExitOrderMessage({
         reason: 'CALL SHORT EXIT',
@@ -2136,7 +2229,7 @@ const exitXemaShort = async () => {
         side: 'B',
         price: getFinalFillPrice(exitResponses, order.price),
         entry: riskState?.entryPrice ?? positionProcess.soldPrice,
-        ltp: positionProcess.smallestCallPosition?.lp,
+        ltp: exitingCallPosition?.lp,
         stop: riskState?.activeStopLtp ?? positionProcess.trailPrice,
         pnl: pnlAfterExit,
       }), true);
@@ -2147,8 +2240,9 @@ const exitXemaShort = async () => {
     }
   }
   shortPositionTaken = exitOrderAccepted ? false:shortPositionTaken;
+  syncCurrentPositionStatus();
   // Set cooldown period when exiting position
-  if(positionProcess.smallestCallPosition?.tsym) {
+  if(exitingCallPosition?.tsym) {
     largeEmaGapExitTime = Date.now();
   }
   resetTrailPrice();
@@ -2171,6 +2265,7 @@ const enterXemaShort = async () => {
   if (isExiting) return; // Block entry during exit
 
   try {
+    await refreshAtmSymbolsForEntry('enterXemaShort');
     const entryPrice = await getRecoverableEntryPrice({
       label: 'enterXemaShort',
       side: 'S',
