@@ -5,10 +5,11 @@ const futureOffset = 0;
 const maxLossThreshold = -2;
 const maxProfitThreshold = 1.5;
 const trailingLossPerLot = 3000;
+const trailActivationProfitPerLot = 1000;
+const normalTrailLossPerLot = 1000;
+const tightTrailLossPerLot = 500;
+const tightTrailProfitPerLot = 3000;
 const emaGapSignalThreshold = 0.15;
-const profitLockStartDecayRatio = 0.03;
-const profitBookDecayRatio = 0.10;
-const profitTrailBounceRatio = 0.03;
 const profitMonitorLogIntervalMs = 30 * 1000;
 const telegramMinuteDivider = '────────────────────';
 const eveningExitMinutesIST = (18 * 60) + 25;
@@ -26,8 +27,6 @@ const orderTickSize = 0.1;
 const paperStrategyFastPeriod = 5;
 const paperStrategySlowPeriod = 13;
 const paperStrategySignalThreshold = 0.05;
-const paperStrategyProfitLockRatio = 0.03;
-const paperStrategyTrailBounceRatio = 0.03;
 const paperStrategyLogPrefix = 'NAT_EMA_PAPER';
 
 const debug = false;
@@ -554,19 +553,21 @@ const formatCompactEmaGapText = (gap) => {
 
 const formatNatPositionText = (direction) => {
   if (direction === 'long') {
-    return '🟢 short PUT';
+    return '🟢 SHORT PUT';
   }
   if (direction === 'short') {
-    return '🔴 short CALL';
+    return '🔴 SHORT CALL';
   }
-  return '⚪ none';
+  return '⚪ NONE';
 };
 
 const formatCompactTrailLabel = (state) => {
   if (!state || toDisplayNumber(state.stopLtp) === null) {
     return 'pending';
   }
-  const stopType = state.trailingActive ? 'TSL' : 'HSL';
+  const stopType = state.trailingActive
+    ? state.tightTrailActive ? 'TIGHT' : 'TSL'
+    : 'HSL';
   return `${formatPriceText(state.stopLtp)} ${stopType}`;
 };
 
@@ -580,20 +581,20 @@ const formatNatRiskLine = ({ symbol, sell, trail, ltp, side = 'short', pending =
   const symbolPrefix = compactSymbol ? `${compactSymbol} | ` : '';
   const pendingPrefix = pending ? 'SL pending | ' : '';
   const sellText = sellValue === null ? 'NA' : sellValue.toFixed(2);
-  return `${symbolPrefix}${pendingPrefix}S @${sellText} | T @${trail || 'pending'} | ${formatSignedPointText(points)}`;
+  const ltpText = ltpValue === null ? 'NA' : ltpValue.toFixed(2);
+  return `${symbolPrefix}${pendingPrefix}S ${sellText} | T ${trail || 'pending'} | L ${ltpText} | ${formatSignedPointText(points)}`;
 };
 
 const formatProfitLockLine = (state) => {
-  if (!state?.profitLockActive) {
-    return undefined;
+  if (!state) {
+    return '👀 waiting';
   }
-  const movePercent = Number.isFinite(state.profitMoveRatio)
-    ? `${(state.profitMoveRatio * 100).toFixed(1)}%`
-    : 'NA';
-  const trail = state.profitTrailExitLtp === undefined || state.profitTrailExitLtp === null
-    ? ''
-    : ` | trail ${formatPriceText(state.profitTrailExitLtp)}`;
-  return `🔒 ${movePercent}${trail}`;
+  const perLot = Number.isFinite(state.profitPerLot) ? `Rs ${state.profitPerLot.toFixed(0)}/lot` : 'Rs NA/lot';
+  if (!state.trailingActive) {
+    return `👀 ${perLot}`;
+  }
+  const mode = state.tightTrailActive ? 'tight' : 'trail';
+  return `🔒 ${mode} | ${perLot}`;
 };
 
 const getCollateralLabel = () => {
@@ -700,7 +701,9 @@ const getCurrentISTMinutes = () => {
 
 const isEveningNoEntryWindow = () => {
   const { weekday, minutes } = getCurrentISTDateParts();
-  return weekday === 'Thu' && minutes >= eveningExitMinutesIST && minutes < eveningReentryMinutesIST;
+  return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekday) &&
+    minutes >= eveningExitMinutesIST &&
+    minutes < eveningReentryMinutesIST;
 };
 
 const isNightShutdownDue = () => getCurrentISTMinutes() >= nightShutdownMinutesIST;
@@ -845,6 +848,7 @@ updatePositions = async () => {
 const trailingStopState = new Map();
 const exitOrdersInProgress = new Set();
 let eveningExitInProgress = false;
+let lastEveningPauseNoticeAt = 0;
 let nightShutdownInProgress = false;
 let latestNatEmaSnapshot = {
   fast: null,
@@ -1080,35 +1084,48 @@ const paperTrailSnapshot = (position, ltp) => {
 
   position.lastLtp = numericLtp;
   position.bestLtp = Math.min(position.bestLtp, numericLtp);
-  const moveRatio = position.entry > 0 ? (position.entry - position.bestLtp) / position.entry : 0;
-  if (!position.profitLockActive && moveRatio >= paperStrategyProfitLockRatio) {
+  const snapshot = getRiskStopSnapshot({
+    entryPrice: position.entry,
+    ltp: numericLtp,
+    bestLtp: position.bestLtp,
+    side: 'short',
+    lotSize: position.qty,
+    forceTightTrail: isEveningNoEntryWindow(),
+    trailAlreadyActive: Boolean(position.profitLockActive),
+    tightTrailAlreadyActive: Boolean(position.tightTrailActive),
+  });
+  if (!snapshot) {
+    return null;
+  }
+
+  if (!position.profitLockActive && snapshot.trailActive) {
     position.profitLockActive = true;
     position.profitLockActivatedAt = Date.now();
-    paperLog('profit_lock_started', {
+    paperLog('trail_started', {
       symbol: position.symbol,
       entry: position.entry,
       bestLtp: position.bestLtp,
-      moveRatio,
+      profitPerLot: snapshot.profitPerLot,
+      mode: snapshot.mode,
     });
   }
+  if (snapshot.tightTrailActive) {
+    position.tightTrailActive = true;
+  }
 
-  const hardStop = position.entry + (trailingLossPerLot / position.qty);
-  const trailStop = position.profitLockActive
-    ? position.bestLtp + (position.entry * paperStrategyTrailBounceRatio)
-    : null;
-  const stop = trailStop === null ? hardStop : Math.min(hardStop, trailStop);
   const pnl = paperPositionPnl(position, numericLtp);
 
   return {
     ltp: numericLtp,
-    hardStop,
-    trailStop,
-    stop,
+    hardStop: snapshot.hardStop,
+    trailStop: snapshot.trailStop,
+    stop: snapshot.stop,
     pnl,
-    moveRatio,
-    exitHit: numericLtp >= stop,
-    exitReason: numericLtp >= stop
-      ? position.profitLockActive ? 'tight_trail_hit' : 'hard_loss_hit'
+    profitPerLot: snapshot.profitPerLot,
+    mode: snapshot.mode,
+    exitHit: numericLtp >= snapshot.stop,
+    exitReason: numericLtp >= snapshot.stop
+      ? snapshot.trailActive ? `${snapshot.mode}_trail_hit` : 'hard_loss_hit'
       : null,
   };
 };
@@ -1219,6 +1236,8 @@ const updatePaperOpenPosition = async ({ callSymbol, callLtp, putSymbol, putLtp 
     trailStop: snapshot.trailStop,
     hardStop: snapshot.hardStop,
     pnl: snapshot.pnl,
+    profitPerLot: snapshot.profitPerLot,
+    trailMode: snapshot.mode,
     locked: Boolean(position.profitLockActive),
   });
   return true;
@@ -1240,6 +1259,7 @@ const enterPaperPosition = (signal) => {
     signalFast: signal.fast,
     signalSlow: signal.slow,
     profitLockActive: false,
+    tightTrailActive: false,
   };
   paperLog('entry', {
     symbol: signal.symbol,
@@ -1438,6 +1458,64 @@ const getProfitMoveRatio = (entryPrice, ltp, side) => {
   return move / entryPrice;
 };
 
+const getPerLotPnl = (entryPrice, ltp, side, lotSize) => {
+  if (!Number.isFinite(entryPrice) || !Number.isFinite(ltp) || !Number.isFinite(lotSize) || lotSize <= 0) {
+    return null;
+  }
+  const points = side === 'short'
+    ? entryPrice - ltp
+    : ltp - entryPrice;
+  return points * lotSize;
+};
+
+const getRiskStopSnapshot = ({
+  entryPrice,
+  ltp,
+  bestLtp,
+  side,
+  lotSize,
+  forceTightTrail = false,
+  trailAlreadyActive = false,
+  tightTrailAlreadyActive = false,
+}) => {
+  const profitPerLot = getPerLotPnl(entryPrice, ltp, side, lotSize);
+  if (profitPerLot === null) {
+    return null;
+  }
+
+  const hardDistance = trailingLossPerLot / lotSize;
+  const trailActive = forceTightTrail || trailAlreadyActive || profitPerLot >= trailActivationProfitPerLot;
+  const tightTrailActive = trailActive && (forceTightTrail || tightTrailAlreadyActive || profitPerLot >= tightTrailProfitPerLot);
+  const trailLossPerLot = tightTrailActive ? tightTrailLossPerLot : normalTrailLossPerLot;
+  const trailDistance = trailLossPerLot / lotSize;
+  const hardStop = side === 'short'
+    ? entryPrice + hardDistance
+    : entryPrice - hardDistance;
+  const trailStop = trailActive
+    ? side === 'short'
+      ? bestLtp + trailDistance
+      : bestLtp - trailDistance
+    : null;
+  const stop = trailStop === null
+    ? hardStop
+    : side === 'short'
+      ? Math.min(hardStop, trailStop)
+      : Math.max(hardStop, trailStop);
+
+  return {
+    profitPerLot,
+    hardDistance,
+    hardStop,
+    trailActive,
+    tightTrailActive,
+    trailLossPerLot,
+    trailDistance,
+    trailStop,
+    stop,
+    mode: trailActive ? tightTrailActive ? 'tight' : 'normal' : 'hard',
+  };
+};
+
 const getTrailingStateForSymbol = (symbol) => {
   if (!symbol) {
     return null;
@@ -1488,7 +1566,12 @@ const logProfitMonitorState = (position, state, event = 'check') => {
     ltp: state.lastLtp,
     bestLtp: state.bestLtp,
     profitMovePct: Number.isFinite(state.profitMoveRatio) ? Number((state.profitMoveRatio * 100).toFixed(2)) : null,
+    profitPerLot: Number.isFinite(state.profitPerLot) ? Number(state.profitPerLot.toFixed(2)) : null,
     profitLockActive: Boolean(state.profitLockActive),
+    trailingActive: Boolean(state.trailingActive),
+    tightTrailActive: Boolean(state.tightTrailActive),
+    trailMode: state.trailMode,
+    trailLossPerLot: state.trailLossPerLot,
     lockStartLtp: state.profitLockStartLtp,
     profitBookLtp: state.profitBookLtp,
     profitTrailExitLtp: state.profitTrailExitLtp,
@@ -1496,6 +1579,7 @@ const logProfitMonitorState = (position, state, event = 'check') => {
     emaGapAgeSec: Number.isFinite(state.emaGapAgeMs) ? Number((state.emaGapAgeMs / 1000).toFixed(1)) : null,
     openPnl: Number.isFinite(state.openPnl) ? Number(state.openPnl.toFixed(2)) : null,
     stopLtp: state.stopLtp,
+    inEveningPause: Boolean(state.inEveningPause),
   };
   console.log(`NAT_EMA_PROFIT_MONITOR ${JSON.stringify(payload)}`);
 };
@@ -1947,7 +2031,6 @@ const monitorTrailingLoss = async () => {
       }
 
       const side = netQty < 0 ? 'short' : 'long';
-      const stopDistance = trailingLossPerLot / lotSize;
       const existing = trailingStopState.get(key);
       const state = existing && existing.side === side && existing.entryPrice === entryPrice
         ? existing
@@ -1956,149 +2039,100 @@ const monitorTrailingLoss = async () => {
       const maxLoss = trailingLossPerLot * lots;
       const emaSnapshot = getLatestEmaSnapshot();
       const profitMoveRatio = getProfitMoveRatio(entryPrice, ltp, side);
-      const profitTrailBounceDistance = entryPrice * profitTrailBounceRatio;
+      const forceTightTrail = isEveningNoEntryWindow();
+      const previousTrailingActive = Boolean(state.trailingActive);
+      const previousTightTrailActive = Boolean(state.tightTrailActive);
 
       state.lastLtp = ltp;
       state.profitMoveRatio = profitMoveRatio;
       state.profitLockStartLtp = side === 'short'
-        ? entryPrice * (1 - profitLockStartDecayRatio)
-        : entryPrice * (1 + profitLockStartDecayRatio);
-      state.profitBookLtp = side === 'short'
-        ? entryPrice * (1 - profitBookDecayRatio)
-        : entryPrice * (1 + profitBookDecayRatio);
-      state.profitTrailBounceDistance = profitTrailBounceDistance;
+        ? entryPrice - (trailActivationProfitPerLot / lotSize)
+        : entryPrice + (trailActivationProfitPerLot / lotSize);
+      state.profitBookLtp = null;
       state.emaGap = emaSnapshot.gap;
       state.emaGapAgeMs = emaSnapshot.ageMs;
+      state.inEveningPause = forceTightTrail;
 
       if (side === 'short') {
         state.bestLtp = Math.min(state.bestLtp, ltp);
         state.openPnl = (entryPrice - ltp) * absQty;
-        state.hardStopLtp = entryPrice + stopDistance;
-        state.profitTrailExitLtp = state.profitLockActive ? state.bestLtp + profitTrailBounceDistance : null;
-        if (state.bestLtp < entryPrice) {
-          state.trailingActive = true;
-        }
-        state.trailingStopLtp = state.trailingActive ? state.bestLtp + stopDistance : null;
-        state.stopLtp = state.trailingActive ? Math.min(state.hardStopLtp, state.trailingStopLtp) : state.hardStopLtp;
-        if (!state.profitLockActive && profitMoveRatio !== null && profitMoveRatio >= profitLockStartDecayRatio) {
-          state.profitLockActive = true;
-          state.profitLockActivatedAt = Date.now();
-          state.profitTrailExitLtp = state.bestLtp + profitTrailBounceDistance;
-          buffer_notification(formatNatMessage('🔒 PROFIT LOCK', [
-            ['Risk', formatNatRiskLine({
-              symbol: position.tsym,
-              sell: entryPrice,
-              trail: formatPriceText(state.profitTrailExitLtp),
-              ltp,
-              side,
-            })],
-            ['Move', `${(profitMoveRatio * 100).toFixed(1)}% decay`],
-            ['Gap', formatCompactEmaGapText(emaSnapshot.gap)],
-          ]), true);
-          logProfitMonitorState(position, state, 'profit_lock_started');
-        }
-        if (entryPrice > 0 && ltp <= state.profitBookLtp) {
-          const exitConfirmed = await placeExitOrderForPosition(
-            position,
-            `Profit target ${Math.round(profitBookDecayRatio * 100)} pct decay hit`
-          );
-          logProfitMonitorState(position, state, exitConfirmed ? 'profit_book_exit_confirmed' : 'profit_book_exit_failed');
-          if (exitConfirmed) {
-            startReentryCooldown(`profit target exit for ${position.tsym}`, profitReentryCooldownMs);
-          }
-          exited = exitConfirmed || exited;
-          continue;
-        }
-        if (state.profitLockActive && state.profitTrailExitLtp !== null && ltp >= state.profitTrailExitLtp) {
-          const exitConfirmed = await placeExitOrderForPosition(
-            position,
-            `Profit lock trail exit best ${state.bestLtp.toFixed(2)} bounce ${profitTrailBounceDistance.toFixed(2)} ltp ${ltp.toFixed(2)}`
-          );
-          logProfitMonitorState(position, state, exitConfirmed ? 'profit_lock_trail_exit_confirmed' : 'profit_lock_trail_exit_failed');
-          if (exitConfirmed) {
-            startReentryCooldown(`profit lock trail exit for ${position.tsym}`, profitReentryCooldownMs);
-          }
-          exited = exitConfirmed || exited;
-          continue;
-        }
-        if (ltp >= state.stopLtp) {
-          const stopType = state.trailingActive ? 'Trailing SL' : 'Hard max loss';
-          const exitConfirmed = await placeExitOrderForPosition(
-            position,
-            `${stopType} hit stop ${state.stopLtp.toFixed(2)} ltp ${ltp.toFixed(2)} max Rs ${maxLoss.toFixed(0)}`
-          );
-          if (exitConfirmed) {
-            startReentryCooldown(`${stopType.toLowerCase()} exit for ${position.tsym}`);
-          }
-          exited = exitConfirmed || exited;
-          continue;
-        }
       } else {
         state.bestLtp = Math.max(state.bestLtp, ltp);
         state.openPnl = (ltp - entryPrice) * absQty;
-        state.hardStopLtp = entryPrice - stopDistance;
-        state.profitTrailExitLtp = state.profitLockActive ? state.bestLtp - profitTrailBounceDistance : null;
-        if (state.bestLtp > entryPrice) {
-          state.trailingActive = true;
-        }
-        state.trailingStopLtp = state.trailingActive ? state.bestLtp - stopDistance : null;
-        state.stopLtp = state.trailingActive ? Math.max(state.hardStopLtp, state.trailingStopLtp) : state.hardStopLtp;
-        if (!state.profitLockActive && profitMoveRatio !== null && profitMoveRatio >= profitLockStartDecayRatio) {
-          state.profitLockActive = true;
-          state.profitLockActivatedAt = Date.now();
-          state.profitTrailExitLtp = state.bestLtp - profitTrailBounceDistance;
-          buffer_notification(formatNatMessage('🔒 PROFIT LOCK', [
-            ['Risk', formatNatRiskLine({
-              symbol: position.tsym,
-              sell: entryPrice,
-              trail: formatPriceText(state.profitTrailExitLtp),
-              ltp,
-              side,
-            })],
-            ['Move', `${(profitMoveRatio * 100).toFixed(1)}% gain`],
-            ['Gap', formatCompactEmaGapText(emaSnapshot.gap)],
-          ]), true);
-          logProfitMonitorState(position, state, 'profit_lock_started');
-        }
-        if (entryPrice > 0 && ltp >= state.profitBookLtp) {
-          const exitConfirmed = await placeExitOrderForPosition(
-            position,
-            `Profit target ${Math.round(profitBookDecayRatio * 100)} pct gain hit`
-          );
-          logProfitMonitorState(position, state, exitConfirmed ? 'profit_book_exit_confirmed' : 'profit_book_exit_failed');
-          if (exitConfirmed) {
-            startReentryCooldown(`profit target exit for ${position.tsym}`, profitReentryCooldownMs);
-          }
-          exited = exitConfirmed || exited;
-          continue;
-        }
-        if (state.profitLockActive && state.profitTrailExitLtp !== null && ltp <= state.profitTrailExitLtp) {
-          const exitConfirmed = await placeExitOrderForPosition(
-            position,
-            `Profit lock trail exit best ${state.bestLtp.toFixed(2)} bounce ${profitTrailBounceDistance.toFixed(2)} ltp ${ltp.toFixed(2)}`
-          );
-          logProfitMonitorState(position, state, exitConfirmed ? 'profit_lock_trail_exit_confirmed' : 'profit_lock_trail_exit_failed');
-          if (exitConfirmed) {
-            startReentryCooldown(`profit lock trail exit for ${position.tsym}`, profitReentryCooldownMs);
-          }
-          exited = exitConfirmed || exited;
-          continue;
-        }
-        if (ltp <= state.stopLtp) {
-          const stopType = state.trailingActive ? 'Trailing SL' : 'Hard max loss';
-          const exitConfirmed = await placeExitOrderForPosition(
-            position,
-            `${stopType} hit stop ${state.stopLtp.toFixed(2)} ltp ${ltp.toFixed(2)} max Rs ${maxLoss.toFixed(0)}`
-          );
-          if (exitConfirmed) {
-            startReentryCooldown(`${stopType.toLowerCase()} exit for ${position.tsym}`);
-          }
-          exited = exitConfirmed || exited;
-          continue;
-        }
       }
 
-      state.stopDistance = stopDistance;
+      const riskSnapshot = getRiskStopSnapshot({
+        entryPrice,
+        ltp,
+        bestLtp: state.bestLtp,
+        side,
+        lotSize,
+        forceTightTrail,
+        trailAlreadyActive: previousTrailingActive,
+        tightTrailAlreadyActive: previousTightTrailActive,
+      });
+      if (!riskSnapshot) {
+        console.error(`Skipping trailing loss check for ${key}: unable to calculate risk snapshot.`);
+        continue;
+      }
+
+      state.hardStopLtp = riskSnapshot.hardStop;
+      state.trailingActive = riskSnapshot.trailActive;
+      state.tightTrailActive = riskSnapshot.tightTrailActive;
+      state.trailingStopLtp = riskSnapshot.trailStop;
+      state.stopLtp = riskSnapshot.stop;
+      state.stopDistance = riskSnapshot.trailActive ? riskSnapshot.trailDistance : riskSnapshot.hardDistance;
+      state.profitTrailExitLtp = riskSnapshot.trailStop;
+      state.profitTrailBounceDistance = riskSnapshot.trailActive ? riskSnapshot.trailDistance : null;
+      state.profitPerLot = riskSnapshot.profitPerLot;
+      state.trailLossPerLot = riskSnapshot.trailLossPerLot;
+      state.trailMode = riskSnapshot.mode;
+      state.profitLockActive = riskSnapshot.trailActive;
+      if (riskSnapshot.trailActive && !previousTrailingActive) {
+        state.profitLockActivatedAt = Date.now();
+        buffer_notification(formatNatMessage('🔒 TRAIL ON', [
+          ['Position', formatNatPositionText(identify_option_type(position.tsym) === 'P' ? 'long' : 'short')],
+          ['Risk', formatNatRiskLine({
+            symbol: position.tsym,
+            sell: entryPrice,
+            trail: formatCompactTrailLabel(state),
+            ltp,
+            side,
+          })],
+          ['Mode', riskSnapshot.tightTrailActive ? 'tight' : 'normal'],
+        ]), true);
+        logProfitMonitorState(position, state, 'trail_started');
+      } else if (riskSnapshot.tightTrailActive && !previousTightTrailActive) {
+        buffer_notification(formatNatMessage('🔐 TIGHT TRAIL', [
+          ['Risk', formatNatRiskLine({
+            symbol: position.tsym,
+            sell: entryPrice,
+            trail: formatCompactTrailLabel(state),
+            ltp,
+            side,
+          })],
+          ['Reason', forceTightTrail ? 'pause window' : `profit >= Rs ${tightTrailProfitPerLot}/lot`],
+        ]), true);
+        logProfitMonitorState(position, state, 'tight_trail_started');
+      }
+
+      const stopHit = side === 'short' ? ltp >= state.stopLtp : ltp <= state.stopLtp;
+      if (stopHit) {
+        const stopType = state.trailingActive
+          ? state.tightTrailActive ? 'Tight trailing SL' : 'Trailing SL'
+          : 'Hard max loss';
+        const exitConfirmed = await placeExitOrderForPosition(
+          position,
+          `${stopType} hit stop ${state.stopLtp.toFixed(2)} ltp ${ltp.toFixed(2)}`
+        );
+        logProfitMonitorState(position, state, exitConfirmed ? `${riskSnapshot.mode}_trail_exit_confirmed` : `${riskSnapshot.mode}_trail_exit_failed`);
+        if (exitConfirmed) {
+          startReentryCooldown(`${stopType.toLowerCase()} exit for ${position.tsym}`);
+        }
+        exited = exitConfirmed || exited;
+        continue;
+      }
+
       state.lots = lots;
       state.maxLoss = maxLoss;
       logProfitMonitorState(position, state);
@@ -3739,21 +3773,19 @@ getEma = async () => {
     if (seconds % trailingMonitorIntervalSeconds === 0 && !eveningExitInProgress) {
       eveningExitInProgress = true;
       try {
-        const exited = await exitOpenStrategyPositions('Thursday 18:25 IST no-entry window');
-        const paperExited = await exitPaperPositionForEveningPauseSafely();
-        if (exited || paperExited) {
-          buffer_notification(formatNatMessage('🌆 THURSDAY EVENING PAUSE', [
-            ['Action', 'Exited open NATURALGAS positions'],
-            ['Window', 'Thursday 18:25-21:25 IST'],
-            ['Re-entry', 'Blocked until 21:25 IST'],
-            ['Paper', paperExited ? 'paper position exited' : 'no paper position'],
-          ]), true);
-        }
+        await monitorTrailingLoss();
       } catch (error) {
-        console.error('Error enforcing evening no-entry window:', error.message || JSON.stringify(apiResponseSummary(error)));
+        console.error('Error enforcing evening no-entry window trailing monitor:', error.message || JSON.stringify(apiResponseSummary(error)));
       } finally {
         eveningExitInProgress = false;
       }
+    }
+    if (Date.now() - lastEveningPauseNoticeAt >= 180000) {
+      lastEveningPauseNoticeAt = Date.now();
+      buffer_notification(formatNatMessage('⏸ PAUSE', [
+        ['Window', '18:25-21:25 IST weekday'],
+        ['Mode', 'no fresh entry, tight trail active'],
+      ]), true);
     }
     return;
   }
@@ -3832,10 +3864,20 @@ const setNearestCrudeFutureToken = async () => {
 
 runEma = async () => {
   try {
+    const exitAllOnce = process.argv.includes('--exit-all');
     await expiryLoadedPromise;
     await executeLogin();
     await setNearestCrudeFutureToken();
     await send_callback_notification();
+    await updateITMSymbolfromOC();
+    if (exitAllOnce) {
+      const exited = await exitOpenStrategyPositions('Manual NAT EMA restart exit');
+      if (!exited) {
+        console.log('No open NAT EMA positions found for manual exit.');
+      }
+      await flush_notifications();
+      process.exit(0);
+    }
     subscribeToInstruments([`${globalInput.pickedExchange}|${globalInput.token}`, 'NSE|26017']);
     const websocketAuthenticated = await startWebsocket();
     startRestQuotePolling();
@@ -3843,7 +3885,6 @@ runEma = async () => {
       console.log('Running nat_ema2 with REST quote polling fallback.');
     }
     await refreshRestQuotes();
-    await updateITMSymbolfromOC();
     await dynSubs();
     await refreshRestQuotes();
     limits = await api.get_limits()
