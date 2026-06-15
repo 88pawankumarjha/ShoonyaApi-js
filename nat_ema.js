@@ -561,6 +561,20 @@ const formatNatPositionText = (direction) => {
   return '⚪ NONE';
 };
 
+const formatNatSymbolShort = (symbol) => {
+  if (!symbol) {
+    return '';
+  }
+  const optionType = identify_option_type(symbol);
+  const strikeMatch = String(symbol).match(/(\d+)$/);
+  return `${optionType || ''}${strikeMatch ? strikeMatch[1] : String(symbol).slice(-4)}`;
+};
+
+const formatNatSpotText = (spot) => {
+  const spotValue = toDisplayNumber(spot);
+  return `NG ${spotValue === null ? 'NA' : spotValue.toFixed(2)}`;
+};
+
 const formatCompactTrailLabel = (state) => {
   if (!state || toDisplayNumber(state.stopLtp) === null) {
     return 'pending';
@@ -582,6 +596,33 @@ const formatNatRiskLine = ({ symbol, sell, trail, ltp, side = 'short', pending =
   const pendingPrefix = pending ? 'SL pending | ' : '';
   const sellText = sellValue === null ? 'NA' : sellValue.toFixed(2);
   return `${symbolPrefix}${pendingPrefix}S ${sellText} | T ${trail || 'pending'} | ${formatSignedPointText(points)}`;
+};
+
+const formatNatCompactStatusMessage = ({
+  direction,
+  symbol,
+  sell,
+  trail,
+  ltp,
+  side = 'short',
+  gap,
+  spot,
+  profitState,
+  pnl,
+}) => {
+  const symbolText = formatNatSymbolShort(symbol);
+  const header = ['NAT', formatNatPositionText(direction), symbolText].filter(Boolean).join(' ');
+  const rows = [header];
+  if (symbol) {
+    rows.push(formatNatRiskLine({ symbol: symbolText, sell, trail, ltp, side, pending: !profitState }));
+  }
+  rows.push(`Gap ${formatCompactEmaGapText(gap)} | ${formatNatSpotText(spot)}`);
+  if (profitState) {
+    rows.push(formatProfitLockLine(profitState));
+  } else if (pnl !== undefined) {
+    rows.push(`Mood ${formatPnlText(pnl)}`);
+  }
+  return rows.join('\n');
 };
 
 const formatProfitLockLine = (state) => {
@@ -3183,7 +3224,7 @@ async function sellercrudecheckCrossOverExit(ema9, ema21) {
   return false;
 }
 let positionDirection = '';
-async function XEma(fastEMA, slowEMA) {
+async function XEma(fastEMA, slowEMA, underlyingLtp) {
   const diff = fastEMA - slowEMA;
   updateLatestEmaSnapshot(fastEMA, slowEMA);
   await syncPositionStateFromLive();
@@ -3239,7 +3280,6 @@ async function XEma(fastEMA, slowEMA) {
     }
   }
   if (positionTaken) {
-    positionTakenInSymbolSubStr = positionTakenInSymbol.substring(positionTakenInSymbol.length - 4);
     const displayEntryPrice = await resolveEntryPriceForSymbol(positionTakenInSymbol);
     if (displayEntryPrice === null) {
       console.error(`Suppressing NAT EMA position notification; unresolved entry price for ${positionTakenInSymbol}.`);
@@ -3249,25 +3289,27 @@ async function XEma(fastEMA, slowEMA) {
     const pnl = await calcPnL(api, true);
     const displayLtp = await getSymbolLtp(positionTakenInSymbol, true);
     const profitState = getTrailingStateForSymbol(positionTakenInSymbol);
-    positionTakenInSymbol && buffer_notification(formatNatMessage(formatNatPositionText(positionDirection, diff), [
-      ['Mood', formatPnlText(pnl)],
-      ['Risk', formatNatRiskLine({
-        symbol: positionTakenInSymbolSubStr,
-        sell: displayEntryPrice,
-        trail: formatCompactTrailLabel(profitState),
-        ltp: displayLtp,
-        side: profitState?.side || 'short',
-        pending: !profitState,
-      })],
-      ['Lock', formatProfitLockLine(profitState)],
-    ]));
+    positionTakenInSymbol && buffer_notification(formatNatCompactStatusMessage({
+      direction: positionDirection,
+      symbol: positionTakenInSymbol,
+      sell: displayEntryPrice,
+      trail: formatCompactTrailLabel(profitState),
+      ltp: displayLtp,
+      side: profitState?.side || 'short',
+      gap: diff,
+      spot: underlyingLtp,
+      profitState,
+    }));
     console.log("Current Time:", moment().utcOffset("+05:30").format('HH:mm:ss'));
   } else {
     const pnl = await calcPnL(api, true);
     console.log(`No position taken. ${getCollateralLabel()} MCX PnL: ${pnl} % Current Time:`, moment().utcOffset("+05:30").format('HH:mm:ss'));
-    buffer_notification(formatNatMessage(formatNatPositionText('', diff), [
-      ['Mood', formatPnlText(pnl)],
-    ]));
+    buffer_notification(formatNatCompactStatusMessage({
+      direction: '',
+      gap: diff,
+      spot: underlyingLtp,
+      pnl,
+    }));
   }
 }
 
@@ -3693,11 +3735,7 @@ emaRecurringFunction = async () => {
           return;
         }
         const underlyingLtp = await getUnderlyingLtp(true);
-        buffer_notification(formatNatMessage('📊 EMA CHECK', [
-          ['Spot', `${globalInput.indexName} @${formatPriceText(underlyingLtp)}`],
-          ['Gap', formatCompactEmaGapText(fastEMA - slowEMA)],
-        ]));
-        await XEma(fastEMA, slowEMA);
+        await XEma(fastEMA, slowEMA, underlyingLtp);
         await runPaperStrategyTickSafely();
         bufferMinuteDivider();
       } else {
@@ -3779,10 +3817,10 @@ getEma = async () => {
     }
     if (Date.now() - lastEveningPauseNoticeAt >= 180000) {
       lastEveningPauseNoticeAt = Date.now();
-      buffer_notification(formatNatMessage('⏸ PAUSE', [
-        ['Window', '18:25-21:25 IST weekday'],
-        ['Mode', 'no fresh entry, tight trail active'],
-      ]), true);
+      await send_notification(formatNatMessage('⏸ PAUSE', [
+        ['Window', '18:25-21:25 IST'],
+        ['Mode', 'no entry, tight trail'],
+      ]), false);
     }
     return;
   }
