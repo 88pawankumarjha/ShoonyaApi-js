@@ -614,7 +614,7 @@ const formatNatCompactStatusMessage = ({
   const header = ['NAT', formatNatPositionText(direction), symbolText].filter(Boolean).join(' ');
   const rows = [header];
   if (symbol) {
-    rows.push(formatNatRiskLine({ symbol: symbolText, sell, trail, ltp, side, pending: !profitState }));
+    rows.push(formatNatRiskLine({ sell, trail, ltp, side, pending: !profitState }));
   }
   rows.push(`Gap ${formatCompactEmaGapText(gap)} | ${formatNatSpotText(spot)}`);
   if (profitState) {
