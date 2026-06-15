@@ -972,8 +972,8 @@ const getPositionEntryPrice = (position) => {
   return toFiniteNumber(position?.netavgprc ?? position?.daybuyavgprc);
 };
 
-const getSymbolLtp = async (symbol, forceRest = false) => {
-  const token = getTokenByTradingSymbol(symbol);
+const getSymbolLtp = async (symbol, forceRest = false, tokenOverride = null) => {
+  const token = tokenOverride || getTokenByTradingSymbol(symbol);
   if (!symbol || !token) {
     return null;
   }
@@ -1038,11 +1038,14 @@ const createPaperStrategyState = () => ({
 });
 
 const paperStrategyState = createPaperStrategyState();
+let lastPaperPositionMonitorLogAt = 0;
+
+const paperStrategyLotSize = () => Math.max(1, toFiniteNumber(globalInput.LotSize) || 1250);
 
 const paperStrategyQty = () => {
-  const lotSize = toFiniteNumber(globalInput.LotSize);
+  const lotSize = paperStrategyLotSize();
   const multiplier = toFiniteNumber(globalInput.emaLotMultiplier);
-  return Math.max(1, (lotSize || 1250) * (multiplier || 1));
+  return Math.max(1, lotSize * (multiplier || 1));
 };
 
 const paperLog = (event, payload = {}) => {
@@ -1116,6 +1119,13 @@ const paperPositionPnl = (position, ltp = position?.lastLtp) => {
   return (position.entry - numericLtp) * position.qty;
 };
 
+const getPaperPositionLtp = async (position) => {
+  if (!position?.symbol) {
+    return null;
+  }
+  return getSymbolLtp(position.symbol, true, position.token);
+};
+
 const paperTrailSnapshot = (position, ltp) => {
   const numericLtp = toFiniteNumber(ltp);
   if (!position || numericLtp === null || numericLtp <= 0) {
@@ -1129,7 +1139,7 @@ const paperTrailSnapshot = (position, ltp) => {
     ltp: numericLtp,
     bestLtp: position.bestLtp,
     side: 'short',
-    lotSize: position.qty,
+    lotSize: position.lotSize || paperStrategyLotSize(),
     forceTightTrail: isEveningNoEntryWindow(),
     trailAlreadyActive: Boolean(position.profitLockActive),
     tightTrailAlreadyActive: Boolean(position.tightTrailActive),
@@ -1207,7 +1217,7 @@ const exitPaperPositionForEveningPause = async () => {
     return false;
   }
 
-  let ltp = await getSymbolLtp(position.symbol, true);
+  let ltp = await getPaperPositionLtp(position);
   if (toFiniteNumber(ltp) === null) {
     ltp = position.lastLtp;
   }
@@ -1249,10 +1259,10 @@ const updatePaperOpenPosition = async ({ callSymbol, callLtp, putSymbol, putLtp 
       ? putLtp
       : null;
   if (toFiniteNumber(ltp) === null) {
-    ltp = await getSymbolLtp(position.symbol, true);
+    ltp = await getPaperPositionLtp(position);
   }
   if (toFiniteNumber(ltp) === null) {
-    paperLog('position_ltp_missing', { symbol: position.symbol, lastLtp: position.lastLtp });
+    paperLog('position_ltp_missing', { symbol: position.symbol, token: position.token || null, lastLtp: position.lastLtp });
     return true;
   }
 
@@ -1284,15 +1294,19 @@ const updatePaperOpenPosition = async ({ callSymbol, callLtp, putSymbol, putLtp 
 };
 
 const enterPaperPosition = (signal) => {
+  const lotSize = paperStrategyLotSize();
   const qty = paperStrategyQty();
   paperStrategyState.position = {
     symbol: signal.symbol,
+    token: getTokenByTradingSymbol(signal.symbol),
     side: signal.side,
     direction: signal.direction,
     entry: signal.ltp,
     lastLtp: signal.ltp,
     bestLtp: signal.ltp,
     qty,
+    lotSize,
+    lots: qty / lotSize,
     openedAt: new Date().toISOString(),
     atmStrike: biasProcess.atmStrike,
     signalGap: signal.gap,
@@ -1306,9 +1320,61 @@ const enterPaperPosition = (signal) => {
     side: signal.side,
     entry: signal.ltp,
     qty,
+    lotSize,
     atmStrike: biasProcess.atmStrike,
     signalGap: signal.gap,
   });
+};
+
+const monitorPaperOpenPosition = async () => {
+  const position = paperStrategyState.position;
+  if (!position) {
+    return false;
+  }
+
+  const ltp = await getPaperPositionLtp(position);
+  if (toFiniteNumber(ltp) === null) {
+    paperLog('position_ltp_missing', { symbol: position.symbol, token: position.token || null, lastLtp: position.lastLtp, source: 'monitor' });
+    return true;
+  }
+
+  const snapshot = paperTrailSnapshot(position, ltp);
+  if (!snapshot) {
+    return true;
+  }
+  if (snapshot.exitHit) {
+    exitPaperPosition(snapshot);
+    return false;
+  }
+
+  if (Date.now() - lastPaperPositionMonitorLogAt >= profitMonitorLogIntervalMs) {
+    lastPaperPositionMonitorLogAt = Date.now();
+    paperLog('position_tick', {
+      symbol: position.symbol,
+      side: position.side,
+      entry: position.entry,
+      ltp: snapshot.ltp,
+      bestLtp: position.bestLtp,
+      stop: snapshot.stop,
+      trailStop: snapshot.trailStop,
+      hardStop: snapshot.hardStop,
+      pnl: snapshot.pnl,
+      profitPerLot: snapshot.profitPerLot,
+      trailMode: snapshot.mode,
+      locked: Boolean(position.profitLockActive),
+      source: 'monitor',
+    });
+  }
+  return true;
+};
+
+const monitorPaperOpenPositionSafely = async () => {
+  try {
+    return await monitorPaperOpenPosition();
+  } catch (error) {
+    console.error(`${paperStrategyLogPrefix}_MONITOR_ERROR`, error.message || JSON.stringify(apiResponseSummary(error)));
+    return false;
+  }
 };
 
 const runPaperStrategyTick = async () => {
@@ -1394,7 +1460,7 @@ const bufferPaperStrategySummary = async (reason) => {
   paperStrategyState.eodSummarySent = true;
 
   const openPosition = paperStrategyState.position;
-  let openLtp = openPosition ? await getSymbolLtp(openPosition.symbol, true) : null;
+  let openLtp = openPosition ? await getPaperPositionLtp(openPosition) : null;
   if (openPosition && toFiniteNumber(openLtp) === null) {
     openLtp = openPosition.lastLtp;
   }
@@ -3809,6 +3875,7 @@ getEma = async () => {
       eveningExitInProgress = true;
       try {
         await monitorTrailingLoss();
+        await monitorPaperOpenPositionSafely();
       } catch (error) {
         console.error('Error enforcing evening no-entry window trailing monitor:', error.message || JSON.stringify(apiResponseSummary(error)));
       } finally {
