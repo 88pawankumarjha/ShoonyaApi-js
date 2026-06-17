@@ -91,6 +91,7 @@ const createAlgoNotifier = ({
 const createTelegramBot = (TelegramBot, telegramBotToken) => {
   if (!isTelegramEnabled()) {
     return {
+      on: () => {},
       onText: () => {},
       sendMessage: async () => {},
     };
