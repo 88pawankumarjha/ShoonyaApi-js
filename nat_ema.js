@@ -56,6 +56,7 @@ const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates,
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
 const { createAlgoNotifier, createTelegramBot } = require('./utils/algoDashboardNotifier');
+const { emitKiteMirrorSignal } = require('./utils/kiteMirrorSignal');
 const bot = createTelegramBot(TelegramBot, telegramBotToken);
 const send_notification = createAlgoNotifier({
   bot,
@@ -1855,6 +1856,21 @@ const placeExitOrderForPosition = async (position, reason) => {
 
     const confirmation = await waitForExitConfirmation(position, response.norenordno);
     if (confirmation.confirmed) {
+      await emitKiteMirrorSignal({
+        ...confirmation.orderStatus,
+        norenordno: response.norenordno,
+        exch: position.exch,
+        tsym: position.tsym,
+        trantype: buyOrSell,
+        qty: absQty,
+        prd: position.prd || 'M',
+        prctyp: 'LMT',
+        prc: getOrderFilledPrice(confirmation.orderStatus) ?? exitPrice,
+      }, {
+        strategy: 'nat_ema2',
+        source: 'REST',
+        exchange: position.exch,
+      });
       const pnlAfterExit = await calcPnL(api, true);
       buffer_notification(formatExitOrderMessage({
         reason,
@@ -2025,6 +2041,21 @@ const placeEntryOrderAndConfirm = async (symbol, direction, reason, emaGap) => {
       await pauseNewEntriesForManualReview(`NAT EMA entry price unresolved after COMPLETE for ${symbol}`, confirmation.orderStatus || response);
       return false;
     }
+    await emitKiteMirrorSignal({
+      ...confirmation.orderStatus,
+      norenordno: response.norenordno,
+      exch: 'MCX',
+      tsym: symbol,
+      trantype: buyOrSell,
+      qty: quantity,
+      prd: 'M',
+      prctyp: 'LMT',
+      prc: confirmedEntryPrice,
+    }, {
+      strategy: 'nat_ema2',
+      source: 'REST',
+      exchange: 'MCX',
+    });
     clearClosedTrailingStops([confirmation.position]);
     buffer_notification(formatNatMessage('✅ ENTRY CONFIRMED', [
       ['Position', formatNatPositionText(direction, emaGap)],

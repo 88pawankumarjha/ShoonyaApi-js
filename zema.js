@@ -64,6 +64,7 @@ const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates,
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
 const { createAlgoNotifier, createTelegramBot } = require('./utils/algoDashboardNotifier');
+const { emitKiteMirrorSignal } = require('./utils/kiteMirrorSignal');
 const bot = createTelegramBot(TelegramBot, telegramBotToken);
 const send_notification = createAlgoNotifier({
   bot,
@@ -862,6 +863,11 @@ const handleCompletedOrderUpdate = async (order, source = 'REST') => {
     completedOrderUpdateKeys.add(key);
     latestOrders[normalizedOrder?.Instrument || normalizedOrder?.tsym || key] = normalizedOrder;
     await postOrderPosTracking(normalizedOrder);
+    await emitKiteMirrorSignal(normalizedOrder, {
+        strategy: 'zema2',
+        source,
+        exchange: globalInput.pickedExchange,
+    });
 };
 
 const waitForOpenShortPosition = async (symbol, label) => {
