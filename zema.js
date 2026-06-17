@@ -63,8 +63,16 @@ const { idxNameTokenMap, idxNameOcGap, downloadCsv, filterAndMapDates,
   identify_option_type, fetchSpotPrice, getStrike, getOptionBasedOnNearestPremium, calcPnL, isTimeEqualsNotAfterProps } = require('./utils/customLibrary');
 let { authparams, telegramBotToken, chat_id, chat_id_me } = require("./creds");
 const TelegramBot = require('node-telegram-bot-api');
-const bot = new TelegramBot(telegramBotToken, { polling: true });
-const send_notification = async (message, me = false) => (message && console.log(message)) || (!debug && message && await bot.sendMessage((me && !telegramSignals.stopSignal) ? chat_id_me : chat_id, (me && !telegramSignals.stopSignal) ? message : message.replace(/\) /g, ")\n")).catch(console.error));
+const { createAlgoNotifier, createTelegramBot } = require('./utils/algoDashboardNotifier');
+const bot = createTelegramBot(TelegramBot, telegramBotToken);
+const send_notification = createAlgoNotifier({
+  bot,
+  chat_id,
+  chat_id_me,
+  debug,
+  source: 'zema2',
+  getTelegramSignals: () => telegramSignals,
+});
 
 let globalBigInput = {
   filteredIndexCSV: undefined
