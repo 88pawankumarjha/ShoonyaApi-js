@@ -28,6 +28,9 @@ const paperStrategyFastPeriod = 5;
 const paperStrategySlowPeriod = 13;
 const paperStrategySignalThreshold = 0.05;
 const paperStrategyLogPrefix = 'NAT_EMA_PAPER';
+const paperStrategyDailyLossCapPct = Number(process.env.NAT_EMA_PAPER_DAILY_LOSS_CAP_PCT || 0.5);
+const paperStrategyMaxTradesPerDay = Number(process.env.NAT_EMA_PAPER_MAX_TRADES_PER_DAY || 20);
+const paperStrategyCapital = Number(process.env.NAT_EMA_PAPER_CAPITAL || 100000);
 
 const debug = false;
 let inputProp = true; // true for XEma logic
@@ -1049,6 +1052,12 @@ const createPaperStrategyState = () => ({
   blockedTradeKey: null,
   lastTick: null,
   eodSummarySent: false,
+  tradingDate: null,
+  dailyTradeCount: 0,
+  dailyRejectCount: 0,
+  dailyHalted: false,
+  dailyHaltReason: null,
+  dailyHighWaterMark: 0,
 });
 
 const paperStrategyState = createPaperStrategyState();
@@ -1060,6 +1069,91 @@ const paperStrategyQty = () => {
   const lotSize = paperStrategyLotSize();
   const multiplier = toFiniteNumber(globalInput.emaLotMultiplier);
   return Math.max(1, lotSize * (multiplier || 1));
+};
+
+const getISTDateKey = (value = Date.now()) => moment(value).utcOffset('+05:30').format('YYYY-MM-DD');
+
+const paperDailyLossLimit = () => -(paperStrategyCapital * (paperStrategyDailyLossCapPct / 100));
+
+const paperEnsureTradingDay = () => {
+  const today = getISTDateKey();
+  if (paperStrategyState.tradingDate !== today) {
+    paperStrategyState.tradingDate = today;
+    paperStrategyState.dailyTradeCount = 0;
+    paperStrategyState.dailyRejectCount = 0;
+    paperStrategyState.dailyHalted = false;
+    paperStrategyState.dailyHaltReason = null;
+    paperStrategyState.dailyHighWaterMark = paperStrategyState.realizedPnl;
+    paperLog('daily_reset', {
+      tradingDate: today,
+      capital: paperStrategyCapital,
+      dailyLossCapPct: paperStrategyDailyLossCapPct,
+      dailyLossLimit: Number(paperDailyLossLimit().toFixed(2)),
+      maxTradesPerDay: paperStrategyMaxTradesPerDay,
+    });
+  }
+};
+
+const paperSetDailyHalt = (reason, extra = {}) => {
+  if (!paperStrategyState.dailyHalted) {
+    paperStrategyState.dailyHalted = true;
+    paperStrategyState.dailyHaltReason = reason;
+    paperLog('daily_halt', {
+      reason,
+      ...extra,
+    });
+  }
+};
+
+const paperRecordReject = (reason, extra = {}) => {
+  paperStrategyState.dailyRejectCount += 1;
+  paperLog('order_reject', {
+    reason,
+    rejectCount: paperStrategyState.dailyRejectCount,
+    ...extra,
+  });
+  if (paperStrategyState.dailyRejectCount >= 1) {
+    paperSetDailyHalt('order_reject_limit_hit', extra);
+  }
+};
+
+const paperGetRiskSnapshot = () => {
+  const openPnl = paperStrategyState.position ? paperPositionPnl(paperStrategyState.position) : 0;
+  const totalPnl = paperStrategyState.realizedPnl + openPnl;
+  const dailyPnL = totalPnl;
+  const lossLimit = paperDailyLossLimit();
+  return {
+    openPnl,
+    totalPnl,
+    dailyPnL,
+    lossLimit,
+    remainingLossBuffer: Number((dailyPnL - lossLimit).toFixed(2)),
+    tradesLeft: Math.max(0, paperStrategyMaxTradesPerDay - paperStrategyState.dailyTradeCount),
+    halted: paperStrategyState.dailyHalted,
+    haltReason: paperStrategyState.dailyHaltReason,
+  };
+};
+
+const paperCheckDailyRisk = (context = {}) => {
+  paperEnsureTradingDay();
+  const snapshot = paperGetRiskSnapshot();
+  if (snapshot.dailyPnL <= snapshot.lossLimit) {
+    paperSetDailyHalt('daily_loss_cap_hit', {
+      dailyPnL: Number(snapshot.dailyPnL.toFixed(2)),
+      lossLimit: Number(snapshot.lossLimit.toFixed(2)),
+      ...context,
+    });
+    return false;
+  }
+  if (paperStrategyState.dailyTradeCount >= paperStrategyMaxTradesPerDay) {
+    paperSetDailyHalt('max_trades_per_day_hit', {
+      dailyTradeCount: paperStrategyState.dailyTradeCount,
+      maxTradesPerDay: paperStrategyMaxTradesPerDay,
+      ...context,
+    });
+    return false;
+  }
+  return true;
 };
 
 const paperLog = (event, payload = {}) => {
@@ -1329,6 +1423,7 @@ const enterPaperPosition = (signal) => {
     profitLockActive: false,
     tightTrailActive: false,
   };
+  paperStrategyState.dailyTradeCount += 1;
   paperLog('entry', {
     symbol: signal.symbol,
     side: signal.side,
@@ -1337,6 +1432,9 @@ const enterPaperPosition = (signal) => {
     lotSize,
     atmStrike: biasProcess.atmStrike,
     signalGap: signal.gap,
+    executionPriceMode: 'best_available',
+    dailyTradeCount: paperStrategyState.dailyTradeCount,
+    maxTradesPerDay: paperStrategyMaxTradesPerDay,
   });
 };
 
@@ -1392,10 +1490,22 @@ const monitorPaperOpenPositionSafely = async () => {
 };
 
 const runPaperStrategyTick = async () => {
+  paperEnsureTradingDay();
   const callSymbol = biasProcess.atmCallSymbol;
   const putSymbol = biasProcess.atmPutSymbol;
   if (!callSymbol || !putSymbol) {
     paperLog('skip', { reason: 'atm_symbols_missing', callSymbol, putSymbol });
+    return;
+  }
+  if (!paperCheckDailyRisk({ reason: 'pre_tick_check' })) {
+    paperLog('skip', {
+      reason: 'daily_guardrail_active',
+      dailyPnL: Number(paperStrategyState.realizedPnl.toFixed(2)),
+      lossLimit: Number(paperDailyLossLimit().toFixed(2)),
+      dailyTradeCount: paperStrategyState.dailyTradeCount,
+      maxTradesPerDay: paperStrategyMaxTradesPerDay,
+      haltReason: paperStrategyState.dailyHaltReason,
+    });
     return;
   }
 
@@ -1421,6 +1531,30 @@ const runPaperStrategyTick = async () => {
   };
 
   const positionStillOpen = await updatePaperOpenPosition({ callSymbol, callLtp, putSymbol, putLtp });
+  const postUpdateRisk = paperGetRiskSnapshot();
+  if (postUpdateRisk.dailyPnL <= postUpdateRisk.lossLimit) {
+    if (paperStrategyState.position) {
+      const position = paperStrategyState.position;
+      const exitLtp = position.symbol === callSymbol ? callLtp : putLtp;
+      paperLog('daily_loss_exit', {
+        symbol: position.symbol,
+        side: position.side,
+        entry: position.entry,
+        exitLtp,
+        dailyPnL: Number(postUpdateRisk.dailyPnL.toFixed(2)),
+        lossLimit: Number(postUpdateRisk.lossLimit.toFixed(2)),
+      });
+      exitPaperPosition({
+        ltp: toFiniteNumber(exitLtp) === null ? position.lastLtp : exitLtp,
+        exitReason: 'daily_loss_cap_hit',
+      });
+    }
+    paperSetDailyHalt('daily_loss_cap_hit', {
+      dailyPnL: Number(postUpdateRisk.dailyPnL.toFixed(2)),
+      lossLimit: Number(postUpdateRisk.lossLimit.toFixed(2)),
+    });
+    return;
+  }
   const signal = choosePaperSignal({ callSymbol, putSymbol, callLtp, putLtp, callEma, putEma });
   const signalKey = getPaperTradeKey(signal);
 
@@ -1433,6 +1567,28 @@ const runPaperStrategyTick = async () => {
   }
 
   if (!positionStillOpen && signal) {
+    if (toFiniteNumber(callLtp) === null || toFiniteNumber(putLtp) === null) {
+      paperRecordReject('missing_live_price_for_signal', {
+        callSymbol,
+        callLtp,
+        putSymbol,
+        putLtp,
+        signalKey,
+      });
+    }
+    if (!paperCheckDailyRisk({ reason: 'signal_check', signalKey, symbol: signal.symbol })) {
+      paperLog('skip', {
+        reason: 'daily_guardrail_active',
+        signalKey,
+        symbol: signal.symbol,
+        dailyPnL: Number(paperStrategyState.realizedPnl.toFixed(2)),
+        lossLimit: Number(paperDailyLossLimit().toFixed(2)),
+        dailyTradeCount: paperStrategyState.dailyTradeCount,
+        maxTradesPerDay: paperStrategyMaxTradesPerDay,
+        haltReason: paperStrategyState.dailyHaltReason,
+      });
+      return;
+    }
     if (paperStrategyState.blockedTradeKey === signalKey) {
       paperLog('entry_blocked_same_trade', {
         signalKey,
@@ -1443,6 +1599,19 @@ const runPaperStrategyTick = async () => {
     } else {
       enterPaperPosition(signal);
     }
+  }
+
+  const guardrailSnapshot = paperGetRiskSnapshot();
+  if (guardrailSnapshot.halted) {
+    paperLog('guardrail_status', {
+      dailyPnL: Number(guardrailSnapshot.dailyPnL.toFixed(2)),
+      lossLimit: Number(guardrailSnapshot.lossLimit.toFixed(2)),
+      remainingLossBuffer: Number(guardrailSnapshot.remainingLossBuffer.toFixed(2)),
+      dailyTradeCount: paperStrategyState.dailyTradeCount,
+      maxTradesPerDay: paperStrategyMaxTradesPerDay,
+      dailyRejectCount: paperStrategyState.dailyRejectCount,
+      haltReason: guardrailSnapshot.haltReason,
+    });
   }
 
   paperLog('tick', {
@@ -1456,6 +1625,13 @@ const runPaperStrategyTick = async () => {
     signal: signal ? { side: signal.side, symbol: signal.symbol, gap: signal.gap } : null,
     openSymbol: paperStrategyState.position?.symbol || null,
     realizedPnl: paperStrategyState.realizedPnl,
+    dailyPnL: paperStrategyState.realizedPnl,
+    dailyLossLimit: Number(paperDailyLossLimit().toFixed(2)),
+    dailyTradeCount: paperStrategyState.dailyTradeCount,
+    maxTradesPerDay: paperStrategyMaxTradesPerDay,
+    dailyRejectCount: paperStrategyState.dailyRejectCount,
+    dailyHalted: paperStrategyState.dailyHalted,
+    haltReason: paperStrategyState.dailyHaltReason,
   });
 };
 
