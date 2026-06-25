@@ -478,15 +478,21 @@ const toPnlNumber = (value) => {
 const getPnlMood = (value) => {
   const numericValue = toPnlNumber(value);
   if (numericValue === null) {
-    return { label: 'neutral', icon: '😐' };
+    return { label: 'NEUTRAL', bar: '[███░░]', color: '\x1b[33m' };
   }
   if (numericValue > 0.33) {
-    return { label: 'good', icon: '🙂' };
+    return { label: 'STRONG', bar: '[█████]', color: '\x1b[32m' };
   }
   if (numericValue < -0.33) {
-    return { label: 'bad', icon: '☹️' };
+    return { label: 'WEAK', bar: '[██░░░]', color: '\x1b[31m' };
   }
-  return { label: 'neutral', icon: '😐' };
+  return { label: 'NEUTRAL', bar: '[███░░]', color: '\x1b[33m' };
+};
+
+const formatMoodBarText = (value, useColor = false) => {
+  const mood = getPnlMood(value);
+  const text = `${mood.bar} ${mood.label}`;
+  return useColor ? `${mood.color}${text}\x1b[0m` : text;
 };
 
 const getEmaGapMood = (gap) => {
@@ -519,12 +525,11 @@ const formatPriceText = (value) => {
 };
 
 const formatPnlText = (value, includePercent = false) => {
-  const mood = getPnlMood(value);
   const numericValue = toPnlNumber(value);
   if (!includePercent || numericValue === null) {
-    return mood.icon;
+    return formatMoodBarText(value);
   }
-  return `${mood.icon} ${numericValue.toFixed(2)}%`;
+  return `${formatMoodBarText(value)} ${numericValue.toFixed(2)}%`;
 };
 
 const formatPnlPercent = (value) => {

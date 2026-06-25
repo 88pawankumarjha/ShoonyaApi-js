@@ -506,15 +506,21 @@ const toPnlNumber = (value) => {
 const getPnlMood = (value) => {
     const numericValue = toPnlNumber(value);
     if (numericValue === null) {
-        return '😐';
+        return { label: 'NEUTRAL', bar: '[███░░]', color: '\x1b[33m' };
     }
     if (numericValue > 0.33) {
-        return '🙂';
+        return { label: 'STRONG', bar: '[█████]', color: '\x1b[32m' };
     }
     if (numericValue < -0.33) {
-        return '☹️';
+        return { label: 'WEAK', bar: '[██░░░]', color: '\x1b[31m' };
     }
-    return '😐';
+    return { label: 'NEUTRAL', bar: '[███░░]', color: '\x1b[33m' };
+};
+
+const formatMoodBarText = (value, useColor = false) => {
+    const mood = getPnlMood(value);
+    const text = `${mood.bar} ${mood.label}`;
+    return useColor ? `${mood.color}${text}\x1b[0m` : text;
 };
 
 const formatPnlPercent = (value) => {
@@ -616,7 +622,7 @@ const formatExitOrderMessage = ({
     ['Entry', entry === undefined ? undefined : formatPriceText(entry)],
     ['LTP', ltp === undefined ? undefined : formatPriceText(ltp)],
     ['Stop', stop === undefined ? undefined : formatPriceText(stop)],
-    ['Mood', getPnlMood(pnl)],
+    ['Mood', formatMoodBarText(pnl)],
     ['PnL', formatPnlPercent(pnl)],
 ]);
 
@@ -1356,7 +1362,7 @@ postOrderPosTracking = async (data) => {
     send_notification(formatTelegramMessage('ORDER UPDATE', [
       ['Action', `${data?.trantype || 'NA'} ${data?.tsym || 'NA'}`],
       ['Fill', formatPriceText(data?.flprc)],
-      ['Mood', getPnlMood(pnl)],
+      ['Mood', formatMoodBarText(pnl)],
       ['Capital', getCollateralLabel()],
     ]));
     
@@ -1983,7 +1989,7 @@ const exitSellsAndOrStop = async (stop = false) => {
     stop = true;
   } else {
     send_notification(formatTelegramMessage('EXIT CHECK', [
-      ['Mood', getPnlMood(pnlTemp1)],
+      ['Mood', formatMoodBarText(pnlTemp1)],
       ['Result', 'No stop threshold hit'],
     ]));
   }
@@ -2168,7 +2174,7 @@ const exitXemaLong = async () => {
     await exitSellsAndOrStop(true);
   } else {
     send_notification(formatTelegramMessage('EXIT CHECK', [
-      ['Mood', getPnlMood(pnlTemp1)],
+      ['Mood', formatMoodBarText(pnlTemp1)],
       ['Result', 'No stop threshold hit'],
     ]));
   }
@@ -2268,7 +2274,7 @@ const exitXemaShort = async () => {
     await exitSellsAndOrStop(true);
   } else {
     send_notification(formatTelegramMessage('EXIT CHECK', [
-      ['Mood', getPnlMood(pnlTemp1)],
+      ['Mood', formatMoodBarText(pnlTemp1)],
       ['Result', 'No stop threshold hit'],
     ]));
   }
@@ -2420,13 +2426,13 @@ async function takeEMADecision(emaMonitorFastCallUp, emaFastMonitorPutUp) {
 
   currentPositionStatus = longPositionTaken ? 'Long' : shortPositionTaken ? 'Short' : 'No Position';
   pnl = await calcPnL(api);
-  pnlMood = getPnlMood(pnl);
+  pnlMood = formatMoodBarText(pnl);
   const biasDisplay = Number.isFinite(Number(biasOutput.bias)) ? biasOutput.bias : 'NA';
   send_notification(formatTelegramMessage('STATUS', [
     ['Mood', pnlMood],
     ['Position', formatPositionBiasText(currentPositionStatus, biasDisplay)],
   ]));
-  console.log(' PnL: ' + pnl);
+  console.log(' PnL: ' + pnl + ' | Mood: ' + formatMoodBarText(pnl, true));
 }
 
 const setBiasValue = async () => {
